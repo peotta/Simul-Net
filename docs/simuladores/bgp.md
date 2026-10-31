@@ -7,11 +7,81 @@ BGP-4 entre seis sistemas autônomos: sessões, OPEN, UPDATE e KEEPALIVE, relaç
 - **RFCs e padrões:** [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811)
 - **Tópicos:** Sessões e mensagens; Seleção de caminho; Sequestro, vazamento e flapping; Defesas (RPKI/ROV, filtros)
 
-## 1. Abas
+## 1. Como ler os diagramas
+
+Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
+
+| Tipo | O que é | Vale para | Equivale, no simulador, a |
+| --- | --- | --- | --- |
+| A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do quadro principal |
+| B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
+
+### 1.1 Legenda dos diagramas
+
+**Tipo A (topologia)**
+
+- Retângulo: host (computador ou servidor final).
+- Hexágono: switch.
+- Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
+- Estádio (cantos bem arredondados): servidor ou rede externa.
+- Retângulo vermelho: atacante (quando existe no modo).
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
+
+**Tipo B (sequência)**
+
+- Cada coluna é um participante (cliente, servidor, roteador ou outro). O tempo corre de cima para baixo.
+- Seta cheia: mensagem enviada. Seta com X: mensagem perdida.
+- `[cifrado]` no início do rótulo: a mensagem viaja cifrada.
+- Faixa horizontal com texto: início de uma fase do cenário.
+- A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
+
+### 1.2 Lista de figuras
+
+**Tipo A (topologia)**
+
+- [Figura 2.1](#21-topologia-de-6-sistemas-autônomos): topologia dos seis sistemas autônomos
+
+**Tipo B (sequência)**
+
+- [Figura 5.1](#51-estabelecimento-da-sessão): sequência de "Estabelecimento da sessão"
+- [Figura 5.3](#53-propagação-do-anúncio): sequência de "Propagação do anúncio"
+- [Figura 5.11](#511-sequestro-de-prefixo): sequência de "Sequestro de prefixo"
+- [Figura 5.14](#514-vazamento-de-rota): sequência de "Vazamento de rota"
+
+## 2. Topologia
+
+Figuras do Tipo A, geradas a partir da mesma definição que a página usa para desenhar a rede.
+
+### 2.1 Topologia de 6 sistemas autônomos
+
+```mermaid
+flowchart LR
+  n_T("Trânsito<br/>AS64496")
+  n_A("ISP A<br/>AS64500")
+  n_B("ISP B<br/>AS64501")
+  n_C["Cliente<br/>AS64510, 203.0.113.0/24"]
+  n_D["Conteúdo<br/>AS64511, 198.51.100.0/24"]
+  n_M["Atacante<br/>AS64666"]
+  n_T -- "provedor: Trânsito" --- n_A
+  n_T -- "provedor: Trânsito" --- n_B
+  n_A -. "peering" .- n_B
+  n_A -- "provedor: ISP A" --- n_C
+  n_B -- "provedor: ISP B" --- n_C
+  n_T -- "provedor: Trânsito" --- n_D
+  n_B -. "peering" .- n_D
+  n_B -- "provedor: ISP B" --- n_M
+  classDef atacante fill:#fde2e2,stroke:#b42318,color:#111
+  class n_M atacante
+```
+
+*Figura 2.1 (Tipo A, topologia).* 6 sistemas autônomos e 8 enlaces BGP: Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas contínuas: relação de provedor e cliente, com o provedor indicado no rótulo. Linhas tracejadas: peering. Vale para todos os cenários; o Atacante só age nos cenários de segurança.
+
+## 3. Abas
 
 Cenário, Terminal, Captura, Mensagem BGP, Sessões, Tabela BGP, Experimento, Referência, Log de eventos.
 
-## 2. Configurações (campos do painel)
+## 4. Configurações (campos do painel)
 
 - **Sentido do tráfego**. Valores: Conteúdo → Cliente; Cliente → Conteúdo; ISP A → Conteúdo. Padrão: Conteúdo → Cliente.
   - **ISP A → Conteúdo:** mostra o caminho de um provedor, útil no cenário de vazamento de rota.
@@ -52,13 +122,13 @@ Cenário, Terminal, Captura, Mensagem BGP, Sessões, Tabela BGP, Experimento, Re
   - Muda só a velocidade de exibição; rotas, UPDATEs e decisões são os mesmos.
   - Use Avançar fase para acompanhar as sessões e a convergência passo a passo.
 
-## 3. Cenários
+## 5. Cenários
 
 > **Grupo:** Sessões
 
 Como dois roteadores de AS diferentes abrem e mantêm uma sessão BGP, e como uma sessão morta é detectada.
 
-### 3.1 Estabelecimento da sessão
+### 5.1 Estabelecimento da sessão
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -90,7 +160,22 @@ Acompanhe os estados na aba Sessões e abra um OPEN na aba Mensagem BGP.
 
 O BGP não descobre vizinhos sozinho: toda sessão é configurada à mão, dos dois lados. Se os parâmetros do OPEN não batem (por exemplo, o AS esperado), a sessão termina com NOTIFICATION.
 
-### 3.2 Hold timer
+```mermaid
+sequenceDiagram
+  participant h_Cliente as AS64510<br/>Cliente
+  participant h_ISP_A as AS64500<br/>ISP A
+  h_Cliente ->> h_ISP_A: TCP SYN para a porta 179
+  h_ISP_A ->> h_Cliente: TCP SYN-ACK
+  h_Cliente ->> h_ISP_A: TCP ACK
+  h_ISP_A ->> h_Cliente: OPEN AS64500, hold 180 s, ID 10.0.0.2
+  h_Cliente ->> h_ISP_A: OPEN AS64510, hold 180 s, ID 10.0.0.10
+  h_ISP_A ->> h_Cliente: KEEPALIVE confirma o OPEN
+  h_Cliente ->> h_ISP_A: KEEPALIVE confirma o OPEN
+```
+
+*Figura 5.1 (Tipo B, sequência).* Mensagens do cenário "Estabelecimento da sessão", na ordem do tempo, entre AS64510 Cliente, AS64500 ISP A: 7 mensagens. Só as mensagens do enlace L4 (ISP A e Cliente), do tipo TCP, OPEN, KEEPALIVE, depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
+### 5.2 Hold timer
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -126,7 +211,7 @@ O hold time define quanto tempo o tráfego pode ir para um vizinho morto. Valore
 
 Como um prefixo se espalha de AS em AS e quem repassa o quê, conforme as relações comerciais.
 
-### 3.3 Propagação do anúncio
+### 5.3 Propagação do anúncio
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -158,7 +243,29 @@ A cada AS, o AS_PATH ganha mais um número e o NEXT_HOP passa a ser o endereço 
 
 O AS_PATH é a memória do caminho: evita laços e serve de critério de escolha. Por isso o BGP é chamado de protocolo de vetor de caminho.
 
-### 3.4 Exportação entre provedores e peers
+```mermaid
+sequenceDiagram
+  participant h_Cliente as AS64510<br/>Cliente
+  participant h_ISP_A as AS64500<br/>ISP A
+  participant h_ISP_B as AS64501<br/>ISP B
+  participant h_Tr_nsito as AS64496<br/>Trânsito
+  participant h_Conte_do as AS64511<br/>Conteúdo
+  participant h_Atacante as AS64666<br/>Atacante
+  h_Cliente ->> h_ISP_A: UPDATE 203.0.113.0/24 AS_PATH 64510 NEXT_HOP 172.16.4.2
+  h_Cliente ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64510 NEXT_HOP 172.16.5.2
+  h_ISP_A ->> h_Tr_nsito: UPDATE 203.0.113.0/24 AS_PATH 64500 64510 NEXT_HOP 172.16.1.2
+  h_ISP_B ->> h_Tr_nsito: UPDATE 203.0.113.0/24 AS_PATH 64501 64510 NEXT_HOP 172.16.2.2
+  h_ISP_A ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64500 64510 NEXT_HOP 172.16.3.1
+  h_ISP_B ->> h_ISP_A: UPDATE 203.0.113.0/24 AS_PATH 64501 64510 NEXT_HOP 172.16.3.2
+  h_ISP_B ->> h_Conte_do: UPDATE 203.0.113.0/24 AS_PATH 64501 64510 NEXT_HOP 172.16.7.1
+  h_ISP_B ->> h_Atacante: UPDATE 203.0.113.0/24 AS_PATH 64501 64510 NEXT_HOP 172.16.8.1
+  h_Tr_nsito ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64496 64500 64510 NEXT_HOP 172.16.2.1
+  h_Tr_nsito ->> h_Conte_do: UPDATE 203.0.113.0/24 AS_PATH 64496 64500 64510 NEXT_HOP 172.16.6.1
+```
+
+*Figura 5.3 (Tipo B, sequência).* Mensagens do cenário "Propagação do anúncio", na ordem do tempo, entre AS64510 Cliente, AS64500 ISP A, AS64501 ISP B, AS64496 Trânsito, AS64511 Conteúdo, AS64666 Atacante: 10 mensagens. Só as mensagens do prefixo 203.0.113.0/24, do tipo UPDATE, depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
+### 5.4 Exportação entre provedores e peers
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -194,7 +301,7 @@ O ISP B conhece um caminho mais curto, mas não o repassa ao ISP A.
 
 Como cada AS escolhe um único caminho entre vários, e como a política influencia o tráfego que sai e o que entra.
 
-### 3.5 AS_PATH mais curto
+### 5.5 AS_PATH mais curto
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -225,7 +332,7 @@ Há dois caminhos: pelo ISP B (peering) e pelo Trânsito. Envie tráfego Conteú
 
 O AS_PATH é uma aproximação grosseira de distância: um caminho com menos AS pode ser mais lento. Por isso os operadores combinam o AS_PATH com políticas de LOCAL_PREF.
 
-### 3.6 Desempate por router ID
+### 5.6 Desempate por router ID
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -256,7 +363,7 @@ Na aba Tabela BGP, veja qual critério desempatou.
 
 Desempates arbitrários tornam o caminho imprevisível para quem está fora. Operadores costumam definir políticas explícitas para não depender deles.
 
-### 3.7 LOCAL_PREF (saída)
+### 5.7 LOCAL_PREF (saída)
 
 Configuração: LOCAL_PREF 200 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -287,7 +394,7 @@ Depois volte o LOCAL_PREF para 100 e envie de novo: o caminho muda, e nenhum UPD
 
 É a principal ferramenta de engenharia de tráfego de saída: preferir o provedor mais barato, o de melhor desempenho ou um enlace de backup.
 
-### 3.8 AS-path prepend (entrada)
+### 5.8 AS-path prepend (entrada)
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend 3x para o ISP B; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -322,7 +429,7 @@ Depois tire o prepend e envie de novo: o tráfego volta a entrar pelo ISP B.
 
 O que acontece quando um caminho deixa de existir: retiradas, reconvergência e caminhos alternativos.
 
-### 3.9 Falha de enlace
+### 5.9 Falha de enlace
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -353,7 +460,7 @@ Restaure o enlace e veja as rotas voltarem.
 
 O dual-homing só protege se o outro caminho também for anunciado e aceito. A convergência do BGP leva de segundos a minutos, e durante esse tempo parte do tráfego pode se perder.
 
-### 3.10 Retirada do prefixo
+### 5.10 Retirada do prefixo
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; defesas: nenhuma
 
@@ -387,7 +494,7 @@ Envie tráfego Conteúdo → Cliente: ele não tem mais para onde ir.
 
 Como anúncios indevidos, violações de política e instabilidade desviam ou interrompem o tráfego, e como as defesas de importação (filtros, RPKI, damping) barram cada problema.
 
-### 3.11 Sequestro de prefixo
+### 5.11 Sequestro de prefixo
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; o Atacante origina 203.0.113.0/24; defesas: nenhuma
 
@@ -420,7 +527,30 @@ Envie tráfego **Conteúdo → Cliente** e veja onde ele para. Depois ligue uma 
 
 O alcance do sequestro depende de quem aceita a rota falsa, e não de quem a originou. As defesas atuam na importação: filtro de prefixos no provedor do atacante e validação de origem (RPKI) em qualquer AS. Incidentes reais costumam ser erros de configuração, não ataques, e causam indisponibilidade em larga escala.
 
-### 3.12 Defesa: filtro de prefixos
+```mermaid
+sequenceDiagram
+  participant h_Cliente as AS64510<br/>Cliente
+  participant h_ISP_A as AS64500<br/>ISP A
+  participant h_ISP_B as AS64501<br/>ISP B
+  participant h_Atacante as AS64666<br/>Atacante
+  participant h_Tr_nsito as AS64496<br/>Trânsito
+  participant h_Conte_do as AS64511<br/>Conteúdo
+  h_Cliente ->> h_ISP_A: UPDATE 203.0.113.0/24 AS_PATH 64510 NEXT_HOP 172.16.4.2
+  h_Cliente ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64510 NEXT_HOP 172.16.5.2
+  h_Atacante ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64666 NEXT_HOP 172.16.8.2
+  h_ISP_A ->> h_Tr_nsito: UPDATE 203.0.113.0/24 AS_PATH 64500 64510 NEXT_HOP 172.16.1.2
+  h_ISP_B ->> h_Tr_nsito: UPDATE 203.0.113.0/24 AS_PATH 64501 64666 NEXT_HOP 172.16.2.2
+  h_ISP_A ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64500 64510 NEXT_HOP 172.16.3.1
+  h_ISP_B ->> h_ISP_A: UPDATE 203.0.113.0/24 AS_PATH 64501 64666 NEXT_HOP 172.16.3.2
+  h_ISP_B ->> h_Cliente: UPDATE 203.0.113.0/24 AS_PATH 64501 64666 NEXT_HOP 172.16.5.1
+  h_ISP_B ->> h_Conte_do: UPDATE 203.0.113.0/24 AS_PATH 64501 64666 NEXT_HOP 172.16.7.1
+  h_Tr_nsito ->> h_ISP_B: UPDATE 203.0.113.0/24 AS_PATH 64496 64500 64510 NEXT_HOP 172.16.2.1
+  h_Tr_nsito ->> h_Conte_do: UPDATE 203.0.113.0/24 AS_PATH 64496 64500 64510 NEXT_HOP 172.16.6.1
+```
+
+*Figura 5.11 (Tipo B, sequência).* Mensagens do cenário "Sequestro de prefixo", na ordem do tempo, entre AS64510 Cliente, AS64500 ISP A, AS64501 ISP B, AS64666 Atacante, AS64496 Trânsito, AS64511 Conteúdo: 11 mensagens. Só as mensagens do prefixo 203.0.113.0/24, do tipo UPDATE, depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
+### 5.12 Defesa: filtro de prefixos
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; o Atacante origina 203.0.113.0/24; defesas: filtro de prefixos de clientes no ISP B
 
@@ -452,7 +582,7 @@ Troque o filtro para **no Trânsito** e observe: o desvio volta. Por que o filtr
 
 O filtro só funciona na borda: precisa estar no provedor direto de quem anuncia. Depende de listas atualizadas e não escala para a Internet inteira, por isso é complementado pelo RPKI.
 
-### 3.13 Defesa: RPKI / ROV
+### 5.13 Defesa: RPKI / ROV
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; o Atacante origina 203.0.113.0/24; defesas: RPKI / ROV só no ISP B
 
@@ -483,7 +613,7 @@ Troque o ROV para **só no ISP A** e envie tráfego Conteúdo → Cliente: o Con
 
 O ROV só protege quem o aplica, e o benefício cresce com a adoção. Ele valida a origem, não o caminho: não detecta uma rota vazada nem um AS_PATH forjado (para isso existem ASPA e BGPsec).
 
-### 3.14 Vazamento de rota
+### 5.14 Vazamento de rota
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; o ISP B vaza a rota do Conteúdo ao ISP A; defesas: LOCAL_PREF por relação comercial
 
@@ -515,7 +645,27 @@ Envie tráfego **ISP A → Conteúdo**, depois ligue o **filtro de rotas de peer
 
 O ISP B passa a carregar tráfego de que não foi contratado, e o ISP A usa um caminho que não pagou nem negociou. Defesa: o ISP A filtra o que aceita do peer ao cone de clientes dele (barra a rota vazada); no protocolo, os papéis BGP com atributo OTC ([RFC 9234](https://www.rfc-editor.org/rfc/rfc9234)) detectam o vazamento, mas dependem de os dois lados implementarem.
 
-### 3.15 Flapping de rota
+```mermaid
+sequenceDiagram
+  participant h_Conte_do as AS64511<br/>Conteúdo
+  participant h_Tr_nsito as AS64496<br/>Trânsito
+  participant h_ISP_B as AS64501<br/>ISP B
+  participant h_ISP_A as AS64500<br/>ISP A
+  participant h_Cliente as AS64510<br/>Cliente
+  participant h_Atacante as AS64666<br/>Atacante
+  h_Conte_do ->> h_Tr_nsito: UPDATE 198.51.100.0/24 AS_PATH 64511 NEXT_HOP 172.16.6.2
+  h_Conte_do ->> h_ISP_B: UPDATE 198.51.100.0/24 AS_PATH 64511 NEXT_HOP 172.16.7.2
+  h_Tr_nsito ->> h_ISP_A: UPDATE 198.51.100.0/24 AS_PATH 64496 64511 NEXT_HOP 172.16.1.1
+  h_Tr_nsito ->> h_ISP_B: UPDATE 198.51.100.0/24 AS_PATH 64496 64511 NEXT_HOP 172.16.2.1
+  h_ISP_B ->> h_ISP_A: UPDATE 198.51.100.0/24 AS_PATH 64501 64511 NEXT_HOP 172.16.3.2
+  h_ISP_B ->> h_Cliente: UPDATE 198.51.100.0/24 AS_PATH 64501 64511 NEXT_HOP 172.16.5.1
+  h_ISP_B ->> h_Atacante: UPDATE 198.51.100.0/24 AS_PATH 64501 64511 NEXT_HOP 172.16.8.1
+  h_ISP_A ->> h_Cliente: UPDATE 198.51.100.0/24 AS_PATH 64500 64501 64511 NEXT_HOP 172.16.4.1
+```
+
+*Figura 5.14 (Tipo B, sequência).* Mensagens do cenário "Vazamento de rota", na ordem do tempo, entre AS64511 Conteúdo, AS64496 Trânsito, AS64501 ISP B, AS64500 ISP A, AS64510 Cliente, AS64666 Atacante: 8 mensagens. Só as mensagens do prefixo 198.51.100.0/24, do tipo UPDATE, depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
+### 5.15 Flapping de rota
 
 Configuração: LOCAL_PREF 100 para o ISP A; prepend nenhum; 203.0.113.0/24 anunciado; o Cliente oscila o anúncio; defesas: nenhuma
 
@@ -546,9 +696,9 @@ Reinicie com o **flap damping nos provedores** ligado: compare o número de mens
 
 O damping contém a instabilidade, mas pune também o prefixo legítimo: ele fica fora do ar até a penalidade decair. Por isso o RIPE-580 e a [RFC 7196](https://www.rfc-editor.org/rfc/rfc7196) recomendam usá-lo, se for o caso, só com parâmetros conservadores.
 
-## 4. Referência
+## 6. Referência
 
-### 4.1 O que é o BGP
+### 6.1 O que é o BGP
 
           
 
@@ -560,7 +710,7 @@ O BGP é um protocolo de **vetor de caminho**: cada rota carrega a lista dos AS 
 
           
 
-### 4.2 Sessões e mensagens ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271))
+### 6.2 Sessões e mensagens ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271))
 
           
 
@@ -579,7 +729,7 @@ Depois que a sessão sobe, os vizinhos trocam a tabela completa uma vez; dali em
 
           
 
-### 4.3 Atributos e processo de decisão
+### 6.3 Atributos e processo de decisão
 
           
 
@@ -601,7 +751,7 @@ O **NEXT_HOP** indica para onde mandar o tráfego; em eBGP, cada AS troca o NEXT
 
           
 
-### 4.4 Relações comerciais e exportação
+### 6.4 Relações comerciais e exportação
 
           
 
@@ -618,7 +768,7 @@ Assim, nenhum AS oferece trânsito gratuito entre dois provedores ou dois peers.
 
           
 
-### 4.5 Convergência e falhas
+### 6.5 Convergência e falhas
 
           
 
@@ -630,7 +780,7 @@ Quando um enlace cai, a sessão termina e cada lado descarta as rotas aprendidas
 
           
 
-### 4.6 BGP e segurança
+### 6.6 BGP e segurança
 
           
 
@@ -653,7 +803,7 @@ As defesas simuladas aqui atuam na **importação** de rotas:
 
           
 
-### 4.7 Roteiro de exercícios
+### 6.7 Roteiro de exercícios
 
           
 

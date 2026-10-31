@@ -7,11 +7,104 @@ Laboratório defensivo com 12 ataques (SYN flood, Slowloris, RST injection, varr
 - **RFCs e padrões:** [RFC 4987](https://www.rfc-editor.org/rfc/rfc4987), [BCP 38](https://www.rfc-editor.org/info/bcp38)
 - **Tópicos:** SYN flood e Slowloris; Varreduras e amplificação; Mitigação e falsos positivos; Resposta a incidente
 
-## 1. Abas
+## 1. Como ler os diagramas
+
+Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
+
+| Tipo | O que é | Vale para | Equivale, no simulador, a |
+| --- | --- | --- | --- |
+| A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do quadro principal |
+
+### 1.1 Legenda dos diagramas
+
+**Tipo A (topologia)**
+
+- Retângulo: host (computador ou servidor final).
+- Hexágono: switch.
+- Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
+- Estádio (cantos bem arredondados): servidor ou rede externa.
+- Retângulo vermelho: atacante (quando existe no modo).
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
+
+### 1.2 Lista de figuras
+
+**Tipo A (topologia)**
+
+- [Figura 2.1](#21-ataque-direto-de-uma-origem): ataque direto de uma origem
+- [Figura 2.2](#22-ataque-distribuído-botnet): ataque distribuído por uma botnet
+- [Figura 2.3](#23-reflexão-e-amplificação): reflexão e amplificação
+
+## 2. Topologia
+
+Figuras do Tipo A, geradas a partir da mesma definição que a página usa para desenhar a rede.
+
+### 2.1 Ataque direto de uma origem
+
+```mermaid
+flowchart LR
+  n_atk["Atacante<br/>198.51.100.x"]
+  n_client["Cliente<br/>198.51.100.77"]
+  n_fw("FW / IDS<br/>borda da vítima")
+  n_srv["Vítima<br/>203.0.113.10"]
+  n_up(["Operadora<br/>upstream"])
+  n_atk --- n_up
+  n_up --- n_fw
+  n_client --- n_fw
+  n_fw --- n_srv
+  classDef atacante fill:#fde2e2,stroke:#b42318,color:#111
+  class n_atk atacante
+```
+
+*Figura 2.1 (Tipo A, topologia).* O atacante envia o tráfego à vítima pela operadora e pelo firewall e IDS da borda; o cliente legítimo usa o mesmo firewall. Vale para os cenários 5.1 a 5.7; 5.11 e 5.12, inclusive as varreduras, que usam o mesmo desenho.
+
+### 2.2 Ataque distribuído (botnet)
+
+```mermaid
+flowchart LR
+  n_atk["Botnet<br/>milhares de IPs"]
+  n_client["Cliente<br/>198.51.100.77"]
+  n_fw("FW / IDS<br/>borda da vítima")
+  n_srv["Vítima<br/>203.0.113.10"]
+  n_up(["Operadora<br/>upstream"])
+  n_atk --- n_up
+  n_up --- n_fw
+  n_client --- n_fw
+  n_fw --- n_srv
+  classDef atacante fill:#fde2e2,stroke:#b42318,color:#111
+  class n_atk atacante
+```
+
+*Figura 2.2 (Tipo A, topologia).* O mesmo caminho, mas a origem é uma botnet, com milhares de endereços, o que impede o bloqueio por origem. Vale para o cenário 5.8.
+
+### 2.3 Reflexão e amplificação
+
+```mermaid
+flowchart LR
+  n_atk["Atacante<br/>198.51.100.x"]
+  n_edge("ISP<br/>borda da origem")
+  n_refl["Refletor<br/>192.0.2.53"]
+  n_client["Cliente<br/>198.51.100.77"]
+  n_fw("FW / IDS<br/>borda da vítima")
+  n_srv["Vítima<br/>203.0.113.10"]
+  n_up(["Operadora<br/>upstream"])
+  n_atk --- n_edge
+  n_edge --- n_refl
+  n_refl --- n_up
+  n_up --- n_fw
+  n_client --- n_fw
+  n_fw --- n_srv
+  classDef atacante fill:#fde2e2,stroke:#b42318,color:#111
+  class n_atk atacante
+```
+
+*Figura 2.3 (Tipo A, topologia).* O atacante envia requisições com a origem falsificada (o IP da vítima) ao serviço refletor, passando pela rede de origem (ISP). O refletor responde à vítima, por um caminho que passa pela operadora e pelo firewall, com tráfego maior que o das requisições. Vale para os cenários 5.9 e 5.10.
+
+## 3. Abas
 
 Cenário, Efeito dos controles, Configuração de referência, Experimento, Referência, Log de eventos.
 
-## 2. Configurações (campos do painel)
+## 4. Configurações (campos do painel)
 
 - **Intensidade do ataque3 - moderada**. Valores: caixa de seleção. Padrão: não.
   - Define quantos pacotes de ataque saem por ciclo e o ritmo da simulação.
@@ -53,13 +146,13 @@ Cenário, Efeito dos controles, Configuração de referência, Experimento, Refe
   - Muda só a velocidade de exibição; métricas, eficácia e resultados são os mesmos.
   - Use Executar passo para avançar um ciclo de cada vez.
 
-## 3. Cenários
+## 5. Cenários
 
 > **Grupo:** TCP
 
 Ataques que abusam do estado da conexão TCP (fila de conexões, números de sequência, sessões abertas) ou das respostas do TCP para mapear a rede.
 
-### 3.1 TCP SYN flood
+### 5.1 TCP SYN flood
 
 Tipo: ataque direto | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -91,7 +184,7 @@ Controle essencial: **SYN cookies**. A eficácia, o ponto de atuação e o motiv
 
 Contramedidas recomendadas: SYN cookies e ajuste do backlog; Rate limiting por origem e por destino; Filtragem upstream para ataques volumétricos. Risco residual: Floods acima da capacidade do enlace exigem mitigação upstream (operadora, RTBH ou scrubbing center).
 
-### 3.2 TCP RST injection
+### 5.2 TCP RST injection
 
 Tipo: ataque direto | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -123,7 +216,7 @@ Controle essencial: **Firewall stateful**. A eficácia, o ponto de atuação e o
 
 Contramedidas recomendadas: Validação rigorosa de sequência ([RFC 5961](https://www.rfc-editor.org/rfc/rfc5961), challenge ACK); TCP-AO ou IPsec em sessões críticas; Monitoramento de RST anômalos. Risco residual: Sessões longas e de portas previsíveis (BGP, VPN) continuam alvos; prefira TCP-AO ([RFC 5925](https://www.rfc-editor.org/rfc/rfc5925)) ou IPsec.
 
-### 3.3 TCP session hijacking
+### 5.3 TCP session hijacking
 
 Tipo: ataque direto | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -155,7 +248,7 @@ Controle essencial: **TLS / SSH**. A eficácia, o ponto de atuação e o motivo 
 
 Contramedidas recomendadas: TLS ou SSH para autenticação e integridade; Números de sequência imprevisíveis; Firewall stateful e segmentação. Risco residual: Um atacante no caminho (MITM) vê a sequência correta e vence controles de estado; só criptografia autenticada protege a integridade.
 
-### 3.4 TCP ACK / port scan
+### 5.4 TCP ACK / port scan
 
 Tipo: varredura | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -187,7 +280,7 @@ Controle essencial: **Firewall stateful**. A eficácia, o ponto de atuação e o
 
 Contramedidas recomendadas: Política padrão de bloqueio; Firewall stateful para descartar ACK órfão; Correlação de varredura no IDS/IPS. Risco residual: Varreduras lentas e distribuídas passam abaixo dos limiares; mantenha inventário e exponha o mínimo.
 
-### 3.5 TCP Slowloris (conexões lentas)
+### 5.5 TCP Slowloris (conexões lentas)
 
 Tipo: ataque direto | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -219,7 +312,7 @@ Controle essencial: **Hardening de serviços**. A eficácia, o ponto de atuaçã
 
 Contramedidas recomendadas: Timeouts curtos de cabeçalho e corpo; Limite de conexões simultâneas por IP; Proxy reverso orientado a eventos na frente do servidor. Risco residual: Variações (R.U.D.Y., slow read) atacam o corpo da requisição e a leitura da resposta; revise todos os timeouts da aplicação.
 
-### 3.6 TCP varredura lenta (low and slow)
+### 5.6 TCP varredura lenta (low and slow)
 
 Tipo: varredura | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -255,7 +348,7 @@ Contramedidas recomendadas: Expor somente as portas necessárias; Correlação d
 
 Ataques que exploram a falta de conexão do UDP: volume, origem falsificada, reflexão, amplificação e varredura.
 
-### 3.7 UDP flood
+### 5.7 UDP flood
 
 Tipo: ataque direto | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -287,7 +380,7 @@ Controle essencial: **Rate limiting**. A eficácia, o ponto de atuação e o mot
 
 Contramedidas recomendadas: Rate limiting e QoS; ACLs para serviços desnecessários; Mitigação upstream e scrubbing. Risco residual: Se o volume excede o enlace, nenhum controle local resolve: é preciso mitigação upstream (RTBH, FlowSpec, scrubbing).
 
-### 3.8 UDP DDoS distribuído (botnet)
+### 5.8 UDP DDoS distribuído (botnet)
 
 Tipo: ataque distribuído | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -319,7 +412,7 @@ Controle essencial: **Mitigação upstream**. A eficácia, o ponto de atuação 
 
 Contramedidas recomendadas: Mitigação upstream: scrubbing ou FlowSpec; Plano de resposta com a operadora definido antes do incidente; CDN e anycast para diluir o volume. Risco residual: Botnets muito grandes podem exceder até a capacidade de scrubbing contratada; anycast e CDN diluem o impacto.
 
-### 3.9 UDP amplification
+### 5.9 UDP amplification
 
 Tipo: reflexão, fator 4x | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -351,7 +444,7 @@ Controle essencial: **Anti-spoofing** e **Hardening de serviços**. A eficácia,
 
 Contramedidas recomendadas: [BCP 38](https://www.rfc-editor.org/info/bcp38) / 84 na rede de origem; Desativar amplificadores abertos; Response Rate Limiting e filtragem upstream. Risco residual: O tráfego amplificado pode exceder o enlace da vítima; filtragem por porta de origem e scrubbing na operadora continuam necessários.
 
-### 3.10 UDP spoofing / reflection
+### 5.10 UDP spoofing / reflection
 
 Tipo: reflexão, fator 2x | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -383,7 +476,7 @@ Controle essencial: **Anti-spoofing**. A eficácia, o ponto de atuação e o mot
 
 Contramedidas recomendadas: Filtragem de ingresso e egresso ([BCP 38](https://www.rfc-editor.org/info/bcp38) / 84); Validação de origem na operadora; Rate limiting nos serviços UDP. Risco residual: Enquanto houver redes sem [BCP 38](https://www.rfc-editor.org/info/bcp38), a falsificação continua possível; a vítima depende de filtragem e mitigação upstream.
 
-### 3.11 UDP port scan
+### 5.11 UDP port scan
 
 Tipo: varredura | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -415,7 +508,7 @@ Controle essencial: **Hardening de serviços**. A eficácia, o ponto de atuaçã
 
 Contramedidas recomendadas: Expor somente serviços necessários; ACLs e firewall com registro; Detecção por limiar e correlação temporal. Risco residual: Serviços realmente expostos continuarão respondendo; mantenha-os atualizados e monitorados.
 
-### 3.12 UDP DNS water torture
+### 5.12 UDP DNS water torture
 
 Tipo: via resolvedores legítimos | vítima 203.0.113.10 | ative os controles no painel lateral e clique em Iniciar.
 
@@ -447,13 +540,13 @@ Controle essencial: **IDS/IPS**. A eficácia, o ponto de atuação e o motivo de
 
 Contramedidas recomendadas: Detecção pela proporção de NXDOMAIN e filtragem pelo padrão do nome; RRL com limite de NXDOMAIN no autoritativo; Aggressive NSEC ([RFC 8198](https://www.rfc-editor.org/rfc/rfc8198)) nos resolvedores e capacidade anycast. Risco residual: Bloquear por IP derruba os resolvedores que também atendem os usuários; a defesa precisa olhar o nome consultado, não a origem.
 
-## 4. Referência
+## 6. Referência
 
 Ambiente didático isolado: todos os hosts, pacotes e resultados existem apenas nesta página e não há tráfego de rede real. Os endereços usam as faixas de documentação da [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737).
 
           
 
-### 4.1 Como ler a simulação
+### 6.1 Como ler a simulação
 
           
 
@@ -465,7 +558,7 @@ Na telemetria, vale sempre: **ataque rumo à vítima = neutralizados + chegaram 
 
           
 
-### 4.2 TCP e abuso de estado
+### 6.2 TCP e abuso de estado
 
           
 
@@ -473,7 +566,7 @@ O TCP mantém estado e usa flags, números de sequência e confirmações. Ataqu
 
           
 
-### 4.3 UDP e abuso sem conexão
+### 6.3 UDP e abuso sem conexão
 
           
 
@@ -481,7 +574,7 @@ O UDP não estabelece sessão e não confirma a origem. Isso favorece falsifica�
 
           
 
-### 4.4 Onde cada controle atua
+### 6.4 Onde cada controle atua
 
           
 
@@ -493,7 +586,7 @@ O UDP não estabelece sessão e não confirma a origem. Isso favorece falsifica�
 
           
 
-### 4.5 Ataques de baixo volume e de aplicação
+### 6.5 Ataques de baixo volume e de aplicação
 
           
 
@@ -501,7 +594,7 @@ O UDP não estabelece sessão e não confirma a origem. Isso favorece falsifica�
 
           
 
-### 4.6 Ataques volumétricos e mitigação upstream
+### 6.6 Ataques volumétricos e mitigação upstream
 
           
 
@@ -513,7 +606,7 @@ No **DNS water torture**, os bots consultam nomes aleatórios por meio de resolv
 
           
 
-### 4.7 Ciclo de resposta a incidente
+### 6.7 Ciclo de resposta a incidente
 
           
 
@@ -521,7 +614,7 @@ O painel lateral acompanha as fases do NIST SP 800-61r2 (substituída pela Rev. 
 
           
 
-### 4.8 Roteiro de exercícios
+### 6.8 Roteiro de exercícios
 
           
 

@@ -7,11 +7,83 @@ Núcleo MPLS com seis LSRs: sessões LDP, LIB e LFIB, push, swap e pop, PHP, mod
 - **RFCs e padrões:** [RFC 3031](https://www.rfc-editor.org/rfc/rfc3031), [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036), [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364)
 - **Tópicos:** LDP, LIB e LFIB; Push, swap e pop; PHP e TTL; L3VPN com dois rótulos
 
-## 1. Abas
+## 1. Como ler os diagramas
+
+Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
+
+| Tipo | O que é | Vale para | Equivale, no simulador, a |
+| --- | --- | --- | --- |
+| A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do quadro principal |
+| B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
+
+### 1.1 Legenda dos diagramas
+
+**Tipo A (topologia)**
+
+- Retângulo: host (computador ou servidor final).
+- Hexágono: switch.
+- Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
+- Estádio (cantos bem arredondados): servidor ou rede externa.
+- Retângulo vermelho: atacante (quando existe no modo).
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
+
+**Tipo B (sequência)**
+
+- Cada coluna é um participante (cliente, servidor, roteador ou outro). O tempo corre de cima para baixo.
+- Seta cheia: mensagem enviada. Seta com X: mensagem perdida.
+- `[cifrado]` no início do rótulo: a mensagem viaja cifrada.
+- Faixa horizontal com texto: início de uma fase do cenário.
+- A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
+
+### 1.2 Lista de figuras
+
+**Tipo A (topologia)**
+
+- [Figura 2.1](#21-topologia-de-6-lsr-e-2-hosts): topologia do núcleo MPLS e dos hosts
+
+**Tipo B (sequência)**
+
+- [Figura 5.2](#52-push-swap-e-pop): sequência de "Push, swap e pop"
+- [Figura 5.3](#53-explicit-null): sequência de "explicit-null"
+- [Figura 5.4](#54-sem-php): sequência de "Sem PHP"
+- [Figura 5.7](#57-l3vpn): sequência de "L3VPN"
+
+## 2. Topologia
+
+Figuras do Tipo A, geradas a partir da mesma definição que a página usa para desenhar a rede.
+
+### 2.1 Topologia de 6 LSR e 2 hosts
+
+```mermaid
+flowchart LR
+  n_PE1("PE1<br/>PE, 10.255.255.1")
+  n_P1("P1<br/>P, 10.255.255.2")
+  n_P2("P2<br/>P, 10.255.255.3")
+  n_P3("P3<br/>P, 10.255.255.4")
+  n_P4("P4<br/>P, 10.255.255.5")
+  n_PE2("PE2<br/>PE, 10.255.255.6")
+  n_H_A["H-A<br/>192.168.1.10"]
+  n_H_B["H-B<br/>192.168.2.10"]
+  n_PE1 -- "L1, custo 10" --- n_P1
+  n_PE1 -- "L2, custo 10" --- n_P2
+  n_P1 -- "L3, custo 10" --- n_P2
+  n_P1 -- "L4, custo 10" --- n_P3
+  n_P2 -- "L5, custo 15" --- n_P4
+  n_P3 -- "L6, custo 10" --- n_P4
+  n_P3 -- "L7, custo 10" --- n_PE2
+  n_P4 -- "L8, custo 10" --- n_PE2
+  n_H_A --- n_PE1
+  n_H_B --- n_PE2
+```
+
+*Figura 2.1 (Tipo A, topologia).* 2 roteadores de borda (PE), 4 roteadores de núcleo (P) e 2 hosts. Cada enlace traz o identificador e o custo IGP; o endereço sob o nome é o de loopback do LSR (ou o IP do host). Os P encaminham por rótulos; o PE1 e o PE2 ligam as redes 192.168.1.0/24 e 192.168.2.0/24. Vale para todos os cenários.
+
+## 3. Abas
 
 Cenário, LIB / LFIB, Captura, Pacote, Terminal, Experimento, Referência, Log de eventos.
 
-## 2. Configurações (campos do painel)
+## 4. Configurações (campos do painel)
 
 - **Serviço**. Valores: IP sobre MPLS (1 rótulo); L3VPN (pilha de 2 rótulos). Padrão: IP sobre MPLS (1 rótulo).
   - **IP sobre MPLS:** todos os LSRs conhecem as redes dos clientes e o pacote leva 1 rótulo.
@@ -35,13 +107,13 @@ Cenário, LIB / LFIB, Captura, Pacote, Terminal, Experimento, Referência, Log d
   - Muda só a velocidade de exibição; rótulos, TTL e tempos são os mesmos.
   - Use Avançar fase para acompanhar o LDP passo a passo.
 
-## 3. Cenários
+## 5. Cenários
 
 > **Grupo:** LDP e LSP
 
 Como o plano de controle (LDP sobre o IGP) monta os caminhos rotulados e como o plano de dados os percorre.
 
-### 3.1 Montagem do LSP
+### 5.1 Montagem do LSP
 
 Configuração do cenário: IP sobre MPLS; egresso implicit-null; TTL Uniform
 
@@ -73,7 +145,7 @@ Depois escolha um LSR em **Ver LIB / LFIB** e compare a LIB, com os rótulos de 
 
 Sem LDP não há rótulos, e o tráfego segue por roteamento IP comum (ou é descartado, na L3VPN). O LDP depende do IGP: só existem rótulos para destinos que o OSPF conhece.
 
-### 3.2 Push, swap e pop
+### 5.2 Push, swap e pop
 
 Configuração do cenário: IP sobre MPLS; egresso implicit-null; TTL Uniform
 
@@ -105,11 +177,33 @@ Troque o sentido para H-B → H-A e repita: a volta usa outro LSP, com outros r�
 
 Comutar por rótulo permite engenharia de tráfego, VPNs e caminhos independentes do destino IP; o núcleo nem precisa conhecer as redes dos clientes.
 
+```mermaid
+sequenceDiagram
+  participant h_H_A as Host<br/>H-A
+  participant h_PE1 as PE<br/>PE1
+  participant h_P1 as P<br/>P1
+  participant h_P3 as P<br/>P3
+  participant h_PE2 as PE<br/>PE2
+  participant h_H_B as Host<br/>H-B
+  h_H_A ->> h_PE1: Echo Request: envio pelo host (gateway 192.168.1.1)
+  h_PE1 ->> h_P1: Echo Request: push 208 (FEC 192.168.2.0/24)
+  h_P1 ->> h_P3: Echo Request: swap 208 → 408
+  h_P3 ->> h_PE2: Echo Request: pop 408 (PHP, PE2 anunciou imp-null)
+  h_PE2 ->> h_H_B: Echo Request: entrega na rede conectada
+  h_H_B ->> h_PE2: Echo Reply: envio pelo host (gateway 192.168.2.1)
+  h_PE2 ->> h_P3: Echo Reply: push 407 (FEC 192.168.1.0/24)
+  h_P3 ->> h_P1: Echo Reply: swap 407 → 207
+  h_P1 ->> h_PE1: Echo Reply: pop 207 (PHP, PE1 anunciou imp-null)
+  h_PE1 ->> h_H_A: Echo Reply: entrega na rede conectada
+```
+
+*Figura 5.2 (Tipo B, sequência).* Mensagens do cenário "Push, swap e pop", na ordem do tempo, entre Host H-A, PE PE1, P P1, P P3, PE PE2, Host H-B: 10 mensagens. Mostra um ping do host H-A ao H-B (ida e volta), depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
 > **Grupo:** Rótulo do egresso
 
 O rótulo que o PE de saída anuncia para as próprias FECs define onde o último rótulo é removido.
 
-### 3.3 explicit-null
+### 5.3 explicit-null
 
 Configuração do cenário: IP sobre MPLS; egresso explicit-null; TTL Uniform
 
@@ -140,7 +234,29 @@ Na Captura, o último enlace leva o rótulo 0 até o PE2, que o remove.
 
 Provedores usam explicit-null quando a marcação de QoS do núcleo precisa valer até a borda.
 
-### 3.4 Sem PHP
+```mermaid
+sequenceDiagram
+  participant h_H_A as Host<br/>H-A
+  participant h_PE1 as PE<br/>PE1
+  participant h_P1 as P<br/>P1
+  participant h_P3 as P<br/>P3
+  participant h_PE2 as PE<br/>PE2
+  participant h_H_B as Host<br/>H-B
+  h_H_A ->> h_PE1: Echo Request: envio pelo host (gateway 192.168.1.1)
+  h_PE1 ->> h_P1: Echo Request: push 208 (FEC 192.168.2.0/24)
+  h_P1 ->> h_P3: Echo Request: swap 208 → 408
+  h_P3 ->> h_PE2: Echo Request: swap 408 → 0
+  h_PE2 ->> h_H_B: Echo Request: entrega na rede conectada
+  h_H_B ->> h_PE2: Echo Reply: envio pelo host (gateway 192.168.2.1)
+  h_PE2 ->> h_P3: Echo Reply: push 407 (FEC 192.168.1.0/24)
+  h_P3 ->> h_P1: Echo Reply: swap 407 → 207
+  h_P1 ->> h_PE1: Echo Reply: swap 207 → 0
+  h_PE1 ->> h_H_A: Echo Reply: entrega na rede conectada
+```
+
+*Figura 5.3 (Tipo B, sequência).* Mensagens do cenário "explicit-null", na ordem do tempo, entre Host H-A, PE PE1, P P1, P P3, PE PE2, Host H-B: 10 mensagens. Mostra um ping do host H-A ao H-B (ida e volta), depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
+### 5.4 Sem PHP
 
 Configuração do cenário: IP sobre MPLS; egresso sem PHP; TTL Uniform
 
@@ -171,11 +287,33 @@ Compare onde o pop acontece nos três modos de rótulo do egresso.
 
 O PHP (penultimate hop popping) existe justamente para evitar essa consulta dupla no egresso.
 
+```mermaid
+sequenceDiagram
+  participant h_H_A as Host<br/>H-A
+  participant h_PE1 as PE<br/>PE1
+  participant h_P1 as P<br/>P1
+  participant h_P3 as P<br/>P3
+  participant h_PE2 as PE<br/>PE2
+  participant h_H_B as Host<br/>H-B
+  h_H_A ->> h_PE1: Echo Request: envio pelo host (gateway 192.168.1.1)
+  h_PE1 ->> h_P1: Echo Request: push 208 (FEC 192.168.2.0/24)
+  h_P1 ->> h_P3: Echo Request: swap 208 → 408
+  h_P3 ->> h_PE2: Echo Request: swap 408 → 608
+  h_PE2 ->> h_H_B: Echo Request: entrega na rede conectada
+  h_H_B ->> h_PE2: Echo Reply: envio pelo host (gateway 192.168.2.1)
+  h_PE2 ->> h_P3: Echo Reply: push 407 (FEC 192.168.1.0/24)
+  h_P3 ->> h_P1: Echo Reply: swap 407 → 207
+  h_P1 ->> h_PE1: Echo Reply: swap 207 → 107
+  h_PE1 ->> h_H_A: Echo Reply: entrega na rede conectada
+```
+
+*Figura 5.4 (Tipo B, sequência).* Mensagens do cenário "Sem PHP", na ordem do tempo, entre Host H-A, PE PE1, P P1, P P3, PE PE2, Host H-B: 10 mensagens. Mostra um ping do host H-A ao H-B (ida e volta), depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
 > **Grupo:** TTL
 
 Se o TTL do IP é copiado para o rótulo, o núcleo aparece ou some no traceroute do cliente.
 
-### 3.5 TTL Uniform
+### 5.5 TTL Uniform
 
 Configuração do cenário: IP sobre MPLS; egresso implicit-null; TTL Uniform
 
@@ -204,7 +342,7 @@ Avance as fases e rode o **traceroute**. Com a propagação de TTL, o TTL do IP 
 
 Facilita o diagnóstico do núcleo, mas revela a topologia interna do provedor a qualquer cliente.
 
-### 3.6 TTL Pipe
+### 5.6 TTL Pipe
 
 Configuração do cenário: IP sobre MPLS; egresso implicit-null; TTL Pipe
 
@@ -239,7 +377,7 @@ Esconde a topologia do provedor dos clientes. É uma escolha comum em redes de o
 
 O MPLS usado para separar clientes sobre o mesmo núcleo: a VPN de camada 3.
 
-### 3.7 L3VPN
+### 5.7 L3VPN
 
 Configuração do cenário: L3VPN; egresso implicit-null; TTL Uniform
 
@@ -271,11 +409,33 @@ Os P só olham o rótulo de transporte: não conhecem as redes dos clientes.
 
 Permite atender vários clientes, até com endereços repetidos, sobre o mesmo núcleo. A separação é lógica, não criptográfica: o PE nunca deve aceitar pacotes rotulados vindos do cliente.
 
+```mermaid
+sequenceDiagram
+  participant h_H_A as Host<br/>H-A
+  participant h_PE1 as PE<br/>PE1
+  participant h_P1 as P<br/>P1
+  participant h_P3 as P<br/>P3
+  participant h_PE2 as PE<br/>PE2
+  participant h_H_B as Host<br/>H-B
+  h_H_A ->> h_PE1: Echo Request: envio pelo host (gateway 192.168.1.1)
+  h_PE1 ->> h_P1: Echo Request: push 206 (transporte) + 690 (VPN)
+  h_P1 ->> h_P3: Echo Request: swap 206 → 406
+  h_P3 ->> h_PE2: Echo Request: pop 406 (PHP, PE2 anunciou imp-null)
+  h_PE2 ->> h_H_B: Echo Request: entrega na rede conectada
+  h_H_B ->> h_PE2: Echo Reply: envio pelo host (gateway 192.168.2.1)
+  h_PE2 ->> h_P3: Echo Reply: push 401 (transporte) + 190 (VPN)
+  h_P3 ->> h_P1: Echo Reply: swap 401 → 201
+  h_P1 ->> h_PE1: Echo Reply: pop 201 (PHP, PE1 anunciou imp-null)
+  h_PE1 ->> h_H_A: Echo Reply: entrega na rede conectada
+```
+
+*Figura 5.7 (Tipo B, sequência).* Mensagens do cenário "L3VPN", na ordem do tempo, entre Host H-A, PE PE1, P P1, P P3, PE PE2, Host H-B: 10 mensagens. Mostra um ping do host H-A ao H-B (ida e volta), depois de avançar as quatro fases. Corresponde à aba Captura, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.
+
 > **Grupo:** Falhas
 
 Como os LSPs reagem a mudanças de topologia.
 
-### 3.8 Falha de enlace
+### 5.8 Falha de enlace
 
 Configuração do cenário: IP sobre MPLS; egresso implicit-null; TTL Uniform
 
@@ -306,9 +466,9 @@ O caminho e os rótulos mudam sem esperar nova sinalização LDP.
 
 A convergência do MPLS depende do IGP. Em produção, mecanismos como a sincronização LDP-IGP e o Fast Reroute reduzem a perda durante a troca.
 
-## 4. Referência
+## 6. Referência
 
-### 4.1 O que é o MPLS
+### 6.1 O que é o MPLS
 
           
 
@@ -322,7 +482,7 @@ No **Multiprotocol Label Switching** ([RFC 3031](https://www.rfc-editor.org/rfc/
 
           
 
-### 4.2 Cabeçalho de rótulo ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032))
+### 6.2 Cabeçalho de rótulo ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032))
 
           
 
@@ -346,7 +506,7 @@ O rótulo fica entre o cabeçalho de enlace e o IP (EtherType **0x8847**). Cada 
 
           
 
-### 4.3 LDP ([RFC 5036](https://www.rfc-editor.org/rfc/rfc5036))
+### 6.3 LDP ([RFC 5036](https://www.rfc-editor.org/rfc/rfc5036))
 
           
 
@@ -358,7 +518,7 @@ O rótulo fica entre o cabeçalho de enlace e o IP (EtherType **0x8847**). Cada 
 
           
 
-### 4.4 PHP e modelos de TTL
+### 6.4 PHP e modelos de TTL
 
           Com **PHP** (Penultimate Hop Popping), o egresso anuncia implicit-null (3) e o penúltimo LSR remove o rótulo. Assim, o egresso faz uma única consulta (IP) em vez de duas (rótulo e IP). Com **explicit-null** (0), o rótulo chega ao egresso, o que preserva o campo TC para QoS. A [RFC 3032](https://www.rfc-editor.org/rfc/rfc3032) só permitia o explicit-null no fundo da pilha; a [RFC 4182](https://www.rfc-editor.org/rfc/rfc4182) removeu essa restrição, o que permite usá-lo também sobre o rótulo VPN.
 
@@ -372,7 +532,7 @@ Quando o TTL expira dentro do LSP, o LSR gera o ICMP Time Exceeded, copia a pilh
 
           
 
-### 4.5 L3VPN ([RFC 4364](https://www.rfc-editor.org/rfc/rfc4364))
+### 6.5 L3VPN ([RFC 4364](https://www.rfc-editor.org/rfc/rfc4364))
 
           
 
@@ -380,7 +540,7 @@ Os PEs mantêm uma tabela de roteamento por cliente (**VRF**) e trocam as rotas 
 
           
 
-### 4.6 MPLS e segurança
+### 6.6 MPLS e segurança
 
           
 
@@ -391,7 +551,7 @@ Os PEs mantêm uma tabela de roteamento por cliente (**VRF**) e trocam as rotas 
 
           
 
-### 4.7 Limitações do simulador
+### 6.7 Limitações do simulador
 
           
 
@@ -402,7 +562,7 @@ Os PEs mantêm uma tabela de roteamento por cliente (**VRF**) e trocam as rotas 
 
           
 
-### 4.8 Roteiro de exercícios
+### 6.8 Roteiro de exercícios
 
           
 

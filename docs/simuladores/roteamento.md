@@ -7,11 +7,101 @@ Roteamento dinâmico passo a passo: OSPF em área única e multiárea (Hello, ad
 - **RFCs e padrões:** [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), [RFC 2453](https://www.rfc-editor.org/rfc/rfc2453)
 - **Tópicos:** Hello e adjacências; LSAs e SPF; Bellman-Ford e split horizon; Falhas de enlace
 
-## 1. Abas
+## 1. Como ler os diagramas
+
+Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
+
+| Tipo | O que é | Vale para | Equivale, no simulador, a |
+| --- | --- | --- | --- |
+| A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do quadro principal |
+
+### 1.1 Legenda dos diagramas
+
+**Tipo A (topologia)**
+
+- Retângulo: host (computador ou servidor final).
+- Hexágono: switch.
+- Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
+- Estádio (cantos bem arredondados): servidor ou rede externa.
+- Retângulo vermelho: atacante (quando existe no modo).
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
+
+### 1.2 Lista de figuras
+
+**Tipo A (topologia)**
+
+- [Figura 2.1](#21-rede-de-6-roteadores-ospf-em-área-única-e-ripv2): rede de seis roteadores, OSPF em área única e RIPv2
+- [Figura 2.2](#22-rede-de-9-roteadores-em-três-áreas-ospf-multi-área): rede de nove roteadores em três áreas
+
+## 2. Topologia
+
+Figuras do Tipo A, geradas a partir da mesma definição que a página usa para desenhar a rede.
+
+### 2.1 Rede de 6 roteadores (OSPF em área única e RIPv2)
+
+```mermaid
+flowchart LR
+  n_R1("R1")
+  n_R2("R2")
+  n_R3("R3")
+  n_R4("R4")
+  n_R5("R5")
+  n_R6("R6")
+  n_PC_A["PC-A<br/>ligado a R1"]
+  n_PC_B["PC-B<br/>ligado a R6"]
+  n_R1 -- "L1, custo 10" --- n_R2
+  n_R1 -- "L2, custo 20" --- n_R4
+  n_R2 -- "L3, custo 10" --- n_R3
+  n_R2 -- "L4, custo 15" --- n_R5
+  n_R3 -- "L5, custo 10" --- n_R6
+  n_R4 -- "L6, custo 10" --- n_R5
+  n_R5 -- "L7, custo 20" --- n_R6
+  n_PC_A --- n_R1
+  n_PC_B --- n_R6
+```
+
+*Figura 2.1 (Tipo A, topologia).* 6 roteadores, 7 enlaces com custo OSPF e dois hosts. É a rede dos cenários de OSPF em área única e de RIPv2; o RIPv2 ignora os custos, porque a métrica dele é o número de saltos.
+
+### 2.2 Rede de 9 roteadores em três áreas (OSPF multi-área)
+
+```mermaid
+flowchart LR
+  n_R1("R1<br/>área 1")
+  n_R2("R2<br/>ABR, áreas 1 e 0")
+  n_R3("R3<br/>ABR, áreas 1 e 0")
+  n_R4("R4<br/>área 0")
+  n_R5("R5<br/>área 0")
+  n_R6("R6<br/>área 0")
+  n_R7("R7<br/>área 2")
+  n_R8("R8<br/>ABR, áreas 2 e 0")
+  n_R9("R9<br/>ABR, áreas 2 e 0")
+  n_PC_A["PC-A<br/>ligado a R1"]
+  n_PC_B["PC-B<br/>ligado a R7"]
+  n_R1 -- "custo 10, área 1" --- n_R2
+  n_R1 -- "custo 15, área 1" --- n_R3
+  n_R2 -- "custo 10, área 1" --- n_R3
+  n_R4 -- "custo 10, área 0" --- n_R5
+  n_R5 -- "custo 15, área 0" --- n_R6
+  n_R4 -- "custo 20, área 0" --- n_R6
+  n_R7 -- "custo 10, área 2" --- n_R8
+  n_R7 -- "custo 15, área 2" --- n_R9
+  n_R8 -- "custo 10, área 2" --- n_R9
+  n_R2 -- "custo 25, área 0" --- n_R4
+  n_R3 -- "custo 30, área 0" --- n_R6
+  n_R4 -- "custo 20, área 0" --- n_R8
+  n_R6 -- "custo 25, área 0" --- n_R9
+  n_PC_A --- n_R1
+  n_PC_B --- n_R7
+```
+
+*Figura 2.2 (Tipo A, topologia).* 9 roteadores em três áreas: 1, 0 (backbone) e 2. Os roteadores de borda de área (ABR) pertencem a duas áreas e ligam cada área ao backbone. Cada enlace traz o custo e a área a que pertence. Vale para o cenário de OSPF multi-área.
+
+## 3. Abas
 
 Cenário, Vetores / LSDB, Tabela de roteamento, Experimento, Referência, Log de eventos.
 
-## 2. Configurações (campos do painel)
+## 4. Configurações (campos do painel)
 
 - **Protocolo**. Valores: OSPF (estado de enlace); RIPv2 (vetor de distância). Padrão: OSPF (estado de enlace).
   - **OSPF:** estado de enlace. Cada roteador recebe a descrição de todos os enlaces (LSDB) e calcula o caminho de menor custo com Dijkstra.
@@ -33,13 +123,13 @@ Cenário, Vetores / LSDB, Tabela de roteamento, Experimento, Referência, Log de
   - Muda só a velocidade de exibição; rotas, custos e rodadas são os mesmos.
   - Use Avançar fase para acompanhar a convergência passo a passo.
 
-## 3. Cenários
+## 5. Cenários
 
 > **Grupo:** OSPF
 
 Estado de enlace: cada roteador conhece o mapa inteiro da rede e calcula sozinho o caminho de menor custo, com Dijkstra.
 
-### 3.1 Convergência OSPF
+### 5.1 Convergência OSPF
 
 Configuração do cenário: OSPF, área única
 
@@ -71,7 +161,7 @@ O caminho escolhido é R1 → R2 → R3 → R6, com custo total 30.
 
 Converge rápido e sem laços, porque todos calculam sobre o mesmo mapa. O custo, ligado à banda, permite preferir enlaces rápidos.
 
-### 3.2 Custo e melhor caminho
+### 5.2 Custo e melhor caminho
 
 Configuração do cenário: OSPF, área única
 
@@ -102,7 +192,7 @@ Simule de novo: o tráfego passa a ir por R2 → R5 → R6.
 
 É assim que o administrador faz engenharia de tráfego com o OSPF: ajusta custos para preferir ou evitar enlaces.
 
-### 3.3 Falha de enlace
+### 5.3 Falha de enlace
 
 Configuração do cenário: OSPF, área única
 
@@ -133,7 +223,7 @@ Só R2 e R3 originam novos LSAs; todos recalculam o SPF e a comunicação segue 
 
 A convergência rápida limita o tempo em que o tráfego se perde. Em produção, o BFD detecta a falha em milissegundos.
 
-### 3.4 OSPF multi-área
+### 5.4 OSPF multi-área
 
 Configuração do cenário: OSPF, multi-área
 
@@ -169,7 +259,7 @@ A hierarquia permite ao OSPF escalar: uma falha dentro de uma área não obriga 
 
 Vetor de distância: cada roteador só conhece o que os vizinhos anunciam e escolhe o caminho com menos saltos.
 
-### 3.5 Convergência RIPv2
+### 5.5 Convergência RIPv2
 
 Configuração do cenário: RIPv2, split horizon ligado
 
@@ -199,7 +289,7 @@ O caminho é R1 → R2 → R3 → R6, com 3 saltos.
 
 É simples e leve, mas lento para convergir e limitado a 15 saltos. Ainda aparece em redes pequenas e em equipamentos antigos.
 
-### 3.6 Saltos, não custo
+### 5.6 Saltos, não custo
 
 Configuração do cenário: RIPv2, split horizon ligado
 
@@ -230,7 +320,7 @@ Nada muda nas tabelas: o RIP só conta saltos.
 
 Contar saltos pode levar o tráfego por enlaces lentos. É uma das razões para o RIP ter dado lugar ao OSPF em redes maiores.
 
-### 3.7 Contagem ao infinito
+### 5.7 Contagem ao infinito
 
 Configuração do cenário: RIPv2, split horizon desligado
 
@@ -261,9 +351,9 @@ Conte no log as rodadas até a rede perceber. Depois repita no cenário Converg�
 
 Enquanto a contagem não termina, os pacotes ficam em laço e se perdem. Split horizon, poison reverse e triggered updates reduzem o problema, mas não o eliminam em topologias com ciclos; o limite de 16 garante que ele termina. Essa é uma das razões para protocolos de estado de enlace, como o OSPF, que não têm contagem ao infinito.
 
-## 4. Referência
+## 6. Referência
 
-### 4.1 Roteamento dinâmico
+### 6.1 Roteamento dinâmico
 
           
 
@@ -271,7 +361,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 4.2 OSPF ([RFC 2328](https://www.rfc-editor.org/rfc/rfc2328))
+### 6.2 OSPF ([RFC 2328](https://www.rfc-editor.org/rfc/rfc2328))
 
           
 
@@ -284,7 +374,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 4.3 RIPv2 ([RFC 2453](https://www.rfc-editor.org/rfc/rfc2453))
+### 6.3 RIPv2 ([RFC 2453](https://www.rfc-editor.org/rfc/rfc2453))
 
           
 
@@ -296,7 +386,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 4.4 Comparação
+### 6.4 Comparação
 
           
 
@@ -312,7 +402,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 4.5 Roteamento e segurança
+### 6.5 Roteamento e segurança
 
           
 
@@ -322,7 +412,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 4.6 Roteiro de exercícios
+### 6.6 Roteiro de exercícios
 
           
 

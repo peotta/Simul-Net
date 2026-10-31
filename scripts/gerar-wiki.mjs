@@ -367,7 +367,175 @@ const LEGACY = {
       { label: 'Comparação TCP x UDP', proto: 'cmp', sub: 0 },
     ],
   },
+  // BGP e MPLS animam os pacotes com a Web Animations API e esperas por temporizador; no jsdom as duas são trocadas
+  // por versões imediatas (`fast`). A captura vem de avançar as fases (`advance`, e `then` para um clique extra, como
+  // o ping do MPLS); só entram na sequência os cenários de `seq`, e `row` converte cada linha da aba Captura em
+  // [nº, tempo, origem, destino, tipo, '', informação] ou a descarta (a captura inteira do BGP tem mais de 70 mensagens).
+  // `topos` lê as constantes da própria página, para os diagramas de topologia não divergirem dela.
+  'bgp-simulator.html': {
+    fast: true,
+    advance: { id: 'btnAdvance', n: 4 },
+    hosts: { Trânsito: 'AS64496', 'ISP A': 'AS64500', 'ISP B': 'AS64501', Cliente: 'AS64510', Conteúdo: 'AS64511', Atacante: 'AS64666' },
+    topos: bgpTopos,
+    seq: {
+      'Estabelecimento da sessão': { link: 'L4', types: ['TCP', 'OPEN', 'KEEPALIVE'] },
+      'Propagação do anúncio': { types: ['UPDATE'], prefix: '203.0.113.0/24' },
+      'Sequestro de prefixo': { types: ['UPDATE'], prefix: '203.0.113.0/24' },
+      'Vazamento de rota': { types: ['UPDATE'], prefix: '198.51.100.0/24' },
+    },
+    row: (c, p) => ((!p.link || c[2] === p.link) && p.types.includes(c[5]) && (!p.prefix || c[6].startsWith(p.prefix + ' ')) ? [c[0], c[1], c[3], c[4], c[5], '', c[6]] : null),
+    filtro: (p, ids) => `Só as mensagens ${p.link ? `do enlace ${p.link} (${ids[p.link].join(' e ')})` : `do prefixo ${p.prefix}`}, do tipo ${p.types.join(', ')}, depois de avançar as quatro fases. `,
+  },
+  'mpls-simulator.html': {
+    fast: true,
+    advance: { id: 'btnAdvance', n: 4, then: 'btnPing' },
+    hosts: { 'H-A': 'Host', 'H-B': 'Host', PE1: 'PE', PE2: 'PE', P1: 'P', P2: 'P', P3: 'P', P4: 'P' },
+    topos: mplsTopos,
+    seq: { 'Push, swap e pop': {}, 'explicit-null': {}, 'Sem PHP': {}, L3VPN: {} },
+    // O enlace vem como "L1 PE1 → P1" (entre LSR) ou "H-A / PE1" (entre host e PE); o rótulo é a operação no emissor.
+    row: (c) => {
+      const m = c[2].match(/([\w-]+)\s*(?:→|\/)\s*([\w-]+)\s*$/);
+      return m ? [c[0], c[1], m[1], m[2], '', '', `${/Echo (Request|Reply)/.exec(c[6])?.[0] ?? 'ICMP'}: ${c[5]}`] : null;
+    },
+    filtro: () => 'Mostra um ping do host H-A ao H-B (ida e volta), depois de avançar as quatro fases. ',
+  },
+  'router-simulator.html': {
+    topos: routerTopos,
+  },
+  'tcp-udp-security-simulator.html': {
+    topos: ataquesTopos,
+  },
 };
+
+const readConst = (html, nome) => new Function('return ' + html.match(new RegExp(String.raw`const ${nome}\s*=\s*([\s\S]*?);\s*\n`))[1])();
+
+/** BGP: seis sistemas autônomos (ASES) e os enlaces com a relação comercial (LINKS_INIT). */
+function bgpTopos(html) {
+  const ases = readConst(html, 'ASES');
+  const links = readConst(html, 'LINKS_INIT');
+  const kind = { M: 'attacker', C: 'host', D: 'host' };
+  const nodes = Object.values(ases).map((a) => ({ key: a.id, label: a.name, sub: 'AS' + a.asn + (a.prefix ? ', ' + a.prefix : ''), kind: kind[a.id] ?? 'router' }));
+  return {
+    figs: [{
+      titulo: `Topologia de ${nodes.length} sistemas autônomos`,
+      curto: 'topologia dos seis sistemas autônomos',
+      topo: { nodes, links: links.map(([, a, b, rel]) => [a, b, rel === 'peer' ? { label: 'peering', dashed: true } : { label: 'provedor: ' + ases[a].name }]) },
+      texto: `${pl(nodes.length, 'sistema autônomo', 'sistemas autônomos')} e ${pl(links.length, 'enlace BGP', 'enlaces BGP')}: ${nodes.map((nd) => `${nd.label} (${nd.sub})`).join('; ')}. Linhas contínuas: relação de provedor e cliente, com o provedor indicado no rótulo. Linhas tracejadas: peering. Vale para todos os cenários; o Atacante só age nos cenários de segurança.`,
+    }],
+    ids: Object.fromEntries(links.map(([id, a, b]) => [id, [ases[a].name, ases[b].name]])),
+  };
+}
+
+/** MPLS: seis LSR (LSRS), dois hosts (HOSTS) e os enlaces com custo IGP e atraso (LINKS_INIT). */
+function mplsTopos(html) {
+  const lsrs = readConst(html, 'LSRS');
+  const hosts = readConst(html, 'HOSTS');
+  const links = readConst(html, 'LINKS_INIT');
+  const nodes = [
+    ...lsrs.map((l) => ({ key: l.id, label: l.id, sub: (l.role === 'PE' ? 'PE' : 'P') + ', ' + l.lo, kind: 'router' })),
+    ...hosts.map((h) => ({ key: h.id, label: h.id, sub: h.ip, kind: 'host' })),
+  ];
+  return {
+    figs: [{
+      titulo: `Topologia de ${lsrs.length} LSR e ${hosts.length} hosts`,
+      curto: 'topologia do núcleo MPLS e dos hosts',
+      topo: {
+        nodes,
+        links: [...links.map(([id, a, b, cost]) => [a, b, { label: `${id}, custo ${cost}` }]), ...hosts.map((h) => [h.id, h.pe, {}])],
+      },
+      texto: `${pl(lsrs.filter((l) => l.role === 'PE').length, 'roteador de borda (PE)', 'roteadores de borda (PE)')}, ${pl(lsrs.filter((l) => l.role !== 'PE').length, 'roteador de núcleo (P)', 'roteadores de núcleo (P)')} e ${pl(hosts.length, 'host', 'hosts')}. Cada enlace traz o identificador e o custo IGP; o endereço sob o nome é o de loopback do LSR (ou o IP do host). Os P encaminham por rótulos; o PE1 e o PE2 ligam as redes ${hosts.map((h) => h.net).join(' e ')}. Vale para todos os cenários.`,
+    }],
+    ids: {},
+  };
+}
+
+/** Roteamento: rede de seis roteadores (OSPF em área única e RIPv2) e rede de nove roteadores em três áreas. */
+function routerTopos(html) {
+  const single = { r: readConst(html, 'routersSingle'), l: readConst(html, 'linksInitSingle'), h: readConst(html, 'hostsSingle') };
+  const multi = { r: readConst(html, 'routersMulti'), l: readConst(html, 'linksInitMulti'), h: readConst(html, 'hostsMulti') };
+  const hostLinks = (t) => t.h.map((h) => [h.id, h.attach, {}]);
+  const hostNodes = (t) => t.h.map((h) => ({ key: h.id, label: h.id, sub: 'ligado a ' + h.attach, kind: 'host' }));
+  return {
+    figs: [
+      {
+        titulo: `Rede de ${single.r.length} roteadores (OSPF em área única e RIPv2)`,
+        curto: 'rede de seis roteadores, OSPF em área única e RIPv2',
+        topo: {
+          nodes: [...single.r.map((r) => ({ key: r.id, label: r.id, kind: 'router' })), ...hostNodes(single)],
+          links: [...single.l.map((l) => [l.a, l.b, { label: `${l.id}, custo ${l.cost}` }]), ...hostLinks(single)],
+        },
+        texto: `${pl(single.r.length, 'roteador', 'roteadores')}, ${pl(single.l.length, 'enlace', 'enlaces')} com custo OSPF e dois hosts. É a rede dos cenários de OSPF em área única e de RIPv2; o RIPv2 ignora os custos, porque a métrica dele é o número de saltos.`,
+      },
+      {
+        titulo: `Rede de ${multi.r.length} roteadores em três áreas (OSPF multi-área)`,
+        curto: 'rede de nove roteadores em três áreas',
+        topo: {
+          nodes: [...multi.r.map((r) => ({ key: r.id, label: r.id, sub: r.abr ? 'ABR, áreas ' + r.areas.join(' e ') : 'área ' + r.areas[0], kind: 'router' })), ...hostNodes(multi)],
+          links: [...multi.l.map((l) => [l.a, l.b, { label: `custo ${l.cost}, área ${l.area}` }]), ...hostLinks(multi)],
+        },
+        texto: `${pl(multi.r.length, 'roteador', 'roteadores')} em três áreas: 1, 0 (backbone) e 2. Os roteadores de borda de área (ABR) pertencem a duas áreas e ligam cada área ao backbone. Cada enlace traz o custo e a área a que pertence. Vale para o cenário de OSPF multi-área.`,
+      },
+    ],
+    ids: {},
+  };
+}
+
+/**
+ * Ataques em TCP e UDP: o desenho é feito em canvas, sem constantes de topologia; os nós vêm do literal de `nodes()` da
+ * página e a variante de cada cenário, dos campos `mode` e `multi` da definição dele. As varreduras (`scan`) usam o
+ * mesmo desenho do ataque direto.
+ */
+function ataquesTopos(html, { x, S }) {
+  const no = (k) => {
+    const m = html.match(new RegExp(`${k}: \{[^}]*?name: '([^']*)', ip: (VICTIM|'[^']*')`));
+    return { name: m[1], ip: m[2] === 'VICTIM' ? html.match(/const VICTIM = '([^']*)'/)[1] : m[2].slice(1, -1) };
+  };
+  const [client, edge, firewall, reflector, server] = ['client', 'edge', 'firewall', 'reflector', 'server'].map(no);
+  const upstream = { name: 'Operadora', ip: 'upstream' };
+  // Variante de cada cenário, na ordem da página: [título, modo, multi].
+  const defs = [...html.matchAll(/title: '([^']+)'[^\n]*?mode: '(\w+)'(, multi: true)?/g)].map((m) => ({ titulo: m[1], mode: m[2], multi: !!m[3] }));
+  const faixa = (pred) => {
+    const nums = defs.filter(pred).map((df) => x.scenarios.findIndex((s) => (s.title ?? s.label) === df.titulo) + 1).filter((v) => v > 0);
+    return rangeText(`${S.cen}.`, nums);
+  };
+  const base = [
+    { key: 'client', label: client.name, sub: client.ip, kind: 'host' },
+    { key: 'fw', label: firewall.name, sub: firewall.ip, kind: 'router' },
+    { key: 'srv', label: server.name, sub: server.ip, kind: 'host' },
+    { key: 'up', label: upstream.name, sub: upstream.ip, kind: 'cloud' },
+  ];
+  const comum = [['client', 'fw', {}], ['fw', 'srv', {}]];
+  const direto = (multi) => ({
+    nodes: [{ key: 'atk', label: multi ? 'Botnet' : 'Atacante', sub: multi ? 'milhares de IPs' : '198.51.100.x', kind: 'attacker' }, ...base],
+    links: [['atk', 'up', {}], ['up', 'fw', {}], ...comum],
+  });
+  return {
+    figs: [
+      {
+        titulo: 'Ataque direto de uma origem',
+        curto: 'ataque direto de uma origem',
+        topo: direto(false),
+        texto: `O atacante envia o tráfego à vítima pela operadora e pelo firewall e IDS da borda; o cliente legítimo usa o mesmo firewall. Vale para os cenários ${faixa((d) => d.mode !== 'reflect' && !d.multi)}, inclusive as varreduras, que usam o mesmo desenho.`,
+      },
+      {
+        titulo: 'Ataque distribuído (botnet)',
+        curto: 'ataque distribuído por uma botnet',
+        topo: direto(true),
+        texto: `O mesmo caminho, mas a origem é uma botnet, com milhares de endereços, o que impede o bloqueio por origem. Vale para o cenário ${faixa((d) => d.multi)}.`,
+      },
+      {
+        titulo: 'Reflexão e amplificação',
+        curto: 'reflexão e amplificação',
+        topo: {
+          nodes: [{ key: 'atk', label: 'Atacante', sub: '198.51.100.x', kind: 'attacker' }, { key: 'edge', label: edge.name, sub: edge.ip, kind: 'router' }, { key: 'refl', label: reflector.name, sub: reflector.ip, kind: 'host' }, ...base],
+          links: [['atk', 'edge', {}], ['edge', 'refl', {}], ['refl', 'up', {}], ['up', 'fw', {}], ...comum],
+        },
+        texto: `O atacante envia requisições com a origem falsificada (o IP da vítima) ao serviço refletor, passando pela rede de origem (ISP). O refletor responde à vítima, por um caminho que passa pela operadora e pelo firewall, com tráfego maior que o das requisições. Vale para os cenários ${faixa((d) => d.mode === 'reflect')}.`,
+      },
+    ],
+    ids: {},
+  };
+}
 
 /** Diagrama de sequência a partir da tabela de captura: [nº, tempo, origem, destino, protocolo, tamanho, informação]. */
 function captureSequence(rows, hosts = {}) {
@@ -388,7 +556,8 @@ function captureSequence(rows, hosts = {}) {
 }
 
 /** Executa uma página legada no jsdom e captura controles, ajuda, abas, cenários e referência. */
-function extractLegacy(file) {
+async function extractLegacy(file) {
+  const cfg = LEGACY[file] ?? {};
   const html = fs.readFileSync(path.join(root, 'public', 'sims', file), 'utf8');
   const stub = new Proxy(function () {}, { get: (t, k) => (k === 'measureText' ? () => ({ width: 0 }) : stub), set: () => true, apply: () => stub });
   const dom = new JSDOM(html, {
@@ -400,6 +569,15 @@ function extractLegacy(file) {
       w.matchMedia = () => ({ matches: false, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {} });
       w.scrollTo = () => {};
       w.Element.prototype.scrollIntoView = () => {};
+      if (cfg.fast) {
+        w.Element.prototype.animate = function () {
+          const a = {};
+          Object.defineProperty(a, 'onfinish', { set: (f) => setTimeout(f, 0) });
+          return a;
+        };
+        const st = w.setTimeout.bind(w);
+        w.setTimeout = (f) => st(f, 0);
+      }
     },
   });
   const w = dom.window;
@@ -426,7 +604,6 @@ function extractLegacy(file) {
       help,
     };
   });
-  const cfg = LEGACY[file] ?? {};
   const capRows = () => [...d.querySelectorAll('#capBody tr')].filter((tr) => !tr.classList.contains('placeholder-row'));
   for (const mode of cfg.modes ?? [{ label: '' }]) {
     if (mode.proto) {
@@ -441,7 +618,7 @@ function extractLegacy(file) {
       el.click();
       const body = d.getElementById('scenBody');
       const main = body.querySelector('.sc-main');
-      let capture;
+      let capture, seq;
       if (cfg.capture) {
         // Avança passo a passo até a captura parar de crescer (o motor calcula tudo de uma vez; o passo só revela).
         let stable = 0, prev = -1, i = 0;
@@ -454,6 +631,28 @@ function extractLegacy(file) {
           prev = n;
         }
         capture = capRows().map((tr) => [...tr.children].map((td) => td.textContent.trim()));
+      } else if (cfg.advance && cfg.seq?.[el.textContent.trim()]) {
+        // Avança as fases até o fim (e dá o clique extra, se houver) e guarda só as mensagens que `row` aceita.
+        const pick = cfg.seq[el.textContent.trim()];
+        const espera = async (btn) => {
+          for (let w8 = 0; w8 < 800 && btn.disabled; w8++) await new Promise((res) => setTimeout(res, 25));
+        };
+        const btn = d.getElementById(cfg.advance.id);
+        for (let k = 0; k < cfg.advance.n; k++) {
+          btn.click();
+          await espera(btn);
+        }
+        if (cfg.advance.then) {
+          const extra = d.getElementById(cfg.advance.then);
+          extra.click();
+          await espera(extra);
+          await new Promise((res) => setTimeout(res, 100));
+        }
+        capture = capRows()
+          .map((tr) => [...tr.children].map((td) => td.textContent.trim()))
+          .map((c) => cfg.row(c, pick))
+          .filter(Boolean);
+        seq = pick;
       }
       r.scenarios.push({
         mode: mode.label,
@@ -463,6 +662,7 @@ function extractLegacy(file) {
         cmd: main?.querySelector('.sc-cmd')?.textContent.trim(),
         html: [...(main?.children ?? [])].filter((c) => !c.matches('.sc-kicker, .sc-title, .sc-cmd')).map((c) => c.outerHTML).join(''),
         capture,
+        seq,
       });
       for (const h of body.querySelectorAll('.sc-side h4')) {
         const g = h.nextElementSibling;
@@ -476,8 +676,8 @@ function extractLegacy(file) {
   return r;
 }
 
-function legacyPage(sim) {
-  const x = extractLegacy(sim.file);
+async function legacyPage(sim) {
+  const x = await extractLegacy(sim.file);
   const L = [`# ${sim.title}\n`, `${sim.summary}\n`];
   L.push(`- **Categoria:** ${catTitle[sim.category]}`);
   L.push(`- **Motor:** legado (página autônoma em \`public/sims/${sim.file}\`, incorporada por \`iframe\`)`);
@@ -485,13 +685,26 @@ function legacyPage(sim) {
   if (sim.topics?.length) L.push(`- **Tópicos:** ${sim.topics.join('; ')}`);
   L.push('');
 
-  // Só o TCP e UDP tem sequência (a partir da captura); a seção de leitura dos diagramas existe apenas quando há figuras.
+  // Sequência (a partir da captura) só no TCP e UDP, no BGP e no MPLS; topologia só no BGP, no MPLS e no roteamento. A seção de leitura dos diagramas existe apenas quando há figuras.
+  const cfgL = LEGACY[sim.file] ?? {};
   const hasB = x.scenarios.some((s) => s.capture?.length);
+  const hasA = !!cfgL.topos;
   let n = 0;
-  const S = { ler: hasB ? ++n : 0, abas: ++n, conf: ++n, cen: ++n, ref: ++n };
+  const S = { ler: hasB || hasA ? ++n : 0, topo: hasA ? ++n : 0, abas: ++n, conf: ++n, cen: ++n, ref: ++n };
   const figs = [];
 
   const lerAt = L.length;
+  let topoInfo;
+  if (hasA) {
+    topoInfo = cfgL.topos(fs.readFileSync(path.join(root, 'public', 'sims', sim.file), 'utf8'), { x, S });
+    L.push(`## ${S.topo}. Topologia\n`, 'Figuras do Tipo A, geradas a partir da mesma definição que a página usa para desenhar a rede.\n');
+    topoInfo.figs.forEach((f, k) => {
+      const num = `${S.topo}.${k + 1}`;
+      const heading = `${num} ${f.titulo}`;
+      L.push(`### ${heading}\n`, '```mermaid\n' + toMermaid(f.topo) + '\n```\n', `*Figura ${num} (Tipo A, topologia).* ${f.texto}\n`);
+      figs.push({ tipo: 'A', num, heading, titulo: f.curto });
+    });
+  }
   L.push(`## ${S.abas}. Abas\n`, `${x.tabs.join(', ')}.\n`);
 
   L.push(`## ${S.conf}. Configurações (campos do painel)\n`);
@@ -518,13 +731,14 @@ function legacyPage(sim) {
     L.push(`${md(s.html.replace(/<h4>([\s\S]*?)<\/h4>/gi, '<p><b>$1.</b></p>'))}\n`);
     if (s.capture?.length) {
       const sd = captureSequence(s.capture, LEGACY[sim.file]?.hosts);
-      const onde = `Corresponde à aba Captura${multi ? `, no modo "${s.mode}"` : ''}, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.`;
+      const filtro = s.seq ? cfgL.filtro(s.seq, topoInfo.ids) : '';
+      const onde = `${filtro}Corresponde à aba Captura${multi ? `, no modo "${s.mode}"` : ''}, na ordem em que os pacotes aparecem; os intervalos de tempo não estão em escala.`;
       L.push(sd.block, '', sequenceCaption(num, s.title ?? s.label, sd, onde) + '\n');
       figs.push({ tipo: 'B', num, heading, titulo: `sequência de "${s.title ?? s.label}"` });
     }
   }
   L.push(`## ${S.ref}. Referência\n`, numberSubs(md(x.ref), S.ref) + '\n');
-  if (hasB) L.splice(lerAt, 0, ...howToRead(S.ler, { A: false, B: true }, figs));
+  if (S.ler) L.splice(lerAt, 0, ...howToRead(S.ler, { A: hasA, B: hasB }, figs));
   return L.join('\n') + footer;
 }
 
@@ -538,7 +752,7 @@ for (const sim of avail) {
     files[`${pageName(sim.id)}.md`] = nativePage(sim, def);
     nNative++; nScen += def.scenarios.length;
   } else {
-    files[`${pageName(sim.id)}.md`] = legacyPage(sim);
+    files[`${pageName(sim.id)}.md`] = await legacyPage(sim);
   }
 }
 
