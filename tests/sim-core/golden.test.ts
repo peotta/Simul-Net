@@ -18,6 +18,7 @@ import { natProtocol } from '../../src/sims/nat/protocol';
 import { dnsProtocol } from '../../src/sims/dns/protocol';
 import { firewallProtocol } from '../../src/sims/firewall/protocol';
 import { stpProtocol } from '../../src/sims/stp/protocol';
+import { vlanProtocol } from '../../src/sims/vlan/protocol';
 import { switchingProtocol } from '../../src/sims/switching/protocol';
 import { icmpProtocol } from '../../src/sims/icmp/protocol';
 import { httpsProtocol } from '../../src/sims/https/protocol';
@@ -72,6 +73,7 @@ const SIMS: [string, ProtocolDef][] = [
   ['firewall', firewallProtocol],
   ['switching', switchingProtocol],
   ['stp', stpProtocol],
+  ['vlan', vlanProtocol],
 ];
 
 describe.each(SIMS)('impressões digitais: %s', (name, def) => {

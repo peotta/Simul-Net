@@ -252,9 +252,11 @@ export const SIMS: SimMeta[] = [
     category: 'camada-de-enlace',
     title: 'VLAN e trunking (802.1Q)',
     summary: 'Segmentação da rede local: marcação 802.1Q, portas de acesso e de tronco, VLAN nativa, roteamento entre VLANs e as defesas contra VLAN hopping.',
-    topics: [],
+    topics: ['Marcação 802.1Q: acesso e tronco', 'Isolamento e domínios de broadcast', 'Roteamento entre VLANs (router-on-a-stick)', 'VLAN nativa e divergência entre as pontas', 'VLAN hopping e defesas'],
     rfcs: ['IEEE 802.1Q'],
-    status: 'planned',
+    status: 'available',
+    novo: true,
+    engine: 'nativo',
   },
   {
     id: 'wifi',
@@ -311,7 +313,6 @@ export const SIMS: SimMeta[] = [
     topics: ['Conexões e fila no HTTP/1.1', 'Fluxos e HPACK no HTTP/2', 'QUIC, 0-RTT e fallback no HTTP/3', 'Perda de pacote e bloqueio de cabeça de fila'],
     rfcs: ['RFC 9110', 'RFC 9112', 'RFC 9113', 'RFC 9114', 'RFC 9000'],
     status: 'available',
-    novo: true,
     engine: 'nativo',
   },
   {

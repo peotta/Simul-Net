@@ -73,6 +73,7 @@ describe('páginas dos simuladores nativos', () => {
   it('Switching: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('switching', /^Switching e aprendizado de MAC$/), 120000);
 
   it('STP: carrega, percorre os cinco modos e não tem violações de acessibilidade', () => checkSim('stp', /^STP, RSTP e MSTP$/), 180000);
+  it('VLAN: carrega, percorre os cinco modos e não tem violações de acessibilidade', () => checkSim('vlan', /^VLAN e trunking \(802\.1Q\)$/), 180000);
 
   it('ICMP: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('icmp', /^ICMP \(ping e traceroute\)$/), 120000);
 

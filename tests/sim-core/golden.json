@@ -322,5 +322,30 @@
     "amostra:laco": "70ce6c44ccdbd885",
     "amostra:prot": "907143662443c480",
     "textos": "7f4addc39da91a84"
+  },
+  "vlan": {
+    "v-tag": "d3331ffc96c7ac91",
+    "v-nat": "96e66e26756aefb2",
+    "v-poda": "2047f78b47db0468",
+    "s-uni": "a4f2be722d273918",
+    "s-bc": "6d8aea00cb90687d",
+    "s-cross": "437d572bd115a50d",
+    "r-b": "157de86f419f30da",
+    "r-d": "b2dd692a5e83fafb",
+    "r-nosub": "e3cacebd7a462d51",
+    "r-poda": "ef8d02baa91b48aa",
+    "n-ok": "6cd9010dc47fbc73",
+    "n-mis": "0b6cfcff33e95da7",
+    "n-b": "20c23ddc1ff5d501",
+    "h-spoof": "200abe1f8718746c",
+    "h-spoof-def": "cda4fe888dc30af3",
+    "h-dbl": "64a7c3e0b51c879b",
+    "h-dbl-def": "29bdbbd0ddc41034",
+    "amostra:marc": "668165518b2169cc",
+    "amostra:seg": "a91ca3501e36f4cd",
+    "amostra:rota": "41b8594ec1b7bfb3",
+    "amostra:nativa": "7b09dd6368c1e90f",
+    "amostra:hop": "983ace155246b347",
+    "textos": "7b13f2296fda7965"
   }
 }

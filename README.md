@@ -17,12 +17,12 @@ Destaques: diagrama de sequência, captura de pacotes e campos das mensagens em 
 
 | Categoria | Simulador |
 | --- | --- |
-| Camada de enlace e redes locais | Switching e aprendizado de MAC (tabela de endereços, inundação, filtragem, envelhecimento, broadcast, multicast com IGMP snooping, inundação de MAC e segurança de porta), STP, RSTP e MSTP (eleição da raiz, estados, reconvergência, tempestade de broadcast, BPDU Guard e Root Guard) |
+| Camada de enlace e redes locais | Switching e aprendizado de MAC (tabela de endereços, inundação, filtragem, envelhecimento, broadcast, multicast com IGMP snooping, inundação de MAC e segurança de porta), STP, RSTP e MSTP (eleição da raiz, estados, reconvergência, tempestade de broadcast, BPDU Guard e Root Guard), VLAN e trunking 802.1Q (marcação, isolamento, router-on-a-stick, VLAN nativa e VLAN hopping) |
 | Roteamento e serviços de rede | Roteamento (OSPF e RIPv2), ARP (resolução de endereços, proxy ARP, ARP gratuito, conflito de endereço, failover e envenenamento de cache com as defesas), DHCP (DORA), ICMP (ping e traceroute), BGP (sessões e seleção de caminho), MPLS (LDP e L3VPN), NAT (SNAT, DNAT e NAPT) |
 | Camada de transporte e segurança | TCP e UDP (com SACK, download TCP e vídeo UDP), Ataques e defesas TCP/UDP, HTTP/1.1, HTTP/2 e HTTP/3 (conexões, fluxos, QUIC, 0-RTT, perda de pacote e fallback) |
 | Protocolos de rede seguros | SSH (negociação, chaves, autenticação, túneis), HTTPS e TLS (handshake, certificados, HSTS e comparação HTTP x HTTPS), DNS e DNSSEC (resolução, cache e TTL, cadeia de confiança, envenenamento de cache, amplificação, DoT e DoH), FTP, FTPS e SFTP (canais de controle e dados, NAT e firewall, TLS e SSH), Firewall (filtragem sem estado e com estado, DMZ e defesas) |
 
-Em preparação: VPN (IPsec e WireGuard), WAF, SMTP e segurança de e-mail, IS-IS, SNMP, NTP, VLAN e trunking (802.1Q), Wi-Fi (operação e segurança WPA2/WPA3), controle de congestionamento (Reno, CUBIC e BBR), 802.1X e RADIUS (EAP). A situação de cada um está no [índice de documentação](docs/simuladores/README.md).
+Em preparação: VPN (IPsec e WireGuard), WAF, SMTP e segurança de e-mail, IS-IS, SNMP, NTP, Wi-Fi (operação e segurança WPA2/WPA3), controle de congestionamento (Reno, CUBIC e BBR), 802.1X e RADIUS (EAP). A situação de cada um está no [índice de documentação](docs/simuladores/README.md).
 
 > Os simuladores têm finalidade didática. Valores de chaves, hashes e assinaturas são ilustrativos e não oferecem segurança real.
 >

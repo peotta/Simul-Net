@@ -17,4 +17,5 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   'firewall': () => import('./firewall/protocol'),
   'switching': () => import('./switching/protocol'),
   'stp': () => import('./stp/protocol'),
+  'vlan': () => import('./vlan/protocol'),
 };
