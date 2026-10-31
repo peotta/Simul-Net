@@ -10,12 +10,12 @@ export const topology = (_sub: string, tr: Trace): TopologyDef => {
   const acc = (k: string) => 'VLAN ' + cfg(k).vid;
   const lista = (k: string) => (cfg(k).allowed ? ', VLANs ' + cfg(k).allowed!.join(',') : '');
   const nodes: TopoNode[] = [
-    { key: 'sw1', label: 'SW1', sub: 'switch', x: 340, y: 130, kind: 'switch' },
-    { key: 'sw2', label: 'SW2', sub: 'switch', x: 640, y: 130, kind: 'switch' },
-    { key: 'a', label: HOSTS.a.name, sub: HOSTS.a.ip, x: 90, y: 30, kind: 'host' },
-    { key: 'b', label: HOSTS.b.name, sub: HOSTS.b.ip, x: 90, y: 130, kind: 'host' },
-    { key: 'c', label: HOSTS.c.name, sub: HOSTS.c.ip, x: 820, y: 60, kind: 'host' },
-    { key: 'd', label: HOSTS.d.name, sub: HOSTS.d.ip, x: 820, y: 200, kind: 'host' },
+    { key: 'sw1', label: 'SW1', sub: 'switch', x: 340, y: 185, kind: 'switch' },
+    { key: 'sw2', label: 'SW2', sub: 'switch', x: 640, y: 185, kind: 'switch' },
+    { key: 'a', label: HOSTS.a.name, sub: HOSTS.a.ip, x: 90, y: 35, kind: 'host' },
+    { key: 'b', label: HOSTS.b.name, sub: HOSTS.b.ip, x: 90, y: 190, kind: 'host' },
+    { key: 'c', label: HOSTS.c.name, sub: HOSTS.c.ip, x: 820, y: 70, kind: 'host' },
+    { key: 'd', label: HOSTS.d.name, sub: HOSTS.d.ip, x: 820, y: 290, kind: 'host' },
   ];
   const links: TopologyDef['links'] = [
     ['sw1', 'sw2', { label: 'tronco, nativa ' + cfg('sw1:3').native + '/' + cfg('sw2:3').native + lista('sw1:3') }],
@@ -25,12 +25,12 @@ export const topology = (_sub: string, tr: Trace): TopologyDef => {
     ['d', 'sw2', { label: acc('sw2:2') }],
   ];
   if (R.hasR) {
-    nodes.push({ key: 'r1', label: R1.name, sub: R1.gw10 + ' e ' + R1.gw20, x: 340, y: 235, kind: 'router' });
+    nodes.push({ key: 'r1', label: R1.name, sub: R1.gw10 + ' e ' + R1.gw20, x: 340, y: 300, kind: 'router' });
     links.push(['r1', 'sw1', { label: 'tronco' + lista('sw1:4') }]);
   }
   if (R.hasM) {
-    nodes.push({ key: 'm', label: HOSTS.m.name, sub: HOSTS.m.ip, x: 90, y: 235, kind: 'attacker' });
+    nodes.push({ key: 'm', label: HOSTS.m.name, sub: HOSTS.m.ip, x: 90, y: 300, kind: 'attacker' });
     links.push(['m', 'sw1', { label: cfg('sw1:5').mode === 'trunk' ? 'virou tronco' : acc('sw1:5') }]);
   }
-  return { width: 900, height: 270, nodes, links };
+  return { width: 900, height: 340, nodes, links };
 };
