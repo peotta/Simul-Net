@@ -13,9 +13,9 @@ async function draw(id: string, code: string, dark: boolean): Promise<string> {
     // Cores padrão do Mermaid, as mesmas que o GitHub mostra no Markdown (tema claro ou escuro).
     theme: dark ? 'dark' : 'default',
     fontFamily: 'inherit',
-    // Tamanho natural do diagrama: em telas estreitas o contêiner rola na horizontal em vez de encolher o texto.
-    flowchart: { useMaxWidth: false },
-    sequence: { useMaxWidth: false, wrap: false, noteFontSize: 15, messageFontSize: 15, actorFontSize: 16 },
+    // O diagrama se ajusta à largura disponível (sem barra de rolagem): em telas estreitas ele encolhe junto com o texto.
+    flowchart: { useMaxWidth: true },
+    sequence: { useMaxWidth: true, wrap: false, noteFontSize: 15, messageFontSize: 15, actorFontSize: 16 },
   });
   const { svg } = await mermaid.render(id, code);
   return svg;
@@ -63,8 +63,8 @@ export function Mermaid({ code, label }: { code: string; label: string }) {
       </div>
     );
   return (
-    <figure role="img" aria-label={label} className="my-4 overflow-x-auto rounded-xl border border-line bg-surface p-4">
-      {svg ? <div className="mx-auto w-fit" dangerouslySetInnerHTML={{ __html: svg }} /> : <p role="status" className="text-base text-muted">Desenhando o diagrama…</p>}
+    <figure role="img" aria-label={label} className="my-4 rounded-xl border border-line bg-surface p-4">
+      {svg ? <div className="mx-auto w-full [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full" dangerouslySetInnerHTML={{ __html: svg }} /> : <p role="status" className="text-base text-muted">Desenhando o diagrama…</p>}
     </figure>
   );
 }
