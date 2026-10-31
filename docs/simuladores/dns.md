@@ -36,7 +36,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -1845,7 +1845,7 @@ O **Domain Name System** ([RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) e [
 - **RRSIG:** assinatura de um conjunto de registros, com início e fim de validade.
 - **DNSKEY:** chaves públicas da zona: a **ZSK** assina os dados; a **KSK** assina as chaves.
 - **DS:** resumo (hash) da KSK, publicado na zona de cima: é o elo da cadeia de confiança.
-- **NSEC / NSEC3:** provam que um nome ou tipo não existe. O NSEC3 usa hashes para dificultar listar a zona.
+- **NSEC / NSEC3:** provam que um nome ou tipo não existe. O NSEC3 ([RFC 5155](https://www.rfc-editor.org/rfc/rfc5155)) usa hashes para dificultar listar a zona; a [RFC 9276](https://www.rfc-editor.org/rfc/rfc9276) recomenda iterações 0 e salt vazio, porque custos maiores ajudam pouco e sobrecarregam o validador.
 - **Âncora de confiança:** a chave da raiz, configurada no resolvedor; é a origem de toda a validação.
 - **Resultados:** segura (cadeia completa, AD=1), insegura (sem DS, resposta aceita sem AD) e bogus (falha de validação: SERVFAIL).
 - **Erros estendidos ([RFC 8914](https://www.rfc-editor.org/rfc/rfc8914)):** explicam o SERVFAIL, como "Signature Expired" e "DNSSEC Bogus".

@@ -361,14 +361,14 @@ export function buildFirewall(P: FwParams, sub: string): Trace {
   const pkt = (proto: Proto, s: Ep, d: Ep, extra: Partial<Pkt> = {}): Pkt => ({ proto, src: s.ip, dst: d.ip, sport: s.port, dport: d.port, inIf: zoneOf(s.ip), ...extra });
   const tcp = (s: Ep, d: Ep, flags: string, extra: Partial<Pkt> = {}): Pkt => pkt('tcp', s, d, { flags, ...extra });
 
-  /** Abertura TCP: SYN, SYN+ACK e ACK. Com tries > 1, o SYN é retransmitido após 1 s (RFC 6298, seção 2.1). */
+  /** Abertura TCP: SYN, SYN+ACK e ACK. Com tries > 1, o SYN é retransmitido após 1 s (RFC 6298, seção 2, regra 2.1). */
   const open = (ck: string, sk: string, c: Ep, s: Ep, tries = 1): boolean => {
     for (let k = 0; k < tries; k++) {
       if (k > 0) {
         tr.ev(tr.t, ck, 'Sem resposta em 1 s: retransmite o SYN', 'warn');
         tr.wait(1000);
       }
-      if (!send(ck, sk, tcp(c, s, 'SYN'), { about: k ? 'Retransmissão do SYN depois de 1 s sem resposta (RFC 6298, seção 2.1).' : undefined })) continue;
+      if (!send(ck, sk, tcp(c, s, 'SYN'), { about: k ? 'Retransmissão do SYN depois de 1 s sem resposta (RFC 6298, seção 2, regra 2.1).' : undefined })) continue;
       if (!send(sk, ck, tcp(s, c, 'SYN+ACK'))) continue;
       send(ck, sk, tcp(c, s, 'ACK'));
       tr.ev(tr.t, ck, 'Conexão estabelecida', 'ok');

@@ -33,8 +33,19 @@ export const reference: string = [
     '<li><b>Inspeção de aplicação</b> (IPS, WAF, proxies e inspeção de TLS) e filtragem por URL ou por usuário.</li>' +
     '<li><b>Desempenho, alta disponibilidade e sincronização de tabelas</b> entre firewalls.</li>' +
     '<li><b>Produtos específicos</b>: a notação das regras é genérica, e não a sintaxe de nenhum fabricante ou sistema. Estados, prazos e comportamentos diante de pacotes inválidos variam entre produtos.</li>' +
-    '<li><b>Retransmissão do TCP</b>: o SYN é retransmitido uma vez, depois de 1 s (RFC 6298, seção 2.1). Os sistemas reais continuam tentando com intervalos crescentes.</li>' +
+    '<li><b>Retransmissão do TCP</b>: o SYN é retransmitido uma vez, depois de 1 s (RFC 6298, seção 2, regra 2.1). Os sistemas reais continuam tentando com intervalos crescentes.</li>' +
     '<li><b>Segurança</b>: os cenários de forja, varredura e rajada mostram o ponto de vista do defensor (o que o firewall vê, decide e registra), sem ensinar a executá-los.</li></ul>',
+  '<h3>Roteiro de exercícios</h3><ol>' +
+    '<li>Em <b>Ida e volta permitidas</b> e <b>Falta a regra de retorno</b>, compare as duas listas. Por que o SYN+ACK é negado no segundo caso, se o SYN foi aceito?</li>' +
+    '<li>Em <b>Ordem invertida das regras</b>, explique por que a primeira regra que casa decide. Reordene mentalmente a lista para obter o resultado desejado.</li>' +
+    '<li>Compare <b>Negação implícita</b> e <b>Política padrão permitir</b> para a consulta DNS: qual postura é mais segura e que custo operacional ela traz?</li>' +
+    '<li>Compare <b>Retorno por porta de origem</b> e <b>Retorno por flag ACK</b> com <b>Saída permitida, retorno pela tabela</b>. Que pacote de fora passa em cada filtro sem estado e por que a tabela de conexões o barra?</li>' +
+    '<li>Em <b>Estados até o encerramento</b>, acompanhe a entrada da tabela. Em <b>UDP: resposta depois da validade</b>, explique o que mudou em relação à resposta dentro da validade.</li>' +
+    '<li>Em <b>Tabela de conexões cheia</b>, descreva o efeito sobre usuários legítimos e que controle reduz o risco.</li>' +
+    '<li>Percorra os cenários de DMZ: que fluxos são permitidos, quais são negados e por que a <b>regra permissiva de DMZ para a rede interna</b> anula a função da DMZ?</li>' +
+    '<li>Compare as variantes com e sem filtro de origem (BCP 38). Que endereços de origem são impossíveis de chegar de fora?</li>' +
+    '<li>Compare a <b>varredura com descarte silencioso</b> e com <b>rejeição por RST</b>: o que o atacante aprende em cada uma e o que o administrador ganha ou perde ao depurar?</li>' +
+    '<li>Em <b>Rajada com limite de 3 por segundo</b>, avalie o equilíbrio entre proteger o servidor e atingir usuários legítimos atrás de um mesmo NAT.</li></ol>',
   '<h3>Para ir além</h3><ul>' +
     '<li>RFC 2979: comportamento e requisitos de firewalls na Internet.</li>' +
     '<li>NIST SP 800-41 Rev. 1: guia de firewalls e de política de firewall.</li>' +

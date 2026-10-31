@@ -33,7 +33,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -670,7 +670,7 @@ Broadcast não atravessa roteadores. Quando o servidor fica em outra rede, o rot
 ### 7.8 Limitações do simulador
 
 - Na renovação, não há retransmissão em RENEWING e REBINDING (a [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131), seção 4.4.5, manda repetir a cada metade do tempo restante, com mínimo de 60 s).
-- Não são simulados o INIT-REBOOT (cliente que reinicia com lease válido), o DHCPNAK, o agente de retransmissão (relay) nem o atraso aleatório de 1 a 10 s antes do primeiro DISCOVER.
+- DHCPv6 ([RFC 8415](https://www.rfc-editor.org/rfc/rfc8415), substituída pela [RFC 9915](https://www.rfc-editor.org/rfc/rfc9915)) está fora de escopo, assim como o BOOTP puro. O relay do DHCPv4 segue a [RFC 1542](https://www.rfc-editor.org/rfc/rfc1542) e as informações de agente (opção 82) estão na [RFC 3046](https://www.rfc-editor.org/rfc/rfc3046), também não modeladas. Não são simulados o INIT-REBOOT (cliente que reinicia com lease válido), o DHCPNAK, o agente de retransmissão (relay) nem o atraso aleatório de 1 a 10 s antes do primeiro DISCOVER.
 - Os tempos de lease são curtos e didáticos; os temporizadores T1 (50%) e T2 (87,5%) seguem os valores padrão da [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131).
 
 

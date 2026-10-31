@@ -34,7 +34,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -1112,7 +1112,11 @@ Há duas famílias. As **consultas** (Echo Request/Reply) são iniciadas por um 
 - **Buraco negro de PMTUD** ([RFC 2923](https://www.rfc-editor.org/rfc/rfc2923)): bloquear todo ICMP de erro impede o 3/4 de chegar. Pacotes pequenos funcionam, mas os grandes com DF somem; conexões TCP travam após o handshake. Nunca filtre o tipo 3 código 4.
 - **Ataques históricos:** Smurf (Echo para broadcast direcionado, mitigado pela [RFC 2644](https://www.rfc-editor.org/rfc/rfc2644)), Ping of Death (datagrama remontado acima de 65535 bytes), túneis ICMP (dados escondidos no payload do Echo) e Redirect forjado para desviar tráfego.
 
-### 7.6 Roteiro de exercícios
+### 7.6 Limites do simulador
+
+O modelo cobre o ICMP do IPv4 ([RFC 792](https://www.rfc-editor.org/rfc/rfc792)). O ICMPv6, que também assume o papel do ARP (Neighbor Discovery, [RFC 4861](https://www.rfc-editor.org/rfc/rfc4861)), está fora de escopo. Como a filtragem do ICMP quebra a descoberta de MTU de caminho ([RFC 1191](https://www.rfc-editor.org/rfc/rfc1191)), a [RFC 4821](https://www.rfc-editor.org/rfc/rfc4821) define o PLPMTUD, que detecta o MTU pela própria camada de transporte, sem depender de mensagens ICMP.
+
+### 7.7 Roteiro de exercícios
 
 
           

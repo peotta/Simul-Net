@@ -18,7 +18,7 @@ export interface Host {
   port: number;
 }
 
-/** Endereços de documentação (RFC 7042). Redes privadas 192.168.10.0/24 (VLAN 10) e 192.168.20.0/24 (VLAN 20). */
+/** Endereços de documentação (RFC 7042, substituída pela RFC 9542). Redes privadas 192.168.10.0/24 (VLAN 10) e 192.168.20.0/24 (VLAN 20). */
 export const HOSTS: Record<string, Host> = {
   a: { key: 'a', name: 'Host A', mac: '00:00:5e:00:53:a1', ip: '192.168.10.11', vlan: 10, sw: 1, port: 1 },
   b: { key: 'b', name: 'Host B', mac: '00:00:5e:00:53:b1', ip: '192.168.20.11', vlan: 20, sw: 1, port: 2 },

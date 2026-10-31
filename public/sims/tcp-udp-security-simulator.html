@@ -314,7 +314,7 @@
         <a class="rfc-chip" href="https://www.rfc-editor.org/rfc/rfc2827" target="_blank" rel="noreferrer">BCP 38</a>
         <a class="rfc-chip" href="https://www.rfc-editor.org/rfc/rfc5925" target="_blank" rel="noreferrer">RFC 5925</a>
         <a class="rfc-chip" href="https://www.rfc-editor.org/rfc/rfc8955" target="_blank" rel="noreferrer">RFC 8955</a>
-        <a class="rfc-chip" href="https://csrc.nist.gov/pubs/sp/800/61/r2/final" target="_blank" rel="noreferrer">NIST SP 800-61</a>
+        <a class="rfc-chip" href="https://csrc.nist.gov/pubs/sp/800/61/r3/final" target="_blank" rel="noreferrer">NIST SP 800-61 Rev. 3</a>
       </nav>
     </div>
     <div class="scen-row" id="scenRow" aria-label="Cenários de ataque"></div>
@@ -425,7 +425,7 @@
         <article class="ref-body">
           <p>Ambiente didático isolado: todos os hosts, pacotes e resultados existem apenas nesta página e não há tráfego de rede real. Os endereços usam as faixas de documentação da RFC 5737.</p>
           <h3>Como ler a simulação</h3>
-          <p>Cada pacote de ataque atravessa os controles ativos em camadas. A <b>eficácia</b> de um controle é a chance de ele neutralizar um pacote sozinho; controles combinados se somam como <b>defesa em profundidade</b>. O <b>serviço legítimo</b> mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura e também quando um controle gera falsos positivos.</p>
+          <p>Cada pacote de ataque atravessa os controles ativos em camadas. A <b>eficácia</b> de um controle é a chance de ele neutralizar um pacote sozinho; controles combinados formam a <b>defesa em profundidade</b>: o pacote passa por cada camada ativa e é barrado se alguma o neutralizar, o que equivale a tratar as camadas como independentes, com chance total de neutralização 1 − Π(1 − w), onde w é a eficácia de cada controle (sem somar percentuais). O <b>serviço legítimo</b> mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura e também quando um controle gera falsos positivos.</p>
           <p>Na telemetria, vale sempre: <b>ataque rumo à vítima = neutralizados + chegaram à vítima</b>. Na reflexão, as requisições enviadas aos refletores aparecem à parte, porque não vão para a vítima; cada uma que não é barrada vira várias respostas, e são essas que contam como ataque rumo à vítima. A <b>carga</b> é a fração da capacidade do servidor e por isso para em 100%; quando a demanda passa disso, o quadro mostra também a <b>demanda</b>, e o excedente aparece como requisições legítimas descartadas.</p>
           <h3>TCP e abuso de estado</h3>
           <p>O TCP mantém estado e usa flags, números de sequência e confirmações. Ataques exploram filas de conexão (SYN flood, RFC 4987), validação insuficiente de sequência (RST injection, mitigado pela RFC 5961) ou sessões sem autenticação (sequestro). SYN cookies, firewall stateful e criptografia autenticada (TLS, SSH, TCP-AO da RFC 5925) reduzem a superfície de ataque.</p>
@@ -446,6 +446,13 @@
           <p>No <b>DNS water torture</b>, os bots consultam nomes aleatórios por meio de resolvedores legítimos. Bloquear por IP derruba os resolvedores que também atendem os usuários (falso positivo em massa); a defesa deve olhar o nome consultado: proporção de NXDOMAIN, RRL com <code>nxdomains-per-second</code> e Aggressive NSEC (RFC 8198) nos resolvedores.</p>
           <h3>Ciclo de resposta a incidente</h3>
           <p>O painel lateral acompanha as fases do NIST SP 800-61r2 (substituída pela Rev. 3 em abril de 2025, alinhada ao CSF 2.0; as fases abaixo seguem a r2 por serem didáticas): <b>preparação</b> (controles ativos antes do ataque), <b>detecção e análise</b> (primeiro alerta do IDS ou carga acima de 60%), <b>contenção</b> (controles essenciais ativos e proteção de pelo menos 85%), <b>erradicação e recuperação</b> (carga de volta abaixo de 30%) e <b>atividade pós-incidente</b> (lições aprendidas na avaliação). Os indicadores <b>MTTD</b> e <b>MTTC</b> medem, em ciclos, o tempo até detectar e até conter. Observe que, sem IDS, ataques de baixo volume podem nunca ser detectados.</p>
+          <h3>Limitações e valores didáticos</h3>
+          <ul>
+            <li>As <b>eficácias</b> dos controles, os <b>limiares</b> (60% de carga para o primeiro alerta, 85% de proteção, 30% de carga para a recuperação) e as taxas de falso positivo são valores <b>didáticos e subjetivos</b>, escolhidos para comparar cenários. Não são medições nem constam de RFC: em ambiente real dependem do equipamento, da configuração e do tráfego.</li>
+            <li>O sorteio usa uma <b>semente fixa</b>, reiniciada em "Reiniciar": o mesmo cenário com as mesmas defesas produz sempre o mesmo resultado, o que permite comparar exercícios.</li>
+            <li>Os trechos de configuração (nftables, Suricata, BIND, nginx, sysctl, IOS) são <b>exemplos ilustrativos</b>. Confira a sintaxe e os parâmetros na documentação oficial do produto e da versão em uso antes de aplicá-los.</li>
+            <li>Os cenários ficam no nível defensivo: aviso, efeito e defesa, sem passo a passo ofensivo.</li>
+          </ul>
           <h3>Roteiro de exercícios</h3>
           <ol>
             <li>SYN flood na intensidade 4 sem defesas: anote carga e serviço legítimo. Ative só rate limiting e depois só SYN cookies. Qual protege a fila e por quê?</li>
@@ -740,7 +747,10 @@
       let metrics;
       let ir;
 
-      const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+      // PRNG com semente fixa (mulberry32), reiniciado em reset(): cada execução do mesmo cenário e das mesmas defesas se repete.
+      let seed = 1;
+      const rand = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+      const rnd = (a, b) => a + Math.floor(rand() * (b - a + 1));
       const randLabel = () => Array.from({ length: 6 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[rnd(0, 35)]).join('');
       function fmt(text) {
         const v = { src: '198.51.100.' + rnd(2, 254), refl: '192.0.2.' + rnd(2, 254), sport: rnd(1024, 65535), dport: rnd(1, 1024), seq: rnd(1e8, 4e9), seq1: 0, pct: rnd(70, 99), rand: randLabel() };
@@ -768,7 +778,7 @@
       }
       function postureOk(s) { return s.key.every(effective) && protection(s, true) >= .85; }
       function filterPacket(s, order) {
-        for (const id of order) if (effective(id) && Math.random() < ctl(s, id).w) return id;
+        for (const id of order) if (effective(id) && rand() < ctl(s, id).w) return id;
         return null;
       }
       function newMetrics() {
@@ -1072,8 +1082,8 @@
       // ---------- Motor ----------
       function spawnLegit(s, n) {
         metrics.legitSent++;
-        const fp = ['upstream', 'ids', 'rateLimit'].find(id => effective(id) && Math.random() < fpOf(s, id));
-        const saturated = !fp && metrics.load > 70 && Math.random() < (metrics.load - 70) / 30;
+        const fp = ['upstream', 'ids', 'rateLimit'].find(id => effective(id) && rand() < fpOf(s, id));
+        const saturated = !fp && metrics.load > 70 && rand() < (metrics.load - 70) / 30;
         if (fp) {
           addParticle([n.client, n.firewall], s.proto, 'legit-drop', false, .65);
           metrics.fpDrops++; metrics.fpBy[fp] = (metrics.fpBy[fp] || 0) + 1;
@@ -1117,8 +1127,8 @@
         for (let i = 0; i < count; i++) {
           if (s.mode === 'reflect') metrics.reqs++; else metrics.generated++;
           const spread = s.multi ? 30 : 8;
-          const from = { x: n.attacker.x + (Math.random() - .5) * spread * 2, y: n.attacker.y + (Math.random() - .5) * spread * 2 };
-          const spd = .7 + Math.random() * .5;
+          const from = { x: n.attacker.x + (rand() - .5) * spread * 2, y: n.attacker.y + (rand() - .5) * spread * 2 };
+          const spd = .7 + rand() * .5;
           if (s.mode === 'reflect') {
             const by = filterPacket(s, ORDER.req);
             if (by && placeOf(s, by) === 'edge') { addParticle([from, n.edge], s.packet, 'attack', true, spd); blockReq(by); }
@@ -1512,7 +1522,7 @@
         activateTab('scen');
       }
       function reset() {
-        setRunning(false); particles = []; tick = 0; accumulator = 0;
+        setRunning(false); particles = []; tick = 0; accumulator = 0; seed = 20240601;
         upstreamSince = 0; upstreamAnnounced = false; upstreamAlwaysOn = true;
         metrics = newMetrics();
         ir = newIr();

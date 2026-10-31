@@ -24,7 +24,7 @@ export const reference: string = [
     '<p>Os tempos variam entre sistemas: no Linux, a retransmissão padrão é de 1 s com 3 tentativas, e a validade (REACHABLE) é de algumas dezenas de segundos, sorteada. Em roteadores, o padrão costuma ser de horas. O simulador usa os valores do Linux.</p>',
   '<h3>Fora da sub-rede e proxy ARP</h3><ul>' +
     '<li>O broadcast <b>não atravessa roteadores</b>. Para um destino em outra rede, o host faz o ARP do <b>gateway</b>, e o quadro leva o MAC do gateway com o IP de destino remoto.</li>' +
-    '<li>No <b>proxy ARP</b> (RFC 1027), o roteador responde a requisições por endereços de outras redes usando o próprio MAC. Serve para hosts sem gateway, mas esconde erros de máscara e de rota.</li></ul>',
+    '<li>No <b>proxy ARP</b> (RFC 1027, sem classificação de status no índice do RFC Editor), o roteador responde a requisições por endereços de outras redes usando o próprio MAC. Serve para hosts sem gateway, mas esconde erros de máscara e de rota.</li></ul>',
   '<h3>ARP gratuito, Probe e Announce (RFC 5227)</h3><ul>' +
     '<li>O <b>ARP Probe</b> é uma requisição com o IP do remetente <b>zerado</b> (0.0.0.0): pergunta se alguém usa o endereço sem contaminar as tabelas dos vizinhos. A RFC prevê 3 Probes, com 1 a 2 s entre eles, depois de uma espera inicial de até 1 s.</li>' +
     '<li>O <b>ARP Announce</b> é uma requisição em que o IP do remetente e o do alvo são o mesmo endereço. A RFC prevê 2 Announces, a cada 2 s, depois de uma espera de 2 s. Os vizinhos que já tinham uma entrada para o IP a atualizam; ninguém cria entrada por causa de um Announce.</li>' +

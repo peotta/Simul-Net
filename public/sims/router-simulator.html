@@ -389,7 +389,7 @@
             <li><b>Adjacência:</b> os vizinhos trocam DBD, LSR, LSU e LSAck até sincronizar as bases. O estado final é <b>Full</b>.</li>
             <li><b>Inundação de LSAs:</b> cada roteador origina um Router-LSA com seus enlaces e custos. As LSAs se propagam por toda a área até que todas as LSDBs fiquem idênticas.</li>
             <li><b>SPF:</b> cada roteador executa Dijkstra sobre a LSDB, tendo a si mesmo como raiz, e instala o próximo salto de cada destino.</li>
-            <li><b>Custo:</b> por padrão, é a largura de banda de referência dividida pela largura de banda do enlace. Vence o menor custo total.</li>
+            <li><b>Custo:</b> a RFC 2328 trata o custo da interface apenas como um parâmetro configurável (quanto menor, mais preferido); vence o menor custo total. A fórmula "largura de banda de referência dividida pela do enlace" é prática de fabricantes (por exemplo, Cisco IOS), não parte da RFC.</li>
             <li><b>Multiárea:</b> a Área 0 é o backbone. Os ABRs (roteadores de borda de área) resumem cada área para as demais com Summary LSAs (tipo 3), o que reduz a LSDB e o custo do SPF.</li>
           </ul>
           <h3>RIPv2 (RFC 2453)</h3>
@@ -413,6 +413,12 @@
               <tr><td>Escala</td><td>Grande, com hierarquia de áreas</td><td>Pequena</td></tr>
             </tbody>
           </table>
+          <h3>Limitações do simulador</h3>
+          <ul>
+            <li>O DR e o BDR (eleição em redes de acesso múltiplo) não são modelados: os enlaces são ponto a ponto. O endereço 224.0.0.6 (AllDRouters) aparece só na tabela de comparação.</li>
+            <li>OSPFv3, RIPng e IPv6 estão fora de escopo; o modelo cobre OSPFv2 (RFC 2328) e RIPv2 (RFC 2453) sobre IPv4.</li>
+            <li>O custo OSPF é o do enlace configurado no cenário, sem cálculo por largura de banda de referência.</li>
+          </ul>
           <h3>Roteamento e segurança</h3>
           <ul>
             <li><b>Injeção de rotas:</b> um atacante na mesma rede pode anunciar rotas falsas para desviar tráfego (man-in-the-middle) ou criar um buraco negro. A defesa é a <b>autenticação</b>: no OSPF, HMAC-SHA (RFC 5709); no RIPv2, MD5 ou HMAC-SHA (RFC 4822).</li>

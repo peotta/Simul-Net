@@ -21,7 +21,7 @@
     "t-denied": "0bb21c7035bd2c41",
     "amostra:session": "2b213bfeab72df58",
     "amostra:tunnel": "963c605bb425f916",
-    "textos": "bf3fa250f9d0c705"
+    "textos": "14611593ca7a23f6"
   },
   "https": {
     "h13": "54fe31c168b2111c",
@@ -56,7 +56,7 @@
     "amostra:cert": "f53ca3e31d879fd2",
     "amostra:web": "7bc9a4ee7b344ed1",
     "amostra:cmp": "3d8d9c7b3a0b04d9",
-    "textos": "e7e4f493dbf65045"
+    "textos": "67b97432b7845c0a"
   },
   "ftp": {
     "f-pasv": "622008865305c823",
@@ -84,7 +84,7 @@
     "amostra:ftps": "dd1dfec8a4d50032",
     "amostra:sftp": "88713049133d9aa2",
     "amostra:cmp": "953a4e0b2847a0ae",
-    "textos": "215e86ec0aa1952d"
+    "textos": "920fdd0b3846d110"
   },
   "arp": {
     "r-local": "5ffe0c8c68dcf339",
@@ -113,7 +113,7 @@
     "amostra:res": "1fd4fe708683768e",
     "amostra:gra": "d56e59d0a05403df",
     "amostra:env": "fa0fefe95219d439",
-    "textos": "4133af987650ac75"
+    "textos": "51be8d635103bbe1"
   },
   "icmp": {
     "i-echo": "43437c4c6c654a33",
@@ -132,7 +132,7 @@
     "amostra:ping": "af96ac6a9497c5d0",
     "amostra:trace": "8fff31cccc3d9d8f",
     "amostra:hping": "b675cb0d34ddaa13",
-    "textos": "d60c780d5fbca92d"
+    "textos": "f27a7053980ce29e"
   },
   "dhcp": {
     "d-dora": "0482ab838a4ea55d",
@@ -145,7 +145,7 @@
     "d-release": "298f62f55a5bd9de",
     "amostra:dora": "d1c8226ae053e2ad",
     "amostra:lease": "41654129ba503469",
-    "textos": "b8b2c3efa56d6dc4"
+    "textos": "7b512e52ed878ca7"
   },
   "http-versoes": {
     "h1-six": "747f97d1f0e67a0a",
@@ -166,7 +166,7 @@
     "amostra:h1": "890fff4542fa34a5",
     "amostra:h2": "9007b0ceae20b7c8",
     "amostra:h3": "f152c1c56556394a",
-    "textos": "f659d48b5f0b14eb"
+    "textos": "38bd1f8557fc098a"
   },
   "nat": {
     "n-estatico": "d173552c45ba2f88",
@@ -194,7 +194,7 @@
     "amostra:snat": "61076d824e12431c",
     "amostra:dnat": "fecbeb59d39d9797",
     "amostra:limites": "7f3c0b1ac7b69039",
-    "textos": "8a96a0cd071f274e"
+    "textos": "864714a8dbefa1d5"
   },
   "dns": {
     "r-completa": "f870789e18331586",
@@ -235,12 +235,12 @@
     "amostra:env": "65f38985b4170cb9",
     "amostra:amp": "97a07db972438f35",
     "amostra:priv": "7033505161f3e6ef",
-    "textos": "8b023bcb417fdaaa"
+    "textos": "fc09402aafdff315"
   },
   "firewall": {
     "a-ok": "9bda88df69482c9f",
-    "a-noret": "72928433fd41bdde",
-    "a-order": "6efa5bc46d198652",
+    "a-noret": "0e373e700276775e",
+    "a-order": "2deeb38041bfbdd1",
     "a-implicit": "8fe063533bf6430c",
     "a-defpermit": "122244c5af370670",
     "a-weak": "f05cf25f585f4a5c",
@@ -254,9 +254,9 @@
     "e-full": "52ddab50c26e1075",
     "d-pub": "77f205114f128c6c",
     "d-admin": "922af8ddcfa48fe0",
-    "d-in": "368215181d22cfe1",
-    "d-contain": "bf7028cd81f7d3b8",
-    "d-egress": "be7fd8f21f8ac900",
+    "d-in": "d756b506e2eb91bb",
+    "d-contain": "6ab7c2407f967d3c",
+    "d-egress": "fa1d38c02fc11ad8",
     "d-leaky": "728b042ac4779e5b",
     "d-egress-open": "8e33ced22f65a3b7",
     "f-in-off": "6080ea3bb469f94f",
@@ -268,11 +268,11 @@
     "f-rate-off": "f122ac2544db1589",
     "f-rate-on": "b463836c1e8a3d72",
     "f-blind": "86bee27c511360e3",
-    "amostra:acl": "b049eec778adf53c",
+    "amostra:acl": "415ffa09b159444b",
     "amostra:est": "d409fbeb177c3fd9",
-    "amostra:dmz": "bb282c0ce5732b5a",
+    "amostra:dmz": "65e98c0dde6b51f8",
     "amostra:def": "1a67d943786b2585",
-    "textos": "da4e89f6a31e0b98"
+    "textos": "15999dbacddb9116"
   },
   "switching": {
     "a-first": "297a73f258ad2a1c",
@@ -321,7 +321,7 @@
     "amostra:mstp": "12d1c7aadea8aa04",
     "amostra:laco": "70ce6c44ccdbd885",
     "amostra:prot": "907143662443c480",
-    "textos": "7f4addc39da91a84"
+    "textos": "b44495fa4cbc2466"
   },
   "vlan": {
     "v-tag": "d3331ffc96c7ac91",
@@ -346,6 +346,6 @@
     "amostra:rota": "41b8594ec1b7bfb3",
     "amostra:nativa": "7b09dd6368c1e90f",
     "amostra:hop": "983ace155246b347",
-    "textos": "7b13f2296fda7965"
+    "textos": "43445cc9180b09ec"
   }
 }

@@ -35,7 +35,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -365,7 +365,7 @@ sequenceDiagram
 
 Só a ida está permitida. O SYN chega ao servidor, mas o **SYN+ACK de volta é negado**: o filtro não sabe que ele responde a um pedido de dentro. O host retransmite o SYN e o resultado se repete.
 
-**Conceito.** O firewall sem estado não sabe que o SYN+ACK responde a um SYN que ele deixou passar. Sem uma regra que o descreva, o pacote cai na política padrão e é negado. O host retransmite o SYN depois de 1 s ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), seção 2.1), e o resultado se repete.
+**Conceito.** O firewall sem estado não sabe que o SYN+ACK responde a um SYN que ele deixou passar. Sem uma regra que o descreva, o pacote cai na política padrão e é negado. O host retransmite o SYN depois de 1 s ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), seção 2, regra 2.1), e o resultado se repete.
 
 **O que observar**
 
@@ -1689,10 +1689,23 @@ Uma regra pode aceitar um número máximo de novas conexões por segundo por ori
 - **Inspeção de aplicação** (IPS, WAF, proxies e inspeção de TLS) e filtragem por URL ou por usuário.
 - **Desempenho, alta disponibilidade e sincronização de tabelas** entre firewalls.
 - **Produtos específicos**: a notação das regras é genérica, e não a sintaxe de nenhum fabricante ou sistema. Estados, prazos e comportamentos diante de pacotes inválidos variam entre produtos.
-- **Retransmissão do TCP**: o SYN é retransmitido uma vez, depois de 1 s ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), seção 2.1). Os sistemas reais continuam tentando com intervalos crescentes.
+- **Retransmissão do TCP**: o SYN é retransmitido uma vez, depois de 1 s ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), seção 2, regra 2.1). Os sistemas reais continuam tentando com intervalos crescentes.
 - **Segurança**: os cenários de forja, varredura e rajada mostram o ponto de vista do defensor (o que o firewall vê, decide e registra), sem ensinar a executá-los.
 
-### 7.9 Para ir além
+### 7.9 Roteiro de exercícios
+
+1. Em **Ida e volta permitidas** e **Falta a regra de retorno**, compare as duas listas. Por que o SYN+ACK é negado no segundo caso, se o SYN foi aceito?
+2. Em **Ordem invertida das regras**, explique por que a primeira regra que casa decide. Reordene mentalmente a lista para obter o resultado desejado.
+3. Compare **Negação implícita** e **Política padrão permitir** para a consulta DNS: qual postura é mais segura e que custo operacional ela traz?
+4. Compare **Retorno por porta de origem** e **Retorno por flag ACK** com **Saída permitida, retorno pela tabela**. Que pacote de fora passa em cada filtro sem estado e por que a tabela de conexões o barra?
+5. Em **Estados até o encerramento**, acompanhe a entrada da tabela. Em **UDP: resposta depois da validade**, explique o que mudou em relação à resposta dentro da validade.
+6. Em **Tabela de conexões cheia**, descreva o efeito sobre usuários legítimos e que controle reduz o risco.
+7. Percorra os cenários de DMZ: que fluxos são permitidos, quais são negados e por que a **regra permissiva de DMZ para a rede interna** anula a função da DMZ?
+8. Compare as variantes com e sem filtro de origem ([BCP 38](https://www.rfc-editor.org/info/bcp38)). Que endereços de origem são impossíveis de chegar de fora?
+9. Compare a **varredura com descarte silencioso** e com **rejeição por RST**: o que o atacante aprende em cada uma e o que o administrador ganha ou perde ao depurar?
+10. Em **Rajada com limite de 3 por segundo**, avalie o equilíbrio entre proteger o servidor e atingir usuários legítimos atrás de um mesmo NAT.
+
+### 7.10 Para ir além
 
 - [RFC 2979](https://www.rfc-editor.org/rfc/rfc2979): comportamento e requisitos de firewalls na Internet.
 - NIST SP 800-41 Rev. 1: guia de firewalls e de política de firewall.

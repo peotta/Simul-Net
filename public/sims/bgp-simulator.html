@@ -535,6 +535,7 @@
             <li>Rota eBGP antes de iBGP.</li>
             <li>Menor <b>router ID</b> do vizinho, como desempate final.</li>
           </ol>
+          <p><i>Diferença em relação à norma:</i> o processo de decisão da RFC 4271 (seção 9.1.2.2) não tem o passo "originada localmente". Ele escolhe o maior grau de preferência (LOCAL_PREF), depois o AS_PATH mais curto, o menor ORIGIN, o menor MED (entre rotas do mesmo AS vizinho), eBGP sobre iBGP, o menor custo IGP até o NEXT_HOP, o menor BGP Identifier e, por fim, o menor endereço do peer. O passo de rota local é uma preferência de implementação, e o simulador não modela o custo IGP (há um roteador por AS).</p>
           <p>O <b>NEXT_HOP</b> indica para onde mandar o tráfego; em eBGP, cada AS troca o NEXT_HOP pelo próprio endereço no enlace. O <b>AS-path prepend</b> repete o próprio número do AS no anúncio para tornar um caminho menos atraente: é a principal ferramenta para influenciar o tráfego que <b>entra</b> no AS, enquanto o LOCAL_PREF controla o tráfego que <b>sai</b>.</p>
           <h3>Relações comerciais e exportação</h3>
           <p>Entre AS há relações de <b>provedor e cliente</b> (o cliente paga pelo trânsito) e de <b>peering</b> (troca de tráfego entre as próprias redes e seus clientes, normalmente sem pagamento). A regra de exportação, conhecida como valley-free (modelo de Gao-Rexford), é:</p>
@@ -548,10 +549,11 @@
           <p><i>Simplificações do simulador: um roteador por AS (sem iBGP), um UPDATE por prefixo, ORIGIN IGP e MED 0 em todas as rotas, e tempos acelerados. Os números de AS e os prefixos são de documentação (RFC 5398 e RFC 5737).</i></p>
           <h3>BGP e segurança</h3>
           <p>O BGP clássico não comprova que um AS está autorizado a originar um prefixo, nem que o AS_PATH é verdadeiro: cada AS confia no que o vizinho anuncia. Dois problemas decorrem disso. O <b>sequestro de prefixo</b> ocorre quando um AS origina um prefixo que não é seu, e o <b>vazamento de rota</b> quando um AS repassa rotas além do que sua relação comercial permite. Oscilações repetidas (<b>flapping</b>) também sobrecarregam o plano de controle.</p>
+          <p>No cenário de sequestro, o atacante origina o <b>mesmo prefixo</b> (203.0.113.0/24), e o desempate acaba no router ID. Na prática, o sequestro mais comum e determinístico é o de <b>sub-prefixo</b> (por exemplo, dois /25 dentro do /24): o roteamento usa o prefixo mais específico (longest-prefix match) antes de qualquer critério de desempate, então a rota falsa vence em toda a Internet que a aceitar. Esse caso não é simulado. Sobre vazamentos, a RFC 7908 define o problema e a RFC 8212 trata o comportamento padrão de eBGP sem política explícita.</p>
           <p>As defesas simuladas aqui atuam na <b>importação</b> de rotas:</p>
           <ul>
-            <li><b>Filtro de prefixos de clientes:</b> o provedor aceita de cada cliente só os prefixos do cone de clientes dele (listas feitas com registros IRR e contrato). Precisa estar no provedor direto de quem anuncia.</li>
-            <li><b>RPKI / ROV (RFC 6811):</b> o dono do prefixo publica um ROA com o AS autorizado, e o roteador rejeita rotas cuja origem não confere. Protege quem valida, e o efeito cresce com a adoção. Valida só a origem, não o caminho.</li>
+            <li><b>Filtro de prefixos de clientes (boas práticas da RFC 7454):</b> o provedor aceita de cada cliente só os prefixos do cone de clientes dele (listas feitas com registros IRR e contrato). Precisa estar no provedor direto de quem anuncia.</li>
+            <li><b>RPKI / ROV (RFC 6811):</b> o dono do prefixo publica um ROA (RFC 9582, que substitui a RFC 6482) com o AS autorizado, e o comprimento máximo do prefixo deve ser definido com cuidado (RFC 9319), e o roteador rejeita rotas cuja origem não confere. Protege quem valida, e o efeito cresce com a adoção. Valida só a origem, não o caminho.</li>
             <li><b>Filtro de rotas de peers:</b> de um peer, aceita-se só o cone de clientes dele. Barra vazamentos, mas não sequestros que partem do próprio cone.</li>
             <li><b>Flap damping (RFC 2439):</b> suprime prefixos instáveis. Com os padrões antigos (limiar de supressão em torno de 2.000 a 3.000), também tirava do ar prefixos legítimos, e o RIPE (ripe-378, 2006) deixou de recomendá-lo. Desde o RIPE-580 (2013) e a RFC 7196 (2014), a recomendação é usá-lo com limiar de supressão de pelo menos 6.000. O simulador suprime na segunda oscilação, para fins didáticos.</li>
           </ul>
@@ -585,6 +587,9 @@
 </div>
 
 <script>
+  // PRNG com semente fixa (mulberry32): a variação de atraso por salto se repete a cada carga da página.
+  let rngSeed=7;
+  const rand=()=>{rngSeed=(rngSeed+0x6D2B79F5)|0;let t=Math.imul(rngSeed^(rngSeed>>>15),1|rngSeed);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296;};
 (function(){
   'use strict';
 
@@ -1236,7 +1241,7 @@
       const b=bestOf(cur,p).best;
       if(!b){ tprint(String(n).padStart(2)+'  *  *  *  (sem rota em AS'+ASES[cur].asn+')','t-err'); return; }
       if(b.local){ tprint(String(n).padStart(2)+'  *  *  *  (pacotes descartados em AS'+ASES[cur].asn+')','t-err'); return; }
-      const l=linkBetween(cur,b.from); ms+=4+Math.floor(Math.random()*3);
+      const l=linkBetween(cur,b.from); ms+=4+Math.floor(rand()*3);
       tprint(String(n).padStart(2)+' '+ipOn(l,b.from)+' [AS '+ASES[b.from].asn+'] '+ms+' msec');
       cur=b.from; n++;
     }

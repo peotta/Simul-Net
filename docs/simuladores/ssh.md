@@ -1406,7 +1406,7 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 
 | Categoria | Preferir | Evitar |
 | --- | --- | --- |
-| Troca de chaves | curve25519-sha256, ecdh-sha2-nistp256, DH group 16 | diffie-hellman-group1-sha1, group14-sha1, group-exchange-sha1 |
+| Troca de chaves | curve25519-sha256 ([RFC 8731](https://www.rfc-editor.org/rfc/rfc8731)), ecdh-sha2-nistp256 ([RFC 5656](https://www.rfc-editor.org/rfc/rfc5656)), DH group 16 ([RFC 9142](https://www.rfc-editor.org/rfc/rfc9142) atualiza as recomendações de troca de chaves) | diffie-hellman-group1-sha1, group14-sha1, group-exchange-sha1 |
 | Chave de host | ssh-ed25519 ([RFC 8709](https://www.rfc-editor.org/rfc/rfc8709)), rsa-sha2-256/512 | ssh-dss, ssh-rsa (RSA com SHA-1) |
 | Cifra | chacha20-poly1305, aes256-gcm, aes-ctr | 3des-cbc, aes-cbc |
 | MAC | hmac-sha2-512-etm, hmac-sha2-256-etm (ou AEAD) | hmac-md5, hmac-sha1 |
@@ -1444,17 +1444,21 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 - AllowTcpForwarding no (ou restrito com PermitOpen) nos servidores que não precisam de túneis.
 - Manter o OpenSSH atualizado e monitorar o auth.log.
 
-### 6.9 O que este simulador simplifica
+### 6.9 Terrapin (CVE-2023-48795)
+
+O ataque **Terrapin** permite a um intermediário no caminho remover mensagens logo após o NEWKEYS e assim degradar a conexão. Afeta o chacha20-poly1305 e as cifras CBC com EtM. A mitigação é o **strict KEX**, uma extensão negociada nos dois lados (presente a partir do OpenSSH 9.6), descrita em um draft do IETF (draft-ietf-sshm-strict-kex) que ainda não é RFC. O simulador não reproduz o ataque. A defesa prática é atualizar cliente e servidor.
+
+### 6.10 O que este simulador simplifica
 
 Não há criptografia real: chaves, fingerprints e hashes são valores determinísticos e ilustrativos. O SSH-1, o group-exchange, a compressão, o rekeying, o X11 forwarding e os certificados SSH não são simulados. As sequências seguem o OpenSSH, mas os tamanhos de pacote são aproximados.
 
-### 6.10 Segurança
+### 6.11 Segurança
 
 - Um canal cifrado não protege contra um servidor **malicioso** nem contra o uso de algoritmos fracos negociados.
 - Banners e versões expostos facilitam o inventário por atacantes: mantenha o software atualizado em vez de depender de esconder a versão.
 - Para praticar a defesa dos serviços que usam TCP, use o Simulador de Ataques e Defesas TCP/UDP.
 
-### 6.11 Roteiro de exercícios
+### 6.12 Roteiro de exercícios
 
 1. **Conexão moderna com chave:** identifique na aba Captura quais mensagens estão em claro e a partir de qual aparecem só "Encrypted packet". O que o NEWKEYS faz?
 2. **Primeira conexão (TOFU):** o que o usuário precisa conferir antes de digitar "yes"? Por que isso é uma fraqueza?

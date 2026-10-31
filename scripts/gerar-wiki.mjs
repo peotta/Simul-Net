@@ -166,7 +166,7 @@ function howToRead(sec, usa, figs) {
       '- Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.',
       '- Estádio (cantos bem arredondados): servidor ou rede externa.',
       '- Retângulo vermelho: atacante (quando existe no modo).',
-      '- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.',
+      '- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.',
       '- O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.\n');
   }
   if (usa.B) {

@@ -4,7 +4,7 @@ Laboratório defensivo com 12 ataques (SYN flood, Slowloris, RST injection, varr
 
 - **Categoria:** Camada de transporte e segurança
 - **Motor:** legado (página autônoma em `public/sims/tcp-udp-security-simulator.html`, incorporada por `iframe`)
-- **RFCs e padrões:** [RFC 4987](https://www.rfc-editor.org/rfc/rfc4987), [BCP 38](https://www.rfc-editor.org/info/bcp38)
+- **RFCs e padrões:** [RFC 4987](https://www.rfc-editor.org/rfc/rfc4987), [RFC 5961](https://www.rfc-editor.org/rfc/rfc5961), [BCP 38](https://www.rfc-editor.org/info/bcp38), [RFC 5925](https://www.rfc-editor.org/rfc/rfc5925), [RFC 8955](https://www.rfc-editor.org/rfc/rfc8955), [RFC 7999](https://www.rfc-editor.org/rfc/rfc7999)
 - **Tópicos:** SYN flood e Slowloris; Varreduras e amplificação; Mitigação e falsos positivos; Resposta a incidente
 
 ## 1. Como ler os diagramas
@@ -24,7 +24,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 ### 1.2 Lista de figuras
@@ -550,7 +550,7 @@ Ambiente didático isolado: todos os hosts, pacotes e resultados existem apenas 
 
           
 
-Cada pacote de ataque atravessa os controles ativos em camadas. A **eficácia** de um controle é a chance de ele neutralizar um pacote sozinho; controles combinados se somam como **defesa em profundidade**. O **serviço legítimo** mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura e também quando um controle gera falsos positivos.
+Cada pacote de ataque atravessa os controles ativos em camadas. A **eficácia** de um controle é a chance de ele neutralizar um pacote sozinho; controles combinados formam a **defesa em profundidade**: o pacote passa por cada camada ativa e é barrado se alguma o neutralizar, o que equivale a tratar as camadas como independentes, com chance total de neutralização 1 − Π(1 − w), onde w é a eficácia de cada controle (sem somar percentuais). O **serviço legítimo** mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura e também quando um controle gera falsos positivos.
 
           
 
@@ -614,7 +614,18 @@ O painel lateral acompanha as fases do NIST SP 800-61r2 (substituída pela Rev. 
 
           
 
-### 6.8 Roteiro de exercícios
+### 6.8 Limitações e valores didáticos
+
+          
+
+- As **eficácias** dos controles, os **limiares** (60% de carga para o primeiro alerta, 85% de proteção, 30% de carga para a recuperação) e as taxas de falso positivo são valores **didáticos e subjetivos**, escolhidos para comparar cenários. Não são medições nem constam de RFC: em ambiente real dependem do equipamento, da configuração e do tráfego.
+- O sorteio usa uma **semente fixa**, reiniciada em "Reiniciar": o mesmo cenário com as mesmas defesas produz sempre o mesmo resultado, o que permite comparar exercícios.
+- Os trechos de configuração (nftables, Suricata, BIND, nginx, sysctl, IOS) são **exemplos ilustrativos**. Confira a sintaxe e os parâmetros na documentação oficial do produto e da versão em uso antes de aplicá-los.
+- Os cenários ficam no nível defensivo: aviso, efeito e defesa, sem passo a passo ofensivo.
+
+          
+
+### 6.9 Roteiro de exercícios
 
           
 

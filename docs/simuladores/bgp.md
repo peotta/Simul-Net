@@ -4,7 +4,7 @@ BGP-4 entre seis sistemas autônomos: sessões, OPEN, UPDATE e KEEPALIVE, relaç
 
 - **Categoria:** Roteamento e serviços de rede
 - **Motor:** legado (página autônoma em `public/sims/bgp-simulator.html`, incorporada por `iframe`)
-- **RFCs e padrões:** [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811)
+- **RFCs e padrões:** [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811), [RFC 7908](https://www.rfc-editor.org/rfc/rfc7908), [RFC 9319](https://www.rfc-editor.org/rfc/rfc9319), [RFC 9582](https://www.rfc-editor.org/rfc/rfc9582), [RFC 8212](https://www.rfc-editor.org/rfc/rfc8212)
 - **Tópicos:** Sessões e mensagens; Seleção de caminho; Sequestro, vazamento e flapping; Defesas (RPKI/ROV, filtros)
 
 ## 1. Como ler os diagramas
@@ -25,7 +25,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -747,6 +747,10 @@ Cada AS pode receber vários caminhos para o mesmo prefixo, mas instala e repass
 
           
 
+*Diferença em relação à norma:* o processo de decisão da [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271) (seção 9.1.2.2) não tem o passo "originada localmente". Ele escolhe o maior grau de preferência (LOCAL_PREF), depois o AS_PATH mais curto, o menor ORIGIN, o menor MED (entre rotas do mesmo AS vizinho), eBGP sobre iBGP, o menor custo IGP até o NEXT_HOP, o menor BGP Identifier e, por fim, o menor endereço do peer. O passo de rota local é uma preferência de implementação, e o simulador não modela o custo IGP (há um roteador por AS).
+
+          
+
 O **NEXT_HOP** indica para onde mandar o tráfego; em eBGP, cada AS troca o NEXT_HOP pelo próprio endereço no enlace. O **AS-path prepend** repete o próprio número do AS no anúncio para tornar um caminho menos atraente: é a principal ferramenta para influenciar o tráfego que **entra** no AS, enquanto o LOCAL_PREF controla o tráfego que **sai**.
 
           
@@ -788,12 +792,16 @@ O BGP clássico não comprova que um AS está autorizado a originar um prefixo, 
 
           
 
+No cenário de sequestro, o atacante origina o **mesmo prefixo** (203.0.113.0/24), e o desempate acaba no router ID. Na prática, o sequestro mais comum e determinístico é o de **sub-prefixo** (por exemplo, dois /25 dentro do /24): o roteamento usa o prefixo mais específico (longest-prefix match) antes de qualquer critério de desempate, então a rota falsa vence em toda a Internet que a aceitar. Esse caso não é simulado. Sobre vazamentos, a [RFC 7908](https://www.rfc-editor.org/rfc/rfc7908) define o problema e a [RFC 8212](https://www.rfc-editor.org/rfc/rfc8212) trata o comportamento padrão de eBGP sem política explícita.
+
+          
+
 As defesas simuladas aqui atuam na **importação** de rotas:
 
           
 
-- **Filtro de prefixos de clientes:** o provedor aceita de cada cliente só os prefixos do cone de clientes dele (listas feitas com registros IRR e contrato). Precisa estar no provedor direto de quem anuncia.
-- **RPKI / ROV ([RFC 6811](https://www.rfc-editor.org/rfc/rfc6811)):** o dono do prefixo publica um ROA com o AS autorizado, e o roteador rejeita rotas cuja origem não confere. Protege quem valida, e o efeito cresce com a adoção. Valida só a origem, não o caminho.
+- **Filtro de prefixos de clientes (boas práticas da [RFC 7454](https://www.rfc-editor.org/rfc/rfc7454)):** o provedor aceita de cada cliente só os prefixos do cone de clientes dele (listas feitas com registros IRR e contrato). Precisa estar no provedor direto de quem anuncia.
+- **RPKI / ROV ([RFC 6811](https://www.rfc-editor.org/rfc/rfc6811)):** o dono do prefixo publica um ROA ([RFC 9582](https://www.rfc-editor.org/rfc/rfc9582), que substitui a [RFC 6482](https://www.rfc-editor.org/rfc/rfc6482)) com o AS autorizado, e o comprimento máximo do prefixo deve ser definido com cuidado ([RFC 9319](https://www.rfc-editor.org/rfc/rfc9319)), e o roteador rejeita rotas cuja origem não confere. Protege quem valida, e o efeito cresce com a adoção. Valida só a origem, não o caminho.
 - **Filtro de rotas de peers:** de um peer, aceita-se só o cone de clientes dele. Barra vazamentos, mas não sequestros que partem do próprio cone.
 - **Flap damping ([RFC 2439](https://www.rfc-editor.org/rfc/rfc2439)):** suprime prefixos instáveis. Com os padrões antigos (limiar de supressão em torno de 2.000 a 3.000), também tirava do ar prefixos legítimos, e o RIPE (ripe-378, 2006) deixou de recomendá-lo. Desde o RIPE-580 (2013) e a [RFC 7196](https://www.rfc-editor.org/rfc/rfc7196) (2014), a recomendação é usá-lo com limiar de supressão de pelo menos 6.000. O simulador suprime na segunda oscilação, para fins didáticos.
 

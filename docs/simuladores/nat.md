@@ -34,7 +34,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -1289,7 +1289,7 @@ sequenceDiagram
 
 ### 7.1 O que é o NAT
 
-O **Network Address Translation** reescreve campos do cabeçalho IP (e, quando há, das portas) de pacotes que atravessam um roteador. Nasceu para poupar endereços IPv4: a rede interna usa endereços privados ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)) e o roteador os traduz para endereços públicos. A terminologia está na [RFC 2663](https://www.rfc-editor.org/rfc/rfc2663) e a técnica tradicional, na [RFC 3022](https://www.rfc-editor.org/rfc/rfc3022). Nos exemplos, os endereços 203.0.113.0/24 e 198.51.100.0/24 são de documentação ([RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)) e fazem o papel de endereços públicos.
+O **Network Address Translation** reescreve campos do cabeçalho IP (e, quando há, das portas) de pacotes que atravessam um roteador. Nasceu para poupar endereços IPv4: a rede interna usa endereços privados ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)) e o roteador os traduz para endereços públicos. A terminologia está na [RFC 2663](https://www.rfc-editor.org/rfc/rfc2663) e a técnica tradicional, na [RFC 3022](https://www.rfc-editor.org/rfc/rfc3022). Os requisitos de comportamento estão nas RFCs 4787 (UDP), 5382 (TCP) e 5508 (ICMP), todas atualizadas pela [RFC 7857](https://www.rfc-editor.org/rfc/rfc7857). Nos exemplos, os endereços 203.0.113.0/24 e 198.51.100.0/24 são de documentação ([RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)) e fazem o papel de endereços públicos.
 
 ### 7.2 Os tipos de tradução ([RFC 3022](https://www.rfc-editor.org/rfc/rfc3022))
 
@@ -1316,7 +1316,7 @@ No Linux (netfilter), o DNAT é aplicado na cadeia **PREROUTING**, antes da deci
 
 ### 7.5 A tabela de traduções
 
-A entrada liga o par interno (endereço, porta) ao par externo, e guarda o outro extremo da conexão. É consultada na volta para reverter a tradução e removida depois de um tempo de inatividade. A [RFC 4787](https://www.rfc-editor.org/rfc/rfc4787) pede, para UDP, que o tempo não seja menor que 2 minutos; a [RFC 5382](https://www.rfc-editor.org/rfc/rfc5382) pede, para TCP estabelecido, no mínimo 2 horas e 4 minutos. **O simulador usa tempos bem menores só para a visualização**, e o modelo tem um único tempo por entrada, sem os estados do TCP.
+A entrada liga o par interno (endereço, porta) ao par externo, e guarda o outro extremo da conexão. É consultada na volta para reverter a tradução e removida depois de um tempo de inatividade. A [RFC 4787](https://www.rfc-editor.org/rfc/rfc4787) pede, para UDP, que o tempo não seja menor que 2 minutos; a [RFC 5382](https://www.rfc-editor.org/rfc/rfc5382) pede, para TCP estabelecido, no mínimo 2 horas e 4 minutos. Esses mínimos estão no REQ-5 de cada RFC. A [RFC 7857](https://www.rfc-editor.org/rfc/rfc7857), nas seções 2.1 e 2.2, atualiza a [RFC 5382](https://www.rfc-editor.org/rfc/rfc5382) em dois pontos: o tempo das conexões TCP transitórias (padrão mínimo recomendado de 4 minutos, que pode ser configurado abaixo disso) e o tratamento de RST (o NAT traduz o RST e, se nada mais chegar, espera 4 minutos antes de apagar a sessão). Os 2 minutos do UDP e as 2 horas e 4 minutos do TCP estabelecido continuam valendo. **O simulador usa tempos bem menores só para a visualização**, e o modelo tem um único tempo por entrada, sem os estados do TCP.
 
 ### 7.6 Comportamento de mapeamento e de filtragem ([RFC 4787](https://www.rfc-editor.org/rfc/rfc4787))
 
@@ -1335,7 +1335,7 @@ Quando um cliente interno usa o endereço público de um serviço da própria re
 
 ### 7.9 CGNAT
 
-O *carrier-grade NAT* ([RFC 6888](https://www.rfc-editor.org/rfc/rfc6888)) traduz os endereços de muitos assinantes para poucos endereços públicos. O espaço 100.64.0.0/10 ([RFC 6598](https://www.rfc-editor.org/rfc/rfc6598)) é reservado ao trecho entre o CPE e o CGN. O CGN divide as portas entre assinantes (limites por assinante e alocação por blocos de portas) e precisa registrar as traduções para identificar o responsável por uma conexão. O assinante deixa de receber conexões de fora.
+O *carrier-grade NAT* ([RFC 6888](https://www.rfc-editor.org/rfc/rfc6888)) traduz os endereços de muitos assinantes para poucos endereços públicos. O espaço 100.64.0.0/10 ([RFC 6598](https://www.rfc-editor.org/rfc/rfc6598)) é reservado ao trecho entre o CPE e o CGN. O CGN divide as portas entre assinantes (limites por assinante, REQ-4 da [RFC 6888](https://www.rfc-editor.org/rfc/rfc6888), e alocação por blocos de portas) e precisa registrar as traduções para identificar o responsável por uma conexão ([RFC 6888](https://www.rfc-editor.org/rfc/rfc6888), seção 4). O assinante deixa de receber conexões de fora.
 
 ### 7.10 NAT e protocolos que carregam endereços
 
@@ -1343,7 +1343,7 @@ Protocolos que escrevem endereços ou portas no payload (o FTP ativo, o SIP, o I
 
 ### 7.11 NAT e IPv6
 
-O IPv6 tem endereços suficientes para dispensar o NAT como poupança de endereços. Há mecanismos de tradução para outros fins, como o NAT64 ([RFC 6146](https://www.rfc-editor.org/rfc/rfc6146)), para acessar redes IPv4 a partir de IPv6, e o NPTv6 ([RFC 6296](https://www.rfc-editor.org/rfc/rfc6296)). Nenhum deles é modelado aqui.
+O IPv6 tem endereços suficientes para dispensar o NAT como poupança de endereços. Há mecanismos de tradução para outros fins, como o NAT64 ([RFC 6146](https://www.rfc-editor.org/rfc/rfc6146)), para acessar redes IPv4 a partir de IPv6, e o NPTv6 ([RFC 6296](https://www.rfc-editor.org/rfc/rfc6296), de status Experimental). Nenhum deles é modelado aqui.
 
 ### 7.12 NAT e segurança
 

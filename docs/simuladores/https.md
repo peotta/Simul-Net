@@ -1701,7 +1701,7 @@ O custo do HTTPS é pago uma vez por conexão e diminui com TLS 1.3, retomada de
 
 - Sem HSTS, a primeira requisição pode sair em **HTTP** e o redirecionamento 301 também: um intermediário pode alterá-lo ou impedir o upgrade (*SSL stripping*).
 - O cabeçalho `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)) faz o navegador usar só HTTPS, trocando http por https internamente.
-- A **lista de preload** protege até a primeira visita, mas exige HTTPS em todo o domínio e é difícil de desfazer.
+- A **lista de preload** protege até a primeira visita, mas exige HTTPS em todo o domínio e é difícil de desfazer. O atributo `preload` não faz parte da [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797): é uma convenção dos navegadores, que mantêm a lista por fora da especificação.
 
 ### 6.8 Boas práticas de hardening
 

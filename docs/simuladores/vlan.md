@@ -5,7 +5,7 @@ Segmentação da rede local: marcação 802.1Q, portas de acesso e de tronco, VL
 - **Categoria:** Camada de enlace e redes locais
 - **Motor:** nativo (TypeScript puro, apresentado pela bancada genérica)
 - **Código-fonte:** `src/sims/vlan/`
-- **RFCs e padrões:** IEEE 802.1Q
+- **RFCs e padrões:** IEEE 802.1Q-2022, [RFC 9542](https://www.rfc-editor.org/rfc/rfc9542)
 - **Tópicos:** Marcação 802.1Q: acesso e tronco; Isolamento e domínios de broadcast; Roteamento entre VLANs (router-on-a-stick); VLAN nativa e divergência entre as pontas; VLAN hopping e defesas
 
 ## 1. Modos
@@ -36,7 +36,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -1204,7 +1204,7 @@ Nenhuma das duas técnicas funciona dentro do mesmo switch ou contra uma porta c
 - Sem tabela MAC dinâmica nem envelhecimento: o MAC de um destino é considerado conhecido na VLAN dele, e fora dela o quadro é inundado.
 - Sem GVRP/MVRP (registro dinâmico de VLANs), sem VLANs privadas, sem QinQ completo (TPID 0x88a8) e sem VTP ou DTP (protocolos proprietários).
 - Um só roteador com a porta de tronco no SW1; o ARP prévio do gateway e as respostas de eco não são mostrados, exceto o ICMP Destination Unreachable.
-- Os endereços MAC seguem a faixa de documentação ([RFC 7042](https://www.rfc-editor.org/rfc/rfc7042)) e as sub-redes são as privadas 192.168.10.0/24 e 192.168.20.0/24 ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)).
+- Os endereços MAC seguem a faixa de documentação ([RFC 9542](https://www.rfc-editor.org/rfc/rfc9542), que substitui a [RFC 7042](https://www.rfc-editor.org/rfc/rfc7042)) e as sub-redes são as privadas 192.168.10.0/24 e 192.168.20.0/24 ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)).
 
 
 ---

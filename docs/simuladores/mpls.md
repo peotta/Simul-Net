@@ -4,7 +4,7 @@ Núcleo MPLS com seis LSRs: sessões LDP, LIB e LFIB, push, swap e pop, PHP, mod
 
 - **Categoria:** Roteamento e serviços de rede
 - **Motor:** legado (página autônoma em `public/sims/mpls-simulator.html`, incorporada por `iframe`)
-- **RFCs e padrões:** [RFC 3031](https://www.rfc-editor.org/rfc/rfc3031), [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036), [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364)
+- **RFCs e padrões:** [RFC 3031](https://www.rfc-editor.org/rfc/rfc3031), [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036), [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364), [RFC 4381](https://www.rfc-editor.org/rfc/rfc4381)
 - **Tópicos:** LDP, LIB e LFIB; Push, swap e pop; PHP e TTL; L3VPN com dois rótulos
 
 ## 1. Como ler os diagramas
@@ -25,7 +25,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 **Tipo B (sequência)**
@@ -540,10 +540,15 @@ Os PEs mantêm uma tabela de roteamento por cliente (**VRF**) e trocam as rotas 
 
           
 
+Dois conceitos distintos aparecem nas rotas VPNv4. O **Route Distinguisher (RD)** é um prefixo de 64 bits acrescentado ao endereço IPv4 só para torná-lo único no MP-BGP: dois clientes podem usar 10.0.0.0/24 sem colisão. Ele não decide quem recebe a rota. Quem decide é o **Route Target (RT)**, uma extended community: cada VRF exporta suas rotas com um ou mais RT e importa apenas as rotas cujo RT está na sua lista de importação. Assim se montam topologias como full-mesh, hub-and-spoke e extranet. O RD é definido na seção 4.2 da [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364) e o RT, na seção 4.3.1. O simulador não configura RD nem RT.
+
+          
+
 ### 6.6 MPLS e segurança
 
           
 
+- **Modelo de ameaças:** a [RFC 4381](https://www.rfc-editor.org/rfc/rfc4381) analisa a segurança das VPNs MPLS/BGP e as compara às VPNs de camada 2.
 - **MPLS não é criptografia:** a separação de uma L3VPN é lógica. Quem tem acesso ao núcleo lê o tráfego. Dados sensíveis exigem IPsec ou MACsec.
 - **Pacotes rotulados vindos do cliente:** o PE nunca deve aceitar MPLS na interface do cliente. Caso contrário, um rótulo VPN forjado injeta tráfego em outra VRF (label spoofing).
 - **Proteção do LDP e do BGP:** autenticação TCP-MD5 ou TCP-AO ([RFC 5925](https://www.rfc-editor.org/rfc/rfc5925)) e filtros que aceitem LDP e BGP só de vizinhos conhecidos.
@@ -557,7 +562,7 @@ Os PEs mantêm uma tabela de roteamento por cliente (**VRF**) e trocam as rotas 
 
 - Seis LSRs e um único IGP (OSPF simplificado): sem iBGP completo, sem Route Reflector e sem Inter-AS.
 - O LDP mostra Hello, sessão e Label Mapping; não simula temporizadores de Hello e KeepAlive, Label Withdraw, Label Release nem a sincronização LDP-IGP.
-- A L3VPN usa dois rótulos e um par de PEs; os Route Targets e o Route Distinguisher são explicados, mas não configurados.
+- A L3VPN usa dois rótulos e um par de PEs; o Route Target e o Route Distinguisher são descritos na seção de L3VPN desta Referência, mas não são configurados nem trocados via MP-BGP (a [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364) define os dois).
 - Os rótulos de cada LSR usam uma faixa própria só para facilitar a leitura (a [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036) deixa a escolha livre).
 
           

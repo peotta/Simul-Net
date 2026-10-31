@@ -1825,9 +1825,22 @@ sequenceDiagram
 - No SFTP, desative a senha e use chaves; considere restringir os usuários ao seu diretório (chroot) e desativar o shell.
 - Registre e limite tentativas de login (por exemplo, com fail2ban).
 
-### 6.5 Limitações do simulador
+### 6.5 Roteiro de exercícios
+
+1. Em **Listar diretório (LIST)** no FTP, anote na aba Captura as portas dos dois canais. Qual deles existe só durante a transferência?
+2. Compare **Ativo sem NAT** e **Ativo atrás de NAT (falha)**: que endereço o servidor recebe no comando `PORT` e por que a conexão de dados não se forma?
+3. Em **Ativo com helper de FTP**, observe o que o ALG reescreve. Por que o helper deixa de funcionar quando o canal de controle é cifrado (**Ativo com helper (falha)**)?
+4. Em **Passivo atrás de NAT**, identifique quem abre a conexão de dados. Depois, em **Passivo com faixa bloqueada**, explique a falha e a regra de firewall que a resolve.
+5. Compare **FTPS explícito (AUTH TLS)** e **FTPS implícito (porta 990)**: em que momento o TLS começa em cada um? O que um observador da rede vê em **PROT C: dados em claro**?
+6. Em **Senha incorreta (530)** e **Acesso anônimo**, compare o que é exposto no FTP simples e no SFTP. Que riscos a [RFC 2577](https://www.rfc-editor.org/rfc/rfc2577) aponta para essas situações?
+7. Em **Certificado inválido**, descreva o que o cliente deve fazer e o risco de aceitar a exceção por hábito.
+8. Rode **Download nos três** e compare FTP, FTPS e SFTP quanto ao número de conexões, às portas e ao que fica em claro.
+
+### 6.6 Limitações do simulador
 
 As chaves, os hashes e os conteúdos são ilustrativos. Os tempos são didáticos, o certificado e o TLS são simplificados e não há criptografia real.
+
+A [RFC 2577](https://www.rfc-editor.org/rfc/rfc2577) reúne as considerações de segurança do FTP (ataque de bounce com `PORT`, adivinhação de senha, vazamento de nomes de usuário). Em FTPS, muitos servidores exigem que o canal de dados reuse a sessão TLS do canal de controle; é uma escolha de implementação, não um requisito geral, e o simulador não modela o reuso.
 
 
 ---

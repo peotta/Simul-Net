@@ -27,5 +27,5 @@ export const reference: string = [
     '<li>Sem tabela MAC dinâmica nem envelhecimento: o MAC de um destino é considerado conhecido na VLAN dele, e fora dela o quadro é inundado.</li>' +
     '<li>Sem GVRP/MVRP (registro dinâmico de VLANs), sem VLANs privadas, sem QinQ completo (TPID 0x88a8) e sem VTP ou DTP (protocolos proprietários).</li>' +
     '<li>Um só roteador com a porta de tronco no SW1; o ARP prévio do gateway e as respostas de eco não são mostrados, exceto o ICMP Destination Unreachable.</li>' +
-    '<li>Os endereços MAC seguem a faixa de documentação (RFC 7042) e as sub-redes são as privadas 192.168.10.0/24 e 192.168.20.0/24 (RFC 1918).</li></ul>',
+    '<li>Os endereços MAC seguem a faixa de documentação (RFC 9542, que substitui a RFC 7042) e as sub-redes são as privadas 192.168.10.0/24 e 192.168.20.0/24 (RFC 1918).</li></ul>',
 ].join('');

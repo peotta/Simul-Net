@@ -4,7 +4,7 @@ Roteamento dinâmico passo a passo: OSPF em área única e multiárea (Hello, ad
 
 - **Categoria:** Roteamento e serviços de rede
 - **Motor:** legado (página autônoma em `public/sims/router-simulator.html`, incorporada por `iframe`)
-- **RFCs e padrões:** [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), [RFC 2453](https://www.rfc-editor.org/rfc/rfc2453)
+- **RFCs e padrões:** [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), [RFC 2453](https://www.rfc-editor.org/rfc/rfc2453), [RFC 5709](https://www.rfc-editor.org/rfc/rfc5709), [RFC 4822](https://www.rfc-editor.org/rfc/rfc4822)
 - **Tópicos:** Hello e adjacências; LSAs e SPF; Bellman-Ford e split horizon; Falhas de enlace
 
 ## 1. Como ler os diagramas
@@ -24,7 +24,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Retângulo arredondado: roteador, ou dispositivo que encaminha ou traduz.
 - Estádio (cantos bem arredondados): servidor ou rede externa.
 - Retângulo vermelho: atacante (quando existe no modo).
-- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, conforme o rótulo e o cenário.
+- Linha contínua: enlace. Linha tracejada: enlace alternativo, forjado ou caído, ou ainda relação de peering (no BGP), conforme o rótulo e o cenário.
 - O Mermaid posiciona os elementos automaticamente: o layout difere do simulador, as ligações não.
 
 ### 1.2 Lista de figuras
@@ -369,7 +369,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 - **Adjacência:** os vizinhos trocam DBD, LSR, LSU e LSAck até sincronizar as bases. O estado final é **Full**.
 - **Inundação de LSAs:** cada roteador origina um Router-LSA com seus enlaces e custos. As LSAs se propagam por toda a área até que todas as LSDBs fiquem idênticas.
 - **SPF:** cada roteador executa Dijkstra sobre a LSDB, tendo a si mesmo como raiz, e instala o próximo salto de cada destino.
-- **Custo:** por padrão, é a largura de banda de referência dividida pela largura de banda do enlace. Vence o menor custo total.
+- **Custo:** a [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328) trata o custo da interface apenas como um parâmetro configurável (quanto menor, mais preferido); vence o menor custo total. A fórmula "largura de banda de referência dividida pela do enlace" é prática de fabricantes (por exemplo, Cisco IOS), não parte da RFC.
 - **Multiárea:** a Área 0 é o backbone. Os ABRs (roteadores de borda de área) resumem cada área para as demais com Summary LSAs (tipo 3), o que reduz a LSDB e o custo do SPF.
 
           
@@ -402,7 +402,17 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 6.5 Roteamento e segurança
+### 6.5 Limitações do simulador
+
+          
+
+- O DR e o BDR (eleição em redes de acesso múltiplo) não são modelados: os enlaces são ponto a ponto. O endereço 224.0.0.6 (AllDRouters) aparece só na tabela de comparação.
+- OSPFv3, RIPng e IPv6 estão fora de escopo; o modelo cobre OSPFv2 ([RFC 2328](https://www.rfc-editor.org/rfc/rfc2328)) e RIPv2 ([RFC 2453](https://www.rfc-editor.org/rfc/rfc2453)) sobre IPv4.
+- O custo OSPF é o do enlace configurado no cenário, sem cálculo por largura de banda de referência.
+
+          
+
+### 6.6 Roteamento e segurança
 
           
 
@@ -412,7 +422,7 @@ Com roteamento dinâmico, os roteadores trocam informações para montar a tabel
 
           
 
-### 6.6 Roteiro de exercícios
+### 6.7 Roteiro de exercícios
 
           
 

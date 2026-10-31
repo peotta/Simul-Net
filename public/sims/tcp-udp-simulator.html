@@ -593,11 +593,11 @@
           </ul>
           <h3>Controle de congestionamento (RFC 5681 e RFC 6582)</h3>
           <ul>
-            <li><b>Slow start:</b> a cwnd começa pequena (1 a 4 segmentos; 10 no Linux, RFC 6928) e cresce 1 segmento por ACK, o que a <b>dobra a cada RTT</b>.</li>
+            <li><b>Slow start:</b> a cwnd começa pequena (1 a 4 segmentos; 10 no Linux; a RFC 6928 é Experimental) e cresce 1 segmento por ACK, o que a <b>dobra a cada RTT</b>.</li>
             <li><b>Congestion avoidance:</b> acima do ssthresh, cresce cerca de 1 segmento por RTT (crescimento linear).</li>
             <li><b>Fast retransmit e fast recovery:</b> 3 ACKs duplicados indicam uma perda isolada. O emissor retransmite sem esperar o RTO e faz ssthresh = metade do que está em voo (no mínimo 2 segmentos, RFC 5681). O NewReno trata os ACKs parciais quando há várias perdas na mesma janela.</li>
             <li><b>Timeout:</b> sinal de congestionamento grave. ssthresh = metade do que está em voo e cwnd = 1.</li>
-            <li><b>SACK (RFC 2018):</b> opção negociada no SYN (SACK_PERM). Cada ACK duplicado leva até 4 blocos (3 quando a opção Timestamps está em uso) (SLE e SRE) com os bytes recebidos além da lacuna, e o emissor mantém um placar (scoreboard). Este simulador usa uma versão simplificada: dá como perdido todo buraco abaixo do maior byte confirmado (como o FACK do Linux), sem DSACK e sem os detalhes da RFC 6675.</li>
+            <li><b>SACK (RFC 2018):</b> opção negociada no SYN (SACK_PERM). Cada ACK duplicado leva até 4 blocos (3 quando a opção Timestamps está em uso) (SLE e SRE) com os bytes recebidos além da lacuna, e o emissor mantém um placar (scoreboard). Este simulador usa uma versão simplificada: dá como perdido todo buraco abaixo do maior byte confirmado (ideia do antigo FACK; o Linux atual usa RACK-TLP, RFC 8985, e o sysctl tcp_fack já não tem efeito), sem DSACK e sem os detalhes da RFC 6675.</li>
             <li>O Linux usa <b>CUBIC</b> (RFC 9438) por padrão. A lógica de crescer até perceber perda e então reduzir é a mesma mostrada aqui com Reno/NewReno.</li>
           </ul>
           <h3>UDP na prática</h3>
@@ -802,7 +802,7 @@
       if(!tOn) arm(t);
     }
     // Recuperação com SACK: todo segmento não confirmado abaixo do maior byte seletivamente confirmado é dado como perdido
-    // (como o FACK do Linux). O "pipe" conta o que ainda está na rede e limita os envios à cwnd.
+    // (ideia do FACK, hoje substituído no Linux pelo RACK-TLP da RFC 8985). O "pipe" conta o que ainda está na rede e limita os envios à cwnd.
     function sackPump(t){
       let g=0;
       while(g++<100){
@@ -1925,7 +1925,7 @@
       observe:['Na aba Janela (cwnd): o crescimento 1, 2, 4, 8 e a mudança de inclinação no ssthresh (8).','No diagrama: rajadas cada vez maiores, cadenciadas pelos ACKs (ACK clocking).','Na aba Resultados: o tempo total da transferência.'],
       cols:['Segmento','Função','Quem envia'],
       msgs:[['Dados','segmentos de 1000 bytes','cliente'],['ACK','confirma e libera novos envios','servidor']],
-      why:'Evita que um emissor recém-chegado inunde a rede (RFC 5681). O Linux começa com janela 10 (RFC 6928) para acelerar transferências curtas.'},
+      why:'Evita que um emissor recém-chegado inunde a rede (RFC 5681). O Linux começa com janela 10 (RFC 6928, de status Experimental) para acelerar transferências curtas.'},
     fr:{short:'Três ACKs duplicados disparam a retransmissão sem esperar o timeout.',
       concept:'Quando um segmento se perde e os seguintes chegam, o receptor repete o ACK do primeiro byte que falta (<b>ACK duplicado</b>). Três ACKs duplicados indicam uma perda isolada: o emissor faz o <b>fast retransmit</b>, retransmite na hora e entra em <b>fast recovery</b>, cortando a janela à metade em vez de voltar a 1.',
       observe:['No diagrama: o #8 se perde e os ACKs seguintes repetem o mesmo número.','No terceiro ACK duplicado, a retransmissão do #8 sai sem esperar o RTO.','Na aba Janela (cwnd): a queda à metade, não a 1.'],
@@ -2069,7 +2069,7 @@
     fAckLoss:{t:'Perda também nos ACKs',s:'Aplica a mesma taxa de perda aos ACKs do servidor.',
       p:['Como o ACK do TCP é cumulativo, o ACK seguinte confirma também o que o ACK perdido confirmaria.','Por isso a perda de ACKs raramente causa retransmissão; na maioria das vezes, só atrasa um pouco o crescimento da janela.']},
     fIw:{t:'Janela inicial (IW)',s:'Valor da cwnd no início da transferência, em segmentos.',
-      p:['É quantos segmentos o emissor pode enviar antes do primeiro ACK.','O valor original era 1; a RFC 5681 permite de 2 a 4 e o Linux usa 10 (RFC 6928).','Com 1, o slow start fica bem visível: 1, 2, 4, 8 segmentos por RTT.']},
+      p:['É quantos segmentos o emissor pode enviar antes do primeiro ACK.','O valor original era 1; a RFC 5681 permite de 2 a 4 e o Linux usa 10 (RFC 6928, de status Experimental).','Com 1, o slow start fica bem visível: 1, 2, 4, 8 segmentos por RTT.']},
     fRwnd:{t:'rwnd (janela do receptor)',s:'Espaço de buffer que o servidor anuncia em cada ACK.',
       p:['É o controle de fluxo: protege o receptor de receber mais do que consegue guardar. O valor aparece no campo Janela dos ACKs (16 segmentos = 16000 bytes).','O emissor nunca tem mais que o mínimo entre cwnd e rwnd em voo. Com rwnd = 4, a cwnd pode crescer, mas o envio fica limitado a 4 segmentos.']},
     fSsth:{t:'ssthresh inicial',s:'Limiar entre o slow start e o congestion avoidance.',
