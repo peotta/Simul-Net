@@ -56,15 +56,24 @@ export const CATEGORIES: Category[] = [
 // e acrescente uma entrada aqui. A página inicial, as categorias e os testes usam este registro.
 export const SIMS: SimMeta[] = [
   {
-    id: 'roteamento',
+    id: 'ospf',
     category: 'camada-de-rede',
-    title: 'Roteamento (OSPF e RIPv2)',
-    summary: 'Roteamento dinâmico passo a passo: OSPF em área única e multiárea (Hello, adjacências, LSAs e SPF) e RIPv2 com Bellman-Ford e split horizon, com falhas de enlace e custos editáveis.',
-    topics: ['Hello e adjacências', 'LSAs e SPF', 'Bellman-Ford e split horizon', 'Falhas de enlace'],
-    rfcs: ['RFC 2328', 'RFC 2453', 'RFC 5709', 'RFC 4822'],
+    title: 'OSPF (estado de enlace)',
+    summary: 'OSPF passo a passo: Hello, adjacências, inundação de LSAs, SPF e tabela de rotas, com mudança de custo, falhas de enlace e rede multiárea com Summary LSAs dos ABRs.',
+    topics: ['Hello e adjacências', 'LSAs e SPF', 'Custo e falhas de enlace', 'Multiárea e Summary LSAs'],
+    rfcs: ['RFC 2328', 'RFC 5709'],
     status: 'available',
-    engine: 'legado',
-    file: 'router-simulator.html',
+    engine: 'nativo',
+  },
+  {
+    id: 'rip',
+    category: 'camada-de-rede',
+    title: 'RIP (vetor de distância)',
+    summary: 'RIPv2 passo a passo: rodadas de Response (Bellman-Ford), métrica em saltos que ignora o custo, split horizon com poison reverse, atualização disparada e contagem ao infinito.',
+    topics: ['Vetores de distância', 'Split horizon e poison reverse', 'Falhas e contagem ao infinito'],
+    rfcs: ['RFC 2453', 'RFC 4822'],
+    status: 'available',
+    engine: 'nativo',
   },
   {
     id: 'dhcp',

@@ -20,6 +20,8 @@ import { firewallProtocol } from '../../src/sims/firewall/protocol';
 import { stpProtocol } from '../../src/sims/stp/protocol';
 import { vlanProtocol } from '../../src/sims/vlan/protocol';
 import { mplsProtocol } from '../../src/sims/mpls/protocol';
+import { ospfProtocol } from '../../src/sims/ospf/protocol';
+import { ripProtocol } from '../../src/sims/rip/protocol';
 import { x8021Protocol } from '../../src/sims/802-1x/protocol';
 import { wifiProtocol } from '../../src/sims/wifi/protocol';
 import { switchingProtocol } from '../../src/sims/switching/protocol';
@@ -80,6 +82,8 @@ const SIMS: [string, ProtocolDef][] = [
   ['802-1x', x8021Protocol],
   ['wifi', wifiProtocol],
   ['mpls', mplsProtocol],
+  ['ospf', ospfProtocol],
+  ['rip', ripProtocol],
 ];
 
 describe.each(SIMS)('impressões digitais: %s', (name, def) => {

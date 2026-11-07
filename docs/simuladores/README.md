@@ -19,7 +19,8 @@ Roteamento, endereçamento automático, diagnóstico e redes de operadora, em di
 
 | Simulador | Motor | Situação | RFCs e padrões |
 | --- | --- | --- | --- |
-| [Roteamento (OSPF e RIPv2)](roteamento.md) | legado | disponível | [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), [RFC 2453](https://www.rfc-editor.org/rfc/rfc2453), [RFC 5709](https://www.rfc-editor.org/rfc/rfc5709), [RFC 4822](https://www.rfc-editor.org/rfc/rfc4822) |
+| [OSPF (estado de enlace)](ospf.md) | nativo | disponível | [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), [RFC 5709](https://www.rfc-editor.org/rfc/rfc5709) |
+| [RIP (vetor de distância)](rip.md) | nativo | disponível | [RFC 2453](https://www.rfc-editor.org/rfc/rfc2453), [RFC 4822](https://www.rfc-editor.org/rfc/rfc4822) |
 | [DHCP (DORA)](dhcp.md) | nativo | disponível | [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131), [RFC 2132](https://www.rfc-editor.org/rfc/rfc2132), [RFC 5227](https://www.rfc-editor.org/rfc/rfc5227), [RFC 3046](https://www.rfc-editor.org/rfc/rfc3046), [RFC 1542](https://www.rfc-editor.org/rfc/rfc1542) |
 | [ICMP (ping e traceroute)](icmp.md) | nativo | disponível | [RFC 792](https://www.rfc-editor.org/rfc/rfc792), [RFC 1191](https://www.rfc-editor.org/rfc/rfc1191), [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), [RFC 2923](https://www.rfc-editor.org/rfc/rfc2923), [RFC 4821](https://www.rfc-editor.org/rfc/rfc4821) |
 | [BGP (sessões e seleção de caminho)](bgp.md) | legado | disponível | [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811), [RFC 7908](https://www.rfc-editor.org/rfc/rfc7908), [RFC 9319](https://www.rfc-editor.org/rfc/rfc9319), [RFC 9582](https://www.rfc-editor.org/rfc/rfc9582), [RFC 8212](https://www.rfc-editor.org/rfc/rfc8212) |

@@ -21,4 +21,6 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   '802-1x': () => import('./802-1x/protocol'),
   'wifi': () => import('./wifi/protocol'),
   'mpls': () => import('./mpls/protocol'),
+  'ospf': () => import('./ospf/protocol'),
+  'rip': () => import('./rip/protocol'),
 };

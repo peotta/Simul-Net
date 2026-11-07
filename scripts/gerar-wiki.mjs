@@ -395,9 +395,6 @@ const LEGACY = {
     row: (c, p) => ((!p.link || c[2] === p.link) && p.types.includes(c[5]) && (!p.prefix || c[6].startsWith(p.prefix + ' ')) ? [c[0], c[1], c[3], c[4], c[5], '', c[6]] : null),
     filtro: (p, ids) => `Só as mensagens ${p.link ? `do enlace ${p.link} (${ids[p.link].join(' e ')})` : `do prefixo ${p.prefix}`}, do tipo ${p.types.join(', ')}, depois de avançar as quatro fases. `,
   },
-  'router-simulator.html': {
-    topos: routerTopos,
-  },
   'tcp-udp-security-simulator.html': {
     topos: ataquesTopos,
   },
@@ -419,37 +416,6 @@ function bgpTopos(html) {
       texto: `${pl(nodes.length, 'sistema autônomo', 'sistemas autônomos')} e ${pl(links.length, 'enlace BGP', 'enlaces BGP')}: ${nodes.map((nd) => `${nd.label} (${nd.sub})`).join('; ')}. Linhas contínuas: relação de provedor e cliente, com o provedor indicado no rótulo. Linhas tracejadas: peering. Vale para todos os cenários; o Atacante só age nos cenários de segurança.`,
     }],
     ids: Object.fromEntries(links.map(([id, a, b]) => [id, [ases[a].name, ases[b].name]])),
-  };
-}
-
-/** Roteamento: rede de seis roteadores (OSPF em área única e RIPv2) e rede de nove roteadores em três áreas. */
-function routerTopos(html) {
-  const single = { r: readConst(html, 'routersSingle'), l: readConst(html, 'linksInitSingle'), h: readConst(html, 'hostsSingle') };
-  const multi = { r: readConst(html, 'routersMulti'), l: readConst(html, 'linksInitMulti'), h: readConst(html, 'hostsMulti') };
-  const hostLinks = (t) => t.h.map((h) => [h.id, h.attach, {}]);
-  const hostNodes = (t) => t.h.map((h) => ({ key: h.id, label: h.id, sub: 'ligado a ' + h.attach, kind: 'host' }));
-  return {
-    figs: [
-      {
-        titulo: `Rede de ${single.r.length} roteadores (OSPF em área única e RIPv2)`,
-        curto: 'rede de seis roteadores, OSPF em área única e RIPv2',
-        topo: {
-          nodes: [...single.r.map((r) => ({ key: r.id, label: r.id, kind: 'router' })), ...hostNodes(single)],
-          links: [...single.l.map((l) => [l.a, l.b, { label: `${l.id}, custo ${l.cost}` }]), ...hostLinks(single)],
-        },
-        texto: `${pl(single.r.length, 'roteador', 'roteadores')}, ${pl(single.l.length, 'enlace', 'enlaces')} com custo OSPF e dois hosts. É a rede dos cenários de OSPF em área única e de RIPv2; o RIPv2 ignora os custos, porque a métrica dele é o número de saltos.`,
-      },
-      {
-        titulo: `Rede de ${multi.r.length} roteadores em três áreas (OSPF multi-área)`,
-        curto: 'rede de nove roteadores em três áreas',
-        topo: {
-          nodes: [...multi.r.map((r) => ({ key: r.id, label: r.id, sub: r.abr ? 'ABR, áreas ' + r.areas.join(' e ') : 'área ' + r.areas[0], kind: 'router' })), ...hostNodes(multi)],
-          links: [...multi.l.map((l) => [l.a, l.b, { label: `custo ${l.cost}, área ${l.area}` }]), ...hostLinks(multi)],
-        },
-        texto: `${pl(multi.r.length, 'roteador', 'roteadores')} em três áreas: 1, 0 (backbone) e 2. Os roteadores de borda de área (ABR) pertencem a duas áreas e ligam cada área ao backbone. Cada enlace traz o custo e a área a que pertence. Vale para o cenário de OSPF multi-área.`,
-      },
-    ],
-    ids: {},
   };
 }
 
@@ -660,7 +626,7 @@ async function legacyPage(sim) {
   if (sim.topics?.length) L.push(`- **Tópicos:** ${sim.topics.join('; ')}`);
   L.push('');
 
-  // Sequência (a partir da captura) só no TCP e UDP e no BGP; topologia só no BGP e no roteamento. A seção de leitura dos diagramas existe apenas quando há figuras.
+  // Sequência (a partir da captura) só no TCP e UDP e no BGP; topologia só no BGP e nos simuladores de ataques. A seção de leitura dos diagramas existe apenas quando há figuras.
   const cfgL = LEGACY[sim.file] ?? {};
   const hasB = x.scenarios.some((s) => s.capture?.length);
   const hasA = !!cfgL.topos;

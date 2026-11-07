@@ -416,5 +416,27 @@
     "amostra:ttl": "17d19b96021c0621",
     "amostra:falha": "49c8241db0bfdfa7",
     "textos": "5b35032707d52bbb"
+  },
+  "ospf": {
+    "ospf": "30d57ce69f560b7f",
+    "cost": "70500359bbbf251b",
+    "ospffail": "7c5e13bd34a0d4ba",
+    "ospfiso": "cf7c1a00c4f29d44",
+    "multi": "f60938d03132de2f",
+    "multifail": "8f2d4a2a01b3cb8f",
+    "amostra:conv": "a338bf04da60c170",
+    "amostra:evento": "29d043c562274a46",
+    "amostra:multi": "aa5cb10486384835",
+    "textos": "02a1dfa23ff8434a"
+  },
+  "rip": {
+    "rip": "29c7d09de8927a24",
+    "ripcost": "264c24f4a125f5f3",
+    "ripfail": "fa6e927881c487f9",
+    "infinity": "a3b67881b6b5b6b5",
+    "ripiso": "cef0d270d8d704e0",
+    "amostra:conv": "9765ee6d8ff2b5a0",
+    "amostra:falha": "9f8dc826bf6fc37d",
+    "textos": "f580f167710a5304"
   }
 }

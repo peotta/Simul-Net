@@ -313,11 +313,11 @@ export const GLOSSARIO: Sigla[] = [
   { sigla: 'RIP', expansao: 'Routing Information Protocol', pt: 'protocolo de informação de roteamento', serve: 'protocolo de vetor de distância que usa a contagem de saltos (máximo de 15)' },
   { sigla: 'ABR', expansao: 'Area Border Router', pt: 'roteador de borda de área', serve: 'roteador OSPF ligado a mais de uma área, que resume as rotas entre elas' },
   { sigla: 'LSA', expansao: 'Link State Advertisement', pt: 'anúncio de estado de enlace', serve: 'anúncio do estado dos enlaces trocado no OSPF' },
-  { sigla: 'DBD', expansao: 'Database Description', pt: 'descrição de base de dados', serve: 'mensagem OSPF que resume a LSDB na sincronização entre vizinhos', escopo: ['roteamento'] },
-  { sigla: 'LSU', expansao: 'Link State Update', pt: 'atualização de estado de enlace', serve: 'mensagem OSPF que leva os LSAs', escopo: ['roteamento'] },
+  { sigla: 'DBD', expansao: 'Database Description', pt: 'descrição de base de dados', serve: 'mensagem OSPF que resume a LSDB na sincronização entre vizinhos', escopo: ['ospf'] },
+  { sigla: 'LSU', expansao: 'Link State Update', pt: 'atualização de estado de enlace', serve: 'mensagem OSPF que leva os LSAs', escopo: ['ospf'] },
   { sigla: 'HMAC-SHA', expansao: 'keyed-Hash Message Authentication Code com SHA', serve: 'autentica as mensagens de roteamento com uma chave compartilhada, como no OSPF (RFC 5709)' },
-  { sigla: 'DR', expansao: 'Designated Router', pt: 'roteador designado', serve: 'roteador eleito num segmento multiacesso para trocar LSAs com todos os demais', escopo: ['roteamento'] },
-  { sigla: 'BDR', expansao: 'Backup Designated Router', pt: 'roteador designado de reserva', serve: 'assume no lugar do DR se ele falhar', escopo: ['roteamento'] },
+  { sigla: 'DR', expansao: 'Designated Router', pt: 'roteador designado', serve: 'roteador eleito num segmento multiacesso para trocar LSAs com todos os demais', escopo: ['ospf'] },
+  { sigla: 'BDR', expansao: 'Backup Designated Router', pt: 'roteador designado de reserva', serve: 'assume no lugar do DR se ele falhar', escopo: ['ospf'] },
   // ---- SSH ----
   { sigla: 'TOTP', expansao: 'Time-based One-Time Password', pt: 'senha de uso único baseada em tempo', serve: 'código que muda a cada 30 segundos (RFC 6238), usado como segundo fator' },
   { sigla: 'TOFU', expansao: 'Trust On First Use', pt: 'confiar no primeiro uso', serve: 'aceita a chave do servidor na primeira conexão e avisa se ela mudar depois' },
@@ -380,6 +380,8 @@ export const GLOSSARIO: Sigla[] = [
 export const NAO_SIGLAS = new Set([
   'GET', 'POST', 'OK', 'DATA', 'ESTABLISHED',
   'SW1', 'SW2', 'PC-A', 'PC-B', 'R1', 'R2', 'R3', 'SW1-SW2', 'SRV', 'AP-01', 'AP-02',
+  // identificadores de enlaces nos simuladores de OSPF e RIP
+  'L1', 'L3', 'L5', 'L6', 'L7',
   // nomes de mensagens e de estados dos protocolos: ficam para um glossário de mensagens
   'INIT', 'OPEN', 'READ', 'KEXINIT', 'NEWKEYS', 'REFUSED', 'DHCPDECLINE',
   // nomes de equipamentos e de fluxos de exemplo
