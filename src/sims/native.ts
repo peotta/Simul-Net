@@ -23,4 +23,5 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   'mpls': () => import('./mpls/protocol'),
   'ospf': () => import('./ospf/protocol'),
   'rip': () => import('./rip/protocol'),
+  'bgp': () => import('./bgp/protocol'),
 };

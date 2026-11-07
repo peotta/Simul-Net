@@ -103,8 +103,7 @@ export const SIMS: SimMeta[] = [
     topics: ['Sessões e mensagens', 'Seleção de caminho', 'Sequestro, vazamento e flapping', 'Defesas (RPKI/ROV, filtros)'],
     rfcs: ['RFC 4271', 'RFC 6811', 'RFC 7908', 'RFC 9319', 'RFC 9582', 'RFC 8212'],
     status: 'available',
-    engine: 'legado',
-    file: 'bgp-simulator.html',
+    engine: 'nativo',
   },
   {
     id: 'mpls',

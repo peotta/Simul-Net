@@ -376,48 +376,10 @@ const LEGACY = {
       { label: 'Comparação TCP x UDP', proto: 'cmp', sub: 0 },
     ],
   },
-  // O BGP anima os pacotes com a Web Animations API e esperas por temporizador; no jsdom elas são trocadas
-  // por versões imediatas (`fast`). A captura vem de avançar as fases (`advance`, e `then` para um clique extra);
-  // só entram na sequência os cenários de `seq`, e `row` converte cada linha da aba Captura em
-  // [nº, tempo, origem, destino, tipo, '', informação] ou a descarta (a captura inteira do BGP tem mais de 70 mensagens).
-  // `topos` lê as constantes da própria página, para os diagramas de topologia não divergirem dela.
-  'bgp-simulator.html': {
-    fast: true,
-    advance: { id: 'btnAdvance', n: 4 },
-    hosts: { Trânsito: 'AS64496', 'ISP A': 'AS64500', 'ISP B': 'AS64501', Cliente: 'AS64510', Conteúdo: 'AS64511', Atacante: 'AS64666' },
-    topos: bgpTopos,
-    seq: {
-      'Estabelecimento da sessão': { link: 'L4', types: ['TCP', 'OPEN', 'KEEPALIVE'] },
-      'Propagação do anúncio': { types: ['UPDATE'], prefix: '203.0.113.0/24' },
-      'Sequestro de prefixo': { types: ['UPDATE'], prefix: '203.0.113.0/24' },
-      'Vazamento de rota': { types: ['UPDATE'], prefix: '198.51.100.0/24' },
-    },
-    row: (c, p) => ((!p.link || c[2] === p.link) && p.types.includes(c[5]) && (!p.prefix || c[6].startsWith(p.prefix + ' ')) ? [c[0], c[1], c[3], c[4], c[5], '', c[6]] : null),
-    filtro: (p, ids) => `Só as mensagens ${p.link ? `do enlace ${p.link} (${ids[p.link].join(' e ')})` : `do prefixo ${p.prefix}`}, do tipo ${p.types.join(', ')}, depois de avançar as quatro fases. `,
-  },
   'tcp-udp-security-simulator.html': {
     topos: ataquesTopos,
   },
 };
-
-const readConst = (html, nome) => new Function('return ' + html.match(new RegExp(String.raw`const ${nome}\s*=\s*([\s\S]*?);\s*\n`))[1])();
-
-/** BGP: seis sistemas autônomos (ASES) e os enlaces com a relação comercial (LINKS_INIT). */
-function bgpTopos(html) {
-  const ases = readConst(html, 'ASES');
-  const links = readConst(html, 'LINKS_INIT');
-  const kind = { M: 'attacker', C: 'host', D: 'host' };
-  const nodes = Object.values(ases).map((a) => ({ key: a.id, label: a.name, sub: 'AS' + a.asn + (a.prefix ? ', ' + a.prefix : ''), kind: kind[a.id] ?? 'router' }));
-  return {
-    figs: [{
-      titulo: `Topologia de ${nodes.length} sistemas autônomos`,
-      curto: 'topologia dos seis sistemas autônomos',
-      topo: { nodes, links: links.map(([, a, b, rel]) => [a, b, rel === 'peer' ? { label: 'peering', dashed: true } : { label: 'provedor: ' + ases[a].name }]) },
-      texto: `${pl(nodes.length, 'sistema autônomo', 'sistemas autônomos')} e ${pl(links.length, 'enlace BGP', 'enlaces BGP')}: ${nodes.map((nd) => `${nd.label} (${nd.sub})`).join('; ')}. Linhas contínuas: relação de provedor e cliente, com o provedor indicado no rótulo. Linhas tracejadas: peering. Vale para todos os cenários; o Atacante só age nos cenários de segurança.`,
-    }],
-    ids: Object.fromEntries(links.map(([id, a, b]) => [id, [ases[a].name, ases[b].name]])),
-  };
-}
 
 /**
  * Ataques em TCP e UDP: o desenho é feito em canvas, sem constantes de topologia; os nós vêm do literal de `nodes()` da

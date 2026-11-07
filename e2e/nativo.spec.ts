@@ -140,13 +140,3 @@ for (const sim of natives) {
     });
   });
 }
-
-// Os endereços antigos (arquivos HTML dos simuladores que migraram para o motor nativo) redirecionam para a rota atual.
-for (const id of ['ssh', 'https', 'ftp', 'icmp', 'dhcp']) {
-  test(`o endereço antigo sims/${id}-simulator.html leva ao simulador nativo`, async ({ page }) => {
-    await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
-    await page.goto(`sims/${id}-simulator.html`);
-    await page.waitForSelector('.simnet .scen-row button.chip');
-    expect(page.url()).toMatch(new RegExp(`#/sim/${id}$`));
-  });
-}

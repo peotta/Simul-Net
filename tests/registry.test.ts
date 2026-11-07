@@ -104,22 +104,3 @@ describe('simuladores legados em public/sims', () => {
     expect(FORBIDDEN_DASHES.test(readFileSync(path, 'utf-8'))).toBe(false);
   });
 });
-
-describe('endereços antigos dos simuladores migrados para o motor nativo', () => {
-  // Estes arquivos ficam em public/sims só para redirecionar links antigos, e não constam do registro.
-  const MOVED = ['ssh', 'https', 'ftp', 'icmp', 'dhcp'];
-  it.each(MOVED)('%s-simulator.html redireciona para a rota do simulador e não é indexado', (id) => {
-    const html = readFileSync(join(root, 'public', 'sims', `${id}-simulator.html`), 'utf-8');
-    expect(html).toContain(`<meta http-equiv="refresh" content="0; url=../#/sim/${id}">`);
-    expect(html).toContain(`<link rel="canonical" href="https://peotta.github.io/Simul-Net/#/sim/${id}">`);
-    expect(html).toContain('<meta name="robots" content="noindex">');
-    expect(FORBIDDEN_DASHES.test(html)).toBe(false);
-    expect(SIMS.find((s) => s.id === id)?.engine).toBe('nativo');
-    expect(SIMS.find((s) => s.id === id)?.file).toBeUndefined();
-  });
-
-  it('o sitemap não lista as páginas de redirecionamento', () => {
-    const xml = readFileSync(join(root, 'public', 'sitemap.xml'), 'utf-8');
-    MOVED.forEach((id) => expect(xml).not.toContain(`${id}-simulator.html`));
-  });
-});

@@ -381,7 +381,7 @@ export const NAO_SIGLAS = new Set([
   'GET', 'POST', 'OK', 'DATA', 'ESTABLISHED',
   'SW1', 'SW2', 'PC-A', 'PC-B', 'R1', 'R2', 'R3', 'SW1-SW2', 'SRV', 'AP-01', 'AP-02',
   // identificadores de enlaces nos simuladores de OSPF e RIP
-  'L1', 'L3', 'L5', 'L6', 'L7',
+  'L1', 'L3', 'L5', 'L6', 'L7', 'L8',
   // nomes de mensagens e de estados dos protocolos: ficam para um glossário de mensagens
   'INIT', 'OPEN', 'READ', 'KEXINIT', 'NEWKEYS', 'REFUSED', 'DHCPDECLINE',
   // nomes de equipamentos e de fluxos de exemplo

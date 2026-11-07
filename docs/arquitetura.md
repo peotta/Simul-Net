@@ -9,7 +9,7 @@ O Simul-Net reúne simuladores visuais de redes e protocolos seguros em um únic
 ```text
 Simul-Net/
   public/
-    sims/                 simuladores legados (HTML autônomo) e redirecionamentos de endereços antigos
+    sims/                 simuladores legados (HTML autônomo)
     favicon.svg
   src/
     sim-core/             núcleo dos simuladores nativos: trace, valores determinísticos e, em ui/, a bancada React
@@ -33,10 +33,9 @@ Simul-Net/
 
 ## 4. Simuladores legados e nativos
 
-- **Nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF e o RIP são nativos. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
-- **Legado:** página autônoma em `public/sims/`, incorporada por `iframe` na rota `/sim/:id` e acessível em tela cheia. São os demais simuladores (BGP, TCP e UDP, ataques e defesas). Cada página mantém título, descrição, URL canônica, tags de compartilhamento e o rodapé de crédito padrão. O link de volta usa `target="_top"` para funcionar dentro e fora do `iframe`.
+- **Nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP e o BGP são nativos. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
+- **Legado:** página autônoma em `public/sims/`, incorporada por `iframe` na rota `/sim/:id` e acessível em tela cheia. São os demais simuladores (TCP e UDP, ataques e defesas). Cada página mantém título, descrição, URL canônica, tags de compartilhamento e o rodapé de crédito padrão. O link de volta usa `target="_top"` para funcionar dentro e fora do `iframe`.
 - **Modelo misto de propósito:** os simuladores legados continuam como estão. Migrar os que têm a lógica misturada à tela (80 a 160 referências ao DOM em 1.100 a 1.900 linhas de JavaScript cada) custaria muito e não muda o que o aluno vê. A camada nativa é usada nos simuladores novos (VPN, SMTP, IS-IS, SNMP, congestionamento; o Wi-Fi (802.11) já foi entregue, com quatro modos: descoberta e associação, acesso ao meio, roaming e energia, e canais; o 802.1X e RADIUS já foi entregue, com quatro modos: autenticação, falhas, porta e sessão, e riscos com defesas; o DNS e DNSSEC já foi entregue, com cinco modos: resolução, DNSSEC, envenenamento de cache, amplificação e DoT/DoH; o ARP já foi entregue, com três modos: resolução, ARP gratuito e conflito, e envenenamento de cache; as versões do HTTP também, com um modo por versão e as abas Cascata e Comparação) e nos já migrados.
-- **Endereços antigos:** `public/sims/ssh-simulator.html`, `https-simulator.html`, `ftp-simulator.html`, `icmp-simulator.html` e `dhcp-simulator.html` são páginas de redirecionamento para a rota nativa (`noindex`, fora do registro e do sitemap), para não quebrar links existentes.
 
 ## 5. Contrato do motor de simulação
 
@@ -62,7 +61,7 @@ A verificação de paridade foi feita enquanto os dois lados coexistiam: cada ce
 
 ## 7. Testes
 
-- **Registro:** identificadores únicos, categorias válidas, arquivos existentes, ausência de travessão longo e de meia-risca, e redirecionamentos dos endereços antigos.
+- **Registro:** identificadores únicos, categorias válidas, arquivos existentes, ausência de travessão longo e de meia-risca.
 - **Páginas legadas:** título, descrição, canônica, crédito e link de volta ao Simul-Net.
 - **Interface:** páginas inicial, de categoria e de simulador, com verificação de acessibilidade (axe-core).
 - **Página de documentação (`doc-ui.test.tsx`):** leitura dos documentos, índice lateral, âncoras, links, diagramas (o Mermaid é simulado no jsdom), página 404 e axe-core.
@@ -72,7 +71,7 @@ A verificação de paridade foi feita enquanto os dois lados coexistiam: cada ce
 - **Impressões digitais (`golden.test.ts` e `golden.json`):** hash SHA-256 do trace, do Experimento, do texto do cenário e das abas de cada cenário, e de 300 combinações aleatórias por modo (semente fixa). Qualquer mudança de comportamento falha o teste. Quando a mudança é intencional: `UPDATE_GOLDEN=1 npx vitest run tests/sim-core/golden.test.ts`, e revisar o diff de `golden.json` antes de versionar.
 - **Páginas nativas (`tests/native-page.test.tsx`):** cada simulador nativo carrega, percorre todos os modos e passa no axe-core.
 - **Contraste (Playwright, `e2e/contraste.spec.ts`):** o axe mede o contraste de cores (WCAG AA) no Chrome real, o que não funciona no jsdom: páginas do hub nos temas claro e escuro, e cada simulador nativo em todos os modos, numa amostra dos cenários e em todas as abas.
-- **Ponta a ponta (Playwright, em `e2e/`):** todos os cenários de cada simulador sem erro de JavaScript, layout da bancada, painéis destacáveis, redirecionamento dos endereços antigos e o hub. Roda no fluxo de publicação.
+- **Ponta a ponta (Playwright, em `e2e/`):** todos os cenários de cada simulador sem erro de JavaScript, layout da bancada, painéis destacáveis e o hub. Roda no fluxo de publicação.
 
 ## 8. Publicação
 

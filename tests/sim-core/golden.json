@@ -438,5 +438,26 @@
     "amostra:conv": "9765ee6d8ff2b5a0",
     "amostra:falha": "9f8dc826bf6fc37d",
     "textos": "f580f167710a5304"
+  },
+  "bgp": {
+    "open": "a0b7a9edf5a09ef5",
+    "hold": "ae6dd0d5acee7f34",
+    "prop": "8f74eb45b43f0e12",
+    "export": "3e13937246cfef2b",
+    "aspath": "8f74eb45b43f0e12",
+    "rid": "9faf83c64c777048",
+    "lp": "bef18c8b69a95186",
+    "prepend": "6f101407c53eaa45",
+    "fail": "3076889491c4ad67",
+    "withdraw": "2043a38660107a3c",
+    "hijack": "eab375aae3747dec",
+    "hijack-filter": "a2e0a03d21f9bfbc",
+    "hijack-rov": "f713573c29542782",
+    "route-leak": "d285dd1c6ea01136",
+    "route-flap": "2f53a2c4d9221324",
+    "amostra:sessao": "456a49f69f0684bd",
+    "amostra:rotas": "8a725c162d6125ce",
+    "amostra:seguranca": "7721c6bc5d51178c",
+    "textos": "f54d2d2f8e3c21d0"
   }
 }
