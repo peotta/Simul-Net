@@ -44,7 +44,7 @@ npm run dev          # servidor de desenvolvimento (http://localhost:5173)
 | `src/sims/` | simuladores nativos (um por pasta: `engine`, `content` e `protocol.ts`), `native.ts` e o registro `registry.ts`, fonte única dos simuladores |
 | `src/sim-core/` | núcleo compartilhado: contrato do motor, `Trace` e componentes das abas |
 | `src/components/`, `src/pages/`, `src/layouts/` | hub, cartões, páginas e layout |
-| `public/sims/` | simuladores legados, em HTML |
+| `public/` | arquivos estáticos (favicon, imagem de compartilhamento, `robots.txt` e `sitemap.xml`) |
 | `docs/` | arquitetura, documentos dos simuladores (`docs/simuladores/`) e imagens |
 | `scripts/` | gerador da documentação e da wiki (`gerar-wiki.mjs`) |
 | `tests/` e `e2e/` | testes unitários (Vitest) e de ponta a ponta (Playwright) |
@@ -59,7 +59,7 @@ npm run build        # gera o dist/, necessário antes do teste de ponta a ponta
 npm run test:e2e     # testes de ponta a ponta, em um Chrome instalado (veja abaixo)
 ```
 
-Os testes unitários verificam a integridade do registro de simuladores (arquivos existentes, identificadores, categorias, pontuação), os requisitos de cada página legada (título, descrição, canônica, crédito, volta ao Simul-Net) e a acessibilidade da interface (axe-core).
+Os testes unitários verificam a integridade do registro de simuladores (arquivos existentes, identificadores, categorias, pontuação), a existência da documentação de cada simulador, as impressões digitais do comportamento de cada simulador e a acessibilidade da interface (axe-core).
 
 ### Testes de ponta a ponta
 
@@ -87,7 +87,7 @@ Para publicar no GitHub Pages: em *Settings > Pages*, escolha *Source: GitHub Ac
 
 ### Arquitetura
 
-A arquitetura, o contrato do motor de simulação, o modelo misto (simuladores nativos em React e TypeScript e simuladores legados em HTML) e os testes estão em [docs/arquitetura.md](docs/arquitetura.md). O passo a passo para adicionar um simulador está na seção 10 desse documento.
+A arquitetura, o contrato do motor de simulação, os simuladores nativos em React e TypeScript (todos os simuladores do projeto) e os testes estão em [docs/arquitetura.md](docs/arquitetura.md). O passo a passo para adicionar um simulador está na seção 10 desse documento.
 
 ### Documentação dos simuladores
 

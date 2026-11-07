@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { CATEGORIES, SIMS } from '../src/sims/registry';
 
-// O hub: página inicial, categorias e a página de cada simulador (legados por iframe, nativos direto).
+// O hub: página inicial, categorias e a página de cada simulador (todos nativos, sem iframe).
 
 test('a página inicial lista as categorias e os simuladores disponíveis', async ({ page }) => {
   const errors: string[] = [];

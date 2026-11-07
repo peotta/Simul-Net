@@ -123,8 +123,7 @@ export const SIMS: SimMeta[] = [
     topics: ['Handshake e estados', 'Controle de congestionamento e SACK', 'Download TCP e vídeo UDP', 'Comparação TCP x UDP'],
     rfcs: ['RFC 9293', 'RFC 768', 'RFC 5681', 'RFC 2018'],
     status: 'available',
-    engine: 'legado',
-    file: 'tcp-udp-simulator.html',
+    engine: 'nativo',
   },
   {
     id: 'ataques-tcp-udp',
@@ -134,8 +133,7 @@ export const SIMS: SimMeta[] = [
     topics: ['SYN flood e Slowloris', 'Varreduras e amplificação', 'Mitigação e falsos positivos', 'Resposta a incidente'],
     rfcs: ['RFC 4987', 'RFC 5961', 'BCP 38', 'RFC 5925', 'RFC 8955', 'RFC 7999'],
     status: 'available',
-    engine: 'legado',
-    file: 'tcp-udp-security-simulator.html',
+    engine: 'nativo',
   },
   {
     id: 'ssh',

@@ -9,7 +9,6 @@ O Simul-Net reúne simuladores visuais de redes e protocolos seguros em um únic
 ```text
 Simul-Net/
   public/
-    sims/                 simuladores legados (HTML autônomo)
     favicon.svg
   src/
     sim-core/             núcleo dos simuladores nativos: trace, valores determinísticos e, em ui/, a bancada React
@@ -29,13 +28,14 @@ Simul-Net/
 
 ## 3. Registro de simuladores
 
-`src/sims/registry.ts` é a única fonte de verdade. A página inicial, as categorias, os links de navegação e os testes leem dele. Cada entrada tem identificador (kebab-case), categoria, título, resumo, tópicos, especificações (RFCs), situação (`available` ou `planned`) e, quando disponível, o motor (`legado` ou `nativo`) e, no caso dos legados, o arquivo.
+`src/sims/registry.ts` é a única fonte de verdade. A página inicial, as categorias, os links de navegação e os testes leem dele. Cada entrada tem identificador (kebab-case), categoria, título, resumo, tópicos, especificações (RFCs), situação (`available` ou `planned`) e, quando disponível, o motor, que hoje é sempre `nativo` (o tipo `legado`, com o arquivo em `public/sims/`, continua aceito, mas nenhum simulador o usa).
 
-## 4. Simuladores legados e nativos
+## 4. Simuladores nativos
 
-- **Nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP e o BGP são nativos. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
-- **Legado:** página autônoma em `public/sims/`, incorporada por `iframe` na rota `/sim/:id` e acessível em tela cheia. São os demais simuladores (TCP e UDP, ataques e defesas). Cada página mantém título, descrição, URL canônica, tags de compartilhamento e o rodapé de crédito padrão. O link de volta usa `target="_top"` para funcionar dentro e fora do `iframe`.
-- **Modelo misto de propósito:** os simuladores legados continuam como estão. Migrar os que têm a lógica misturada à tela (80 a 160 referências ao DOM em 1.100 a 1.900 linhas de JavaScript cada) custaria muito e não muda o que o aluno vê. A camada nativa é usada nos simuladores novos (VPN, SMTP, IS-IS, SNMP, congestionamento; o Wi-Fi (802.11) já foi entregue, com quatro modos: descoberta e associação, acesso ao meio, roaming e energia, e canais; o 802.1X e RADIUS já foi entregue, com quatro modos: autenticação, falhas, porta e sessão, e riscos com defesas; o DNS e DNSSEC já foi entregue, com cinco modos: resolução, DNSSEC, envenenamento de cache, amplificação e DoT/DoH; o ARP já foi entregue, com três modos: resolução, ARP gratuito e conflito, e envenenamento de cache; as versões do HTTP também, com um modo por versão e as abas Cascata e Comparação) e nos já migrados.
+- **Nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP, o BGP, o TCP e UDP e os ataques e defesas TCP/UDP são nativos: **todos os simuladores do projeto são nativos**. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
+- **Histórico:** o projeto começou com páginas HTML autônomas em `public/sims/`, incorporadas por `iframe`. Todas foram migradas, uma a uma, para o motor nativo, com paridade verificada contra a página antiga antes de sua remoção, e as páginas foram apagadas. O suporte a uma página autônoma (`engine: 'legado'`) permanece no registro e no gerador da documentação apenas como porta aberta; não há uso atual.
+- **Por que o motor nativo:** o motor é uma função pura (os mesmos parâmetros produzem o mesmo `Trace`), separada da interface, o que permite testar cada regra, fixar o comportamento por impressões digitais e reutilizar a bancada de trabalho (diagrama, captura, mensagem, estados, abas, log).
+- **Execução por ciclos e interatividade:** simuladores que antes eram animações contínuas (o TCP e UDP e os ataques e defesas) rodam hoje a simulação inteira de uma vez e a reproduzem no diagrama. Parâmetros que o aluno antes mudava durante a animação viraram controles: por exemplo, a mitigação upstream é escolhida como "ativa desde o início" ou "acionada depois do ciclo N".
 
 ## 5. Contrato do motor de simulação
 
@@ -52,9 +52,9 @@ O núcleo está em `src/sim-core/` (`trace.ts`, `hash.ts`, `types.ts`) e a banca
 
 | Fase | Entrega | Situação |
 | --- | --- | --- |
-| 1 | Hub com registro e simuladores legados incorporados | concluída |
-| 2 | Núcleo (`src/sim-core`), bancada React e migração do SSH, HTTPS e FTP para módulos TypeScript, com paridade verificada contra o legado antes de sua remoção | concluída; os legados desses três foram removidos |
-| 3 | Migração dos demais simuladores legados | **não prevista**: o custo é alto e o ganho para o aluno é pequeno (seção 4) |
+| 1 | Hub com registro e simuladores em páginas autônomas incorporadas | concluída; as páginas foram substituídas pelas versões nativas |
+| 2 | Núcleo (`src/sim-core`), bancada React e migração do SSH, HTTPS e FTP para módulos TypeScript, com paridade verificada contra o legado antes de sua remoção | concluída |
+| 3 | Migração dos demais simuladores legados | **concluída**: DHCP, NAT, ICMP, DNS, Firewall, redes locais, roteamento (OSPF, RIP, BGP, MPLS), TCP e UDP e ataques e defesas TCP/UDP são nativos |
 | 4 | Novos simuladores já nativos (DNS e DNSSEC, VPN, SMTP, IS-IS, SNMP, ARP, HTTP, congestionamento, 802.1X; DNS e DNSSEC, ARP, HTTP e 802.1X já entregues) | prevista; usam o núcleo e a bancada desde o início |
 
 A verificação de paridade foi feita enquanto os dois lados coexistiam: cada cenário e milhares de combinações de parâmetros produziram o mesmo trace, o mesmo Experimento e as mesmas abas. Depois da remoção do legado, essa garantia passou para as impressões digitais (seção 7).
@@ -62,7 +62,7 @@ A verificação de paridade foi feita enquanto os dois lados coexistiam: cada ce
 ## 7. Testes
 
 - **Registro:** identificadores únicos, categorias válidas, arquivos existentes, ausência de travessão longo e de meia-risca.
-- **Páginas legadas:** título, descrição, canônica, crédito e link de volta ao Simul-Net.
+- **Páginas autônomas (se houver):** título, descrição, canônica, crédito e link de volta ao Simul-Net; hoje o teste não tem páginas a verificar.
 - **Interface:** páginas inicial, de categoria e de simulador, com verificação de acessibilidade (axe-core).
 - **Página de documentação (`doc-ui.test.tsx`):** leitura dos documentos, índice lateral, âncoras, links, diagramas (o Mermaid é simulado no jsdom), página 404 e axe-core.
 - **Núcleo e bancada (`tests/sim-core/`):** valores determinísticos e trace (`core.test.ts`); geometria do diagrama, reprodução e cenários (`ui-logic.test.ts`); e a bancada completa com um protocolo de exemplo, incluindo destacar, maximizar, recolher, Esc, zoom, a alça de altura e a alternância entre sequência e topologia, com axe-core em todas as abas (`workbench.test.tsx`).
@@ -93,7 +93,7 @@ O portal continua com suas páginas de simuladores até o Simul-Net estar public
 6. **Wiki.** Rode `npm run wiki -- <pasta>`, clone `Simul-Net.wiki.git`, copie os `.md` gerados, faça o commit e o push. Como a wiki é pública, a publicação só é feita com autorização expressa do autor.
 7. **Link no cartão.** Nada a fazer: o cartão do hub mostra o link "Documentação" a partir do `id` do registro (`docUrl`).
 
-**Legado:** coloque o arquivo em `public/sims/` e acrescente a entrada em `src/sims/registry.ts` com `engine: 'legado'`; o registro verifica o arquivo e os requisitos da página. A documentação de um legado é extraída executando a página no jsdom. Modos escolhidos por botões e captura passo a passo são tratados em `LEGACY`, em `scripts/gerar-wiki.mjs`; páginas cujas mensagens não são determinísticas não geram diagrama de sequência.
+**Página autônoma (não usada hoje):** coloque o arquivo em `public/sims/` e acrescente a entrada em `src/sims/registry.ts` com `engine: 'legado'`. Prefira sempre o motor nativo.
 
 ## 11. Limitações
 

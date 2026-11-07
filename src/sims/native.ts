@@ -24,4 +24,6 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   'ospf': () => import('./ospf/protocol'),
   'rip': () => import('./rip/protocol'),
   'bgp': () => import('./bgp/protocol'),
+  'tcp-udp': () => import('./tcp-udp/protocol'),
+  'ataques-tcp-udp': () => import('./ataques-tcp-udp/protocol'),
 };

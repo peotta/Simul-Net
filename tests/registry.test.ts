@@ -79,28 +79,15 @@ describe('registro de simuladores', () => {
   });
 });
 
-describe('simuladores legados em public/sims', () => {
-  const files = SIMS.filter((s) => s.file).map((s) => s.file!);
-  it.each(files)('%s tem título, descrição, canônica, rodapé de crédito e volta ao Simul-Net', (file) => {
-    const html = readFileSync(join(root, 'public', 'sims', file), 'utf-8');
-    expect(html).toMatch(/<title>[^<]+<\/title>/);
-    expect(html).toMatch(/<meta name="description" content="[^"]{40,}/);
-    expect(html).toContain(`https://peotta.github.io/Simul-Net/sims/${file}`);
-    expect(html).toContain('Prof. Dr. Laerte Peotta de Melo');
-    expect(html).toContain('Uso exclusivo para fins de ensino e pesquisa.');
-    expect(html).toContain('href="../#/" target="_top"');
-    expect(FORBIDDEN_DASHES.test(html)).toBe(false);
+describe('motor dos simuladores', () => {
+  it('todos os simuladores disponíveis são nativos e nenhum aponta para página autônoma', () => {
+    SIMS.filter((s) => s.status === 'available').forEach((s) => {
+      expect(s.engine, s.id).toBe('nativo');
+      expect(s.file, s.id).toBeUndefined();
+    });
   });
 
-  it.each(files.filter((f) => f !== 'tcp-udp-simulator.html'))('%s usa a bancada de trabalho compartilhada', (file) => {
-    const html = readFileSync(join(root, 'public', 'sims', file), 'utf-8');
-    expect(html).toContain('href="bench/bench.css"');
-    expect(html).toContain('src="bench/bench.js"');
-  });
-
-  it.each(['bench/bench.css', 'bench/bench.js'])('%s existe e não tem travessões', (name) => {
-    const path = join(root, 'public', 'sims', name);
-    expect(existsSync(path)).toBe(true);
-    expect(FORBIDDEN_DASHES.test(readFileSync(path, 'utf-8'))).toBe(false);
+  it('não restam páginas autônomas em public/sims', () => {
+    expect(existsSync(join(root, 'public', 'sims'))).toBe(false);
   });
 });

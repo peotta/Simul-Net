@@ -78,6 +78,8 @@ describe('páginas dos simuladores nativos', () => {
   it('Wi-Fi: carrega, percorre os quatro modos e não tem violações de acessibilidade', () => checkSim('wifi', /^Wi-Fi: operação \(802\.11\)$/), 180000);
   it('MPLS: carrega, percorre os quatro modos e não tem violações de acessibilidade', () => checkSim('mpls', /^MPLS \(LDP e L3VPN\)$/), 180000);
   it('BGP: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('bgp', /^BGP \(sessões e seleção de caminho\)$/), 180000);
+  it('TCP e UDP: carrega, percorre os seis modos e não tem violações de acessibilidade', () => checkSim('tcp-udp', /^TCP e UDP$/), 240000);
+  it('Ataques TCP/UDP: carrega, percorre os dois modos e não tem violações de acessibilidade', () => checkSim('ataques-tcp-udp', /^Ataques e defesas TCP\/UDP$/), 240000);
   it('OSPF: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('ospf', /^OSPF \(estado de enlace\)$/), 180000);
   it('RIP: carrega, percorre os dois modos e não tem violações de acessibilidade', () => checkSim('rip', /^RIP \(vetor de distância\)$/), 180000);
 

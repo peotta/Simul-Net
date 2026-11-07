@@ -69,15 +69,6 @@ describe('página inicial e categorias', () => {
 });
 
 describe('página de um simulador', () => {
-  it('incorpora o simulador legado com título acessível e link para tela cheia', async () => {
-    const { container } = renderAt('/sim/tcp-udp');
-    expect(screen.getByRole('heading', { level: 1, name: 'TCP e UDP' })).toBeTruthy();
-    const frame = screen.getByTitle('Simulador: TCP e UDP');
-    expect(frame.getAttribute('src')).toMatch(/sims\/tcp-udp-simulator\.html$/);
-    expect(screen.getByRole('link', { name: /Abrir em tela cheia/ }).getAttribute('href')).toMatch(/sims\/tcp-udp-simulator\.html$/);
-    expect(await violations(container)).toEqual([]);
-  });
-
   it('simulador em preparação não incorpora nada', () => {
     renderAt('/sim/vpn');
     expect(screen.getByText(/em preparação/)).toBeTruthy();

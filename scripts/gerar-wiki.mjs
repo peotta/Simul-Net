@@ -1,4 +1,4 @@
-// Gera as páginas da wiki (Markdown) a partir do registro, dos módulos nativos e das páginas legadas.
+// Gera as páginas da wiki (Markdown) a partir do registro e dos módulos nativos (o suporte a páginas legadas é residual).
 // Uso: npm run wiki -- <pasta-de-saida>   (a pasta de saída recebe os .md; não é versionada aqui)
 // Os nativos são lidos pelo Vite (módulos TypeScript); os legados são executados no jsdom e o texto
 // de cada cenário é capturado da aba Cenário. Edições manuais nas páginas geradas são sobrescritas.
@@ -359,84 +359,8 @@ function nativePage(sim, def) {
   return L.join('\n') + footer;
 }
 
-/**
- * Particularidades das páginas legadas. O TCP e UDP tem cinco modos escolhidos por botões (protocolo e
- * aplicação) e uma tabela de captura que o botão Passo revela; hosts nomeia os endereços da captura
- * (CLI e SRV nas constantes da página).
- */
-const LEGACY = {
-  'tcp-udp-simulator.html': {
-    capture: true,
-    hosts: { '192.168.10.10': 'Cliente', '203.0.113.80': 'Servidor' },
-    modes: [
-      { label: 'TCP: conexão', proto: 'tcp', sub: 0 },
-      { label: 'TCP: download de arquivo', proto: 'tcp', sub: 1 },
-      { label: 'UDP: fluxo de datagramas e DNS', proto: 'udp', sub: 0 },
-      { label: 'UDP: vídeo em streaming', proto: 'udp', sub: 2 },
-      { label: 'Comparação TCP x UDP', proto: 'cmp', sub: 0 },
-    ],
-  },
-  'tcp-udp-security-simulator.html': {
-    topos: ataquesTopos,
-  },
-};
-
-/**
- * Ataques em TCP e UDP: o desenho é feito em canvas, sem constantes de topologia; os nós vêm do literal de `nodes()` da
- * página e a variante de cada cenário, dos campos `mode` e `multi` da definição dele. As varreduras (`scan`) usam o
- * mesmo desenho do ataque direto.
- */
-function ataquesTopos(html, { x, S }) {
-  const no = (k) => {
-    const m = html.match(new RegExp(`${k}: \{[^}]*?name: '([^']*)', ip: (VICTIM|'[^']*')`));
-    return { name: m[1], ip: m[2] === 'VICTIM' ? html.match(/const VICTIM = '([^']*)'/)[1] : m[2].slice(1, -1) };
-  };
-  const [client, edge, firewall, reflector, server] = ['client', 'edge', 'firewall', 'reflector', 'server'].map(no);
-  const upstream = { name: 'Operadora', ip: 'upstream' };
-  // Variante de cada cenário, na ordem da página: [título, modo, multi].
-  const defs = [...html.matchAll(/title: '([^']+)'[^\n]*?mode: '(\w+)'(, multi: true)?/g)].map((m) => ({ titulo: m[1], mode: m[2], multi: !!m[3] }));
-  const faixa = (pred) => {
-    const nums = defs.filter(pred).map((df) => x.scenarios.findIndex((s) => (s.title ?? s.label) === df.titulo) + 1).filter((v) => v > 0);
-    return rangeText(`${S.cen}.`, nums);
-  };
-  const base = [
-    { key: 'client', label: client.name, sub: client.ip, kind: 'host' },
-    { key: 'fw', label: firewall.name, sub: firewall.ip, kind: 'router' },
-    { key: 'srv', label: server.name, sub: server.ip, kind: 'host' },
-    { key: 'up', label: upstream.name, sub: upstream.ip, kind: 'cloud' },
-  ];
-  const comum = [['client', 'fw', {}], ['fw', 'srv', {}]];
-  const direto = (multi) => ({
-    nodes: [{ key: 'atk', label: multi ? 'Botnet' : 'Atacante', sub: multi ? 'milhares de IPs' : '198.51.100.x', kind: 'attacker' }, ...base],
-    links: [['atk', 'up', {}], ['up', 'fw', {}], ...comum],
-  });
-  return {
-    figs: [
-      {
-        titulo: 'Ataque direto de uma origem',
-        curto: 'ataque direto de uma origem',
-        topo: direto(false),
-        texto: `O atacante envia o tráfego à vítima pela operadora e pelo firewall e IDS da borda; o cliente legítimo usa o mesmo firewall. Vale para os cenários ${faixa((d) => d.mode !== 'reflect' && !d.multi)}, inclusive as varreduras, que usam o mesmo desenho.`,
-      },
-      {
-        titulo: 'Ataque distribuído (botnet)',
-        curto: 'ataque distribuído por uma botnet',
-        topo: direto(true),
-        texto: `O mesmo caminho, mas a origem é uma botnet, com milhares de endereços, o que impede o bloqueio por origem. Vale para o cenário ${faixa((d) => d.multi)}.`,
-      },
-      {
-        titulo: 'Reflexão e amplificação',
-        curto: 'reflexão e amplificação',
-        topo: {
-          nodes: [{ key: 'atk', label: 'Atacante', sub: '198.51.100.x', kind: 'attacker' }, { key: 'edge', label: edge.name, sub: edge.ip, kind: 'router' }, { key: 'refl', label: reflector.name, sub: reflector.ip, kind: 'host' }, ...base],
-          links: [['atk', 'edge', {}], ['edge', 'refl', {}], ['refl', 'up', {}], ['up', 'fw', {}], ...comum],
-        },
-        texto: `O atacante envia requisições com a origem falsificada (o IP da vítima) ao serviço refletor, passando pela rede de origem (ISP). O refletor responde à vítima, por um caminho que passa pela operadora e pelo firewall, com tráfego maior que o das requisições. Vale para os cenários ${faixa((d) => d.mode === 'reflect')}.`,
-      },
-    ],
-    ids: {},
-  };
-}
+/** Particularidades das páginas legadas (nenhuma no momento: todos os simuladores são nativos). */
+const LEGACY = {};
 
 /** Diagrama de sequência a partir da tabela de captura: [nº, tempo, origem, destino, protocolo, tamanho, informação]. */
 function captureSequence(rows, hosts = {}, simId = '') {

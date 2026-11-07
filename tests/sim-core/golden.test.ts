@@ -21,6 +21,8 @@ import { stpProtocol } from '../../src/sims/stp/protocol';
 import { vlanProtocol } from '../../src/sims/vlan/protocol';
 import { mplsProtocol } from '../../src/sims/mpls/protocol';
 import { bgpProtocol } from '../../src/sims/bgp/protocol';
+import { tcpUdpProtocol } from '../../src/sims/tcp-udp/protocol';
+import { ataquesProtocol } from '../../src/sims/ataques-tcp-udp/protocol';
 import { ospfProtocol } from '../../src/sims/ospf/protocol';
 import { ripProtocol } from '../../src/sims/rip/protocol';
 import { x8021Protocol } from '../../src/sims/802-1x/protocol';
@@ -86,6 +88,8 @@ const SIMS: [string, ProtocolDef][] = [
   ['ospf', ospfProtocol],
   ['rip', ripProtocol],
   ['bgp', bgpProtocol],
+  ['tcp-udp', tcpUdpProtocol],
+  ['ataques-tcp-udp', ataquesProtocol],
 ];
 
 describe.each(SIMS)('impressões digitais: %s', (name, def) => {
