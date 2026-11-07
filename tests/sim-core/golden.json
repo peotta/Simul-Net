@@ -398,5 +398,23 @@
     "amostra:mov": "b9caa0441fdc1f3d",
     "amostra:canal": "ab0fde9682ccc7cd",
     "textos": "8f309dd3d33cf416"
+  },
+  "mpls": {
+    "ldp": "c536300d4604322c",
+    "ping": "c10fdfc5f2a2f45f",
+    "semldp": "7a8ef1ca1dc288e6",
+    "explicit": "fa393811da156e4e",
+    "nophp": "f890d146095e7b72",
+    "uniform": "4fe44f7cb9b17074",
+    "pipe": "87d30b64cd9897cc",
+    "vpn-ldp": "d91a72741d9093a1",
+    "vpn": "3b45e4d4ea432156",
+    "vpn-sem": "982f504e06bb552f",
+    "failover": "71ca2c7dcb0b71cb",
+    "amostra:ldp": "3421592d67423a44",
+    "amostra:dados": "1aed8071b4376f0e",
+    "amostra:ttl": "17d19b96021c0621",
+    "amostra:falha": "49c8241db0bfdfa7",
+    "textos": "5b35032707d52bbb"
   }
 }

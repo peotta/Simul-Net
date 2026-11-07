@@ -2,7 +2,6 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://peotta.github.io/Simul-Net/</loc></url>
   <url><loc>https://peotta.github.io/Simul-Net/sims/bgp-simulator.html</loc></url>
-  <url><loc>https://peotta.github.io/Simul-Net/sims/mpls-simulator.html</loc></url>
   <url><loc>https://peotta.github.io/Simul-Net/sims/router-simulator.html</loc></url>
   <url><loc>https://peotta.github.io/Simul-Net/sims/tcp-udp-security-simulator.html</loc></url>
   <url><loc>https://peotta.github.io/Simul-Net/sims/tcp-udp-simulator.html</loc></url>

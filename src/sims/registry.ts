@@ -105,8 +105,7 @@ export const SIMS: SimMeta[] = [
     topics: ['LDP, LIB e LFIB', 'Push, swap e pop', 'PHP e TTL', 'L3VPN com dois rótulos'],
     rfcs: ['RFC 3031', 'RFC 5036', 'RFC 4364', 'RFC 4381'],
     status: 'available',
-    engine: 'legado',
-    file: 'mpls-simulator.html',
+    engine: 'nativo',
   },
   {
     id: 'tcp-udp',

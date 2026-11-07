@@ -20,4 +20,5 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   'vlan': () => import('./vlan/protocol'),
   '802-1x': () => import('./802-1x/protocol'),
   'wifi': () => import('./wifi/protocol'),
+  'mpls': () => import('./mpls/protocol'),
 };

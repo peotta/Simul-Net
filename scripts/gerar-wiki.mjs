@@ -376,9 +376,9 @@ const LEGACY = {
       { label: 'Comparação TCP x UDP', proto: 'cmp', sub: 0 },
     ],
   },
-  // BGP e MPLS animam os pacotes com a Web Animations API e esperas por temporizador; no jsdom as duas são trocadas
-  // por versões imediatas (`fast`). A captura vem de avançar as fases (`advance`, e `then` para um clique extra, como
-  // o ping do MPLS); só entram na sequência os cenários de `seq`, e `row` converte cada linha da aba Captura em
+  // O BGP anima os pacotes com a Web Animations API e esperas por temporizador; no jsdom elas são trocadas
+  // por versões imediatas (`fast`). A captura vem de avançar as fases (`advance`, e `then` para um clique extra);
+  // só entram na sequência os cenários de `seq`, e `row` converte cada linha da aba Captura em
   // [nº, tempo, origem, destino, tipo, '', informação] ou a descarta (a captura inteira do BGP tem mais de 70 mensagens).
   // `topos` lê as constantes da própria página, para os diagramas de topologia não divergirem dela.
   'bgp-simulator.html': {
@@ -394,19 +394,6 @@ const LEGACY = {
     },
     row: (c, p) => ((!p.link || c[2] === p.link) && p.types.includes(c[5]) && (!p.prefix || c[6].startsWith(p.prefix + ' ')) ? [c[0], c[1], c[3], c[4], c[5], '', c[6]] : null),
     filtro: (p, ids) => `Só as mensagens ${p.link ? `do enlace ${p.link} (${ids[p.link].join(' e ')})` : `do prefixo ${p.prefix}`}, do tipo ${p.types.join(', ')}, depois de avançar as quatro fases. `,
-  },
-  'mpls-simulator.html': {
-    fast: true,
-    advance: { id: 'btnAdvance', n: 4, then: 'btnPing' },
-    hosts: { 'H-A': 'Host', 'H-B': 'Host', PE1: 'PE', PE2: 'PE', P1: 'P', P2: 'P', P3: 'P', P4: 'P' },
-    topos: mplsTopos,
-    seq: { 'Push, swap e pop': {}, 'explicit-null': {}, 'Sem PHP': {}, L3VPN: {} },
-    // O enlace vem como "L1 PE1 → P1" (entre LSR) ou "H-A / PE1" (entre host e PE); o rótulo é a operação no emissor.
-    row: (c) => {
-      const m = c[2].match(/([\w-]+)\s*(?:→|\/)\s*([\w-]+)\s*$/);
-      return m ? [c[0], c[1], m[1], m[2], '', '', `${/Echo (Request|Reply)/.exec(c[6])?.[0] ?? 'ICMP'}: ${c[5]}`] : null;
-    },
-    filtro: () => 'Mostra um ping do host H-A ao H-B (ida e volta), depois de avançar as quatro fases. ',
   },
   'router-simulator.html': {
     topos: routerTopos,
@@ -432,29 +419,6 @@ function bgpTopos(html) {
       texto: `${pl(nodes.length, 'sistema autônomo', 'sistemas autônomos')} e ${pl(links.length, 'enlace BGP', 'enlaces BGP')}: ${nodes.map((nd) => `${nd.label} (${nd.sub})`).join('; ')}. Linhas contínuas: relação de provedor e cliente, com o provedor indicado no rótulo. Linhas tracejadas: peering. Vale para todos os cenários; o Atacante só age nos cenários de segurança.`,
     }],
     ids: Object.fromEntries(links.map(([id, a, b]) => [id, [ases[a].name, ases[b].name]])),
-  };
-}
-
-/** MPLS: seis LSR (LSRS), dois hosts (HOSTS) e os enlaces com custo IGP e atraso (LINKS_INIT). */
-function mplsTopos(html) {
-  const lsrs = readConst(html, 'LSRS');
-  const hosts = readConst(html, 'HOSTS');
-  const links = readConst(html, 'LINKS_INIT');
-  const nodes = [
-    ...lsrs.map((l) => ({ key: l.id, label: l.id, sub: (l.role === 'PE' ? 'PE' : 'P') + ', ' + l.lo, kind: 'router' })),
-    ...hosts.map((h) => ({ key: h.id, label: h.id, sub: h.ip, kind: 'host' })),
-  ];
-  return {
-    figs: [{
-      titulo: `Topologia de ${lsrs.length} LSR e ${hosts.length} hosts`,
-      curto: 'topologia do núcleo MPLS e dos hosts',
-      topo: {
-        nodes,
-        links: [...links.map(([id, a, b, cost]) => [a, b, { label: `${id}, custo ${cost}` }]), ...hosts.map((h) => [h.id, h.pe, {}])],
-      },
-      texto: `${pl(lsrs.filter((l) => l.role === 'PE').length, 'roteador de borda (PE)', 'roteadores de borda (PE)')}, ${pl(lsrs.filter((l) => l.role !== 'PE').length, 'roteador de núcleo (P)', 'roteadores de núcleo (P)')} e ${pl(hosts.length, 'host', 'hosts')}. Cada enlace traz o identificador e o custo IGP; o endereço sob o nome é o de loopback do LSR (ou o IP do host). Os P encaminham por rótulos; o PE1 e o PE2 ligam as redes ${hosts.map((h) => h.net).join(' e ')}. Vale para todos os cenários.`,
-    }],
-    ids: {},
   };
 }
 
@@ -696,7 +660,7 @@ async function legacyPage(sim) {
   if (sim.topics?.length) L.push(`- **Tópicos:** ${sim.topics.join('; ')}`);
   L.push('');
 
-  // Sequência (a partir da captura) só no TCP e UDP, no BGP e no MPLS; topologia só no BGP, no MPLS e no roteamento. A seção de leitura dos diagramas existe apenas quando há figuras.
+  // Sequência (a partir da captura) só no TCP e UDP e no BGP; topologia só no BGP e no roteamento. A seção de leitura dos diagramas existe apenas quando há figuras.
   const cfgL = LEGACY[sim.file] ?? {};
   const hasB = x.scenarios.some((s) => s.capture?.length);
   const hasA = !!cfgL.topos;
