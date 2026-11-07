@@ -1,4 +1,4 @@
-export type CategoryId = 'camada-de-enlace' | 'camada-de-rede' | 'transporte' | 'protocolos-seguros';
+export type CategoryId = 'fundamentos' | 'camada-de-enlace' | 'camada-de-rede' | 'transporte' | 'protocolos-seguros';
 
 export interface Category {
   id: CategoryId;
@@ -31,6 +31,11 @@ export interface SimMeta {
 
 export const CATEGORIES: Category[] = [
   {
+    id: 'fundamentos',
+    title: 'Fundamentos e modelo de camadas',
+    description: 'O modelo OSI na prática: como um quadro é criado, encapsulado, enviado e recebido, camada por camada.',
+  },
+  {
     id: 'camada-de-enlace',
     title: 'Camada de enlace e redes locais',
     description: 'Switching, VLANs, spanning tree e Wi-Fi: como os frames são encaminhados, como a rede local evita laços e como as redes sem fio operam.',
@@ -55,6 +60,17 @@ export const CATEGORIES: Category[] = [
 // Para adicionar um simulador: coloque o arquivo em public/sims (ou crie um componente em src/sims/<nome>/)
 // e acrescente uma entrada aqui. A página inicial, as categorias e os testes usam este registro.
 export const SIMS: SimMeta[] = [
+  {
+    id: 'osi',
+    category: 'fundamentos',
+    title: 'Modelo OSI (jornada de um quadro)',
+    summary: 'Uma requisição HTTP descendo pelas sete camadas do cliente, atravessando switch e roteador e subindo no servidor, com a resposta de volta: pilhas de camadas animadas, encapsulamento aninhado, PDUs, bytes reais com checksum e FCS e etiqueta 802.1Q.',
+    topics: ['Pilhas de camadas animadas', 'Encapsulamento e desencapsulamento', 'Bytes reais do quadro', 'O que muda a cada salto'],
+    rfcs: ['RFC 791', 'RFC 9293', 'RFC 9112', 'RFC 1812'],
+    status: 'available',
+    engine: 'nativo',
+    novo: true,
+  },
   {
     id: 'ospf',
     category: 'camada-de-rede',
@@ -258,7 +274,6 @@ export const SIMS: SimMeta[] = [
     topics: ['Marcação 802.1Q: acesso e tronco', 'Isolamento e domínios de broadcast', 'Roteamento entre VLANs (router-on-a-stick)', 'VLAN nativa e divergência entre as pontas', 'VLAN hopping e defesas'],
     rfcs: ['IEEE 802.1Q-2022', 'RFC 9542'],
     status: 'available',
-    novo: true,
     engine: 'nativo',
   },
   {

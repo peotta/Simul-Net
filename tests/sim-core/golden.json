@@ -505,5 +505,11 @@
     "amostra:tcp": "4129e99e28d1af6c",
     "amostra:udp": "ddfdfc4a13edacbd",
     "textos": "6a481ff75f0aecf2"
+  },
+  "osi": {
+    "j-get": "e72274f6f54ac172",
+    "j-vlan": "5ed76d7cd22cc023",
+    "amostra:jor": "8c12dcfa125cb62e",
+    "textos": "e76a168463874156"
   }
 }

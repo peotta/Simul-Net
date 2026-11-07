@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Field, Message } from '../types';
 import { esc } from '../hash';
 import { prepare, timeAt } from '../trace';
@@ -97,7 +97,7 @@ function Bench({ def }: Props) {
   const [zi, setZi] = useState(ZOOM_FIT);
   const [view, setView] = useState<'seq' | 'topo'>('seq');
   // Prova de conceito: o painel de estados dentro do palco (acompanha a mensagem atual no diagrama de sequência)
-  const [statesInStage, setStatesInStage] = useState(true);
+  const [statesInStage, setStatesInStage] = useState(!def.stage);
   const [ovTop, setOvTop] = useState(8);
   const ovRef = useRef<HTMLElement>(null);
 
@@ -437,18 +437,22 @@ function Bench({ def }: Props) {
                   Zoom +
                 </button>
               </div>
-              <button type="button" className="fbtn" aria-pressed={statesInStage} title="Mostrar os estados do protocolo dentro do diagrama" onClick={() => setStatesInStage(!statesInStage)}>
-                Estados no diagrama
-              </button>
+              {!def.stage && (
+                <button type="button" className="fbtn" aria-pressed={statesInStage} title="Mostrar os estados do protocolo dentro do diagrama" onClick={() => setStatesInStage(!statesInStage)}>
+                  Estados no diagrama
+                </button>
+              )}
               {stageF.buttons}
             </div>
             <div className={'stage-body' + (statesInStage ? ' with-states' : '')}>
-              {showTopo ? (
+              {def.stage ? (
+                <div className="custom-stage" style={{ '--zoom': ZOOM_STEPS[zi] } as CSSProperties} dangerouslySetInnerHTML={{ __html: def.stage(tr, clock) }} />
+              ) : showTopo ? (
                 <Topology def={topoDef} tr={tr} zoom={ZOOM_STEPS[zi]} clock={clock} selectedId={selId} onSelect={selectMsg} />
               ) : (
                 <Ladder ref={ladderRef} layout={layout} zoom={ZOOM_STEPS[zi]} clock={clock} selectedId={selId} onSelect={selectMsg} />
               )}
-              {statesInStage && (
+              {statesInStage && !def.stage && (
                 <aside ref={ovRef} className="state-overlay panel" style={{ top: ovTop }} aria-label="Estados do protocolo">
                   <div className="state-overlay-title">Estados do protocolo</div>
                   <div className="state-panel" aria-live="off">

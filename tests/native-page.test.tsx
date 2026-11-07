@@ -80,6 +80,7 @@ describe('páginas dos simuladores nativos', () => {
   it('BGP: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('bgp', /^BGP \(sessões e seleção de caminho\)$/), 180000);
   it('TCP e UDP: carrega, percorre os seis modos e não tem violações de acessibilidade', () => checkSim('tcp-udp', /^TCP e UDP$/), 240000);
   it('Ataques TCP/UDP: carrega, percorre os dois modos e não tem violações de acessibilidade', () => checkSim('ataques-tcp-udp', /^Ataques e defesas TCP\/UDP$/), 240000);
+  it('Modelo OSI: carrega, percorre os cenários e não tem violações de acessibilidade', () => checkSim('osi', /^Modelo OSI \(jornada de um quadro\)$/), 180000);
   it('OSPF: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('ospf', /^OSPF \(estado de enlace\)$/), 180000);
   it('RIP: carrega, percorre os dois modos e não tem violações de acessibilidade', () => checkSim('rip', /^RIP \(vetor de distância\)$/), 180000);
 

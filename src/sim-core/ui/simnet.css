@@ -405,3 +405,46 @@
 .simnet .state-overlay .cfg-line{flex-direction:column;align-items:flex-start;gap:3px;}
 @media (prefers-reduced-motion:reduce){.simnet .state-overlay{transition:none;}}
 @media (max-width:960px){.simnet .stage-body{flex-direction:column;}.simnet .stage-body.with-states>.ladder-wrap,.simnet .stage-body.with-states>.topo-wrap{margin-right:0;}.simnet .state-overlay{position:static;width:auto;margin:8px;}}
+
+/* Simulador OSI: cor por camada (a mesma em todas as abas) */
+.simnet .osi-l1{--c:#8a94a6;}
+.simnet .osi-l2{--c:#b279e0;}
+.simnet .osi-l3{--c:#5b9be0;}
+.simnet .osi-l4{--c:#3fb5a0;}
+.simnet .osi-l7{--c:#e0a030;}
+.simnet .osi-b{background:color-mix(in srgb,var(--c) 30%,transparent);border-bottom:2px solid var(--c);padding:0 2px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
+.simnet .osi-legend{display:flex;flex-wrap:wrap;gap:6px;}
+.simnet .osi-box{border:2px solid var(--c);border-radius:8px;padding:6px 10px;margin:6px 0;background:color-mix(in srgb,var(--c) 14%,transparent);font-size:13px;}
+.simnet .osi-hex{line-height:1.9;}
+.simnet td.osi-off{color:var(--muted);text-align:center;}
+.simnet td.osi-on{color:var(--muted);}
+.simnet td.osi-act{background:var(--amber);color:#06231C;font-weight:700;}
+.simnet tr.osi-cur td{background:color-mix(in srgb,var(--amber) 22%,transparent);}
+.simnet td.chg{font-weight:700;text-decoration:underline dotted;}
+
+/* Palco do OSI: pilhas de camadas e encapsulamento */
+.simnet .stage-body>.custom-stage{flex:1 1 auto;min-width:0;min-height:0;overflow:auto;background-image:linear-gradient(var(--border-soft) 1px,transparent 1px),linear-gradient(90deg,var(--border-soft) 1px,transparent 1px);background-size:34px 34px;background-color:var(--bg);}
+.simnet .stage-body>.custom-stage{display:flex;}
+.simnet .osi-stage{flex:1 1 auto;min-width:0;min-height:100%;display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;padding:8px;align-items:stretch;box-sizing:border-box;}
+.simnet .osi-stack{min-width:0;min-height:0;overflow:auto;}
+.simnet .osi-onion{align-self:start;max-height:100%;overflow:auto;}
+@media (max-width:960px){.simnet .osi-stage{grid-template-columns:1fr;}}
+.simnet .osi-svg{display:block;margin:0 auto;width:calc(100% * var(--zoom,1));height:calc(100% * var(--zoom,1));min-height:calc(340px * var(--zoom,1));}
+.simnet .osi-svg text{font-family:'IBM Plex Mono',monospace;fill:var(--ink);}
+.simnet .osi-node{font-size:16px;font-weight:700;}
+.simnet .osi-lay{fill:color-mix(in srgb,var(--c) 14%,transparent);stroke:var(--c);stroke-width:1.5;}
+.simnet .osi-lay.osi-none{fill:none;stroke:var(--muted-line);stroke-dasharray:4 4;}
+.simnet .osi-lay.osi-hot{fill:color-mix(in srgb,var(--c) 45%,transparent);stroke:var(--amber);stroke-width:3;}
+.simnet .osi-lt{font-size:13px;}
+.simnet .osi-lt.osi-dim{fill:var(--muted);}
+.simnet .osi-wire{stroke:var(--muted-line);stroke-width:2;}
+.simnet .osi-cable{stroke:var(--muted);stroke-width:3;}
+.simnet .osi-cap{font-size:12px;fill:var(--muted);}
+.simnet .osi-seg{fill:var(--c);stroke:var(--bg);stroke-width:1;}
+.simnet .osi-svg .osi-st{font-size:10px;font-weight:700;fill:#06231C;}
+.simnet .osi-pdu{font-size:12px;font-weight:700;}
+.simnet .osi-bits{font-size:10px;fill:var(--muted);}
+.simnet .osi-onion{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+.simnet .osi-onion h3{margin:0 0 4px;font-size:14px;}
+.simnet .osi-onion .osi-box{border:2px solid color-mix(in srgb,var(--c) var(--a),transparent);background:color-mix(in srgb,var(--c) calc(var(--a) * .18),transparent);}
+.simnet .osi-now{font-size:13px;margin:8px 0 0;}

@@ -2,6 +2,14 @@
 
 Lista dos simuladores do Simul-Net por categoria. A fonte única é `src/sims/registry.ts`.
 
+## Fundamentos e modelo de camadas
+
+O modelo OSI na prática: como um quadro é criado, encapsulado, enviado e recebido, camada por camada.
+
+| Simulador | Motor | Situação | RFCs e padrões |
+| --- | --- | --- | --- |
+| [Modelo OSI (jornada de um quadro)](osi.md) | nativo | disponível | [RFC 791](https://www.rfc-editor.org/rfc/rfc791), [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112), [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812) |
+
 ## Camada de enlace e redes locais
 
 Switching, VLANs, spanning tree e Wi-Fi: como os frames são encaminhados, como a rede local evita laços e como as redes sem fio operam.

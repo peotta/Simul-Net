@@ -6,6 +6,7 @@ const link = ({ isActive }: { isActive: boolean }) =>
   `rounded-lg px-3 py-1 text-base font-semibold ${isActive ? 'bg-accent text-accent-ink' : 'hover:bg-surface2'}`;
 
 const SHORT: Record<string, string> = {
+  fundamentos: 'Fundamentos',
   'camada-de-enlace': 'Enlace',
   'camada-de-rede': 'Rede',
   transporte: 'Transporte',

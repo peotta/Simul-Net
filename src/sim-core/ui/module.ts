@@ -119,6 +119,11 @@ export interface ProtocolDef {
   scenDoc: Record<string, ScenarioDoc>;
   tabs?: TabDef[];
   stageTitle?: (sub: string) => string;
+  /**
+   * Palco próprio, no lugar do diagrama de sequência e da topologia: devolve o HTML (ou SVG) do instante dado,
+   * com o relógio em linhas do trace. Função pura do trace e do relógio; a bancada só a desenha.
+   */
+  stage?: (tr: Trace, clock: number) => string;
   /** Visão de topologia ao lado do diagrama de sequência (seletor no painel principal). */
   topology?: (sub: string, tr: Trace) => TopologyDef;
   topologyTitle?: string;

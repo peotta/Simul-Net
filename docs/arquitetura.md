@@ -2,7 +2,7 @@
 
 ## 1. Objetivo
 
-O Simul-Net reúne simuladores visuais de redes e protocolos seguros em um único projeto, com registro central, testes automatizados e publicação própria. Ele substitui a organização anterior, em que cada simulador era um arquivo HTML independente, com CSS e JavaScript duplicados.
+O Simul-Net reúne simuladores visuais de redes e protocolos seguros em um único projeto, com registro central, testes automatizados e publicação própria.
 
 ## 2. Estrutura de pastas
 
@@ -28,12 +28,11 @@ Simul-Net/
 
 ## 3. Registro de simuladores
 
-`src/sims/registry.ts` é a única fonte de verdade. A página inicial, as categorias, os links de navegação e os testes leem dele. Cada entrada tem identificador (kebab-case), categoria, título, resumo, tópicos, especificações (RFCs), situação (`available` ou `planned`) e, quando disponível, o motor, que hoje é sempre `nativo` (o tipo `legado`, com o arquivo em `public/sims/`, continua aceito, mas nenhum simulador o usa).
+`src/sims/registry.ts` é a única fonte de verdade. A página inicial, as categorias, os links de navegação e os testes leem dele. Cada entrada tem identificador (kebab-case), categoria, título, resumo, tópicos, especificações (RFCs), situação (`available` ou `planned`) e, quando disponível, o motor (`nativo`).
 
 ## 4. Simuladores nativos
 
-- **Nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP, o BGP, o TCP e UDP e os ataques e defesas TCP/UDP são nativos: **todos os simuladores do projeto são nativos**. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
-- **Histórico:** o projeto começou com páginas HTML autônomas em `public/sims/`, incorporadas por `iframe`. Todas foram migradas, uma a uma, para o motor nativo, com paridade verificada contra a página antiga antes de sua remoção, e as páginas foram apagadas. O suporte a uma página autônoma (`engine: 'legado'`) permanece no registro e no gerador da documentação apenas como porta aberta; não há uso atual.
+- **Simulador nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP, o BGP, o TCP e UDP e os ataques e defesas TCP/UDP e o modelo OSI (jornada de um quadro) estão disponíveis. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
 - **Por que o motor nativo:** o motor é uma função pura (os mesmos parâmetros produzem o mesmo `Trace`), separada da interface, o que permite testar cada regra, fixar o comportamento por impressões digitais e reutilizar a bancada de trabalho (diagrama, captura, mensagem, estados, abas, log).
 - **Execução por ciclos e interatividade:** simuladores que antes eram animações contínuas (o TCP e UDP e os ataques e defesas) rodam hoje a simulação inteira de uma vez e a reproduzem no diagrama. Parâmetros que o aluno antes mudava durante a animação viraram controles: por exemplo, a mitigação upstream é escolhida como "ativa desde o início" ou "acionada depois do ciclo N".
 
@@ -45,24 +44,22 @@ O núcleo está em `src/sim-core/` (`trace.ts`, `hash.ts`, `types.ts`) e a banca
 2. **Trace:** colunas (atores), mensagens (origem, destino, instantes de envio e chegada, rótulo, campos, se vai cifrada), eventos anotados por ator, estados por ator, fases, marcos e métricas. `prepare()` converte os tempos em linhas, de modo que o diagrama é compacto e a animação tem ritmo constante.
 3. **Módulo de simulador (`ProtocolDef`, em `src/sim-core/ui/module.ts`):** declara controles do painel, cenários, documentação de cada cenário, abas extras, texto do Experimento e Referência. A bancada (`Workbench`) cuida do diagrama, da captura, do detalhe da mensagem, do log, do estado e da reprodução (Simular, Passo, velocidade).
 3a. **Topologia (opcional):** o módulo pode declarar `topology` (nós, enlaces, caminho de cada mensagem e notas sob cada nó, como a tabela ARP). A bancada então mostra um seletor "Sequência / Topologia" no painel principal, e os pacotes percorrem os enlaces com o mesmo relógio, o mesmo Passo e o mesmo zoom. Usado pelo ARP, pelo ICMP, pelo DHCP, pelo HTTP, pelo NAT, pelo DNS e pelo Firewall. O módulo também pode configurar a legenda de cores (`legend`) e a formatação do tempo (`timeLabel`), por exemplo para mostrar horas num ciclo de lease.
+3b. **Palco próprio (opcional):** o módulo pode declarar `stage`, uma função pura `(trace, relógio) => HTML` que substitui o diagrama de sequência e a topologia. A bancada só desenha o resultado e mantém Simular, Passo, velocidade, zoom (Zoom -, Ajustada e Zoom +, pela variável CSS `--zoom`) e os painéis. Os demais simuladores não são afetados. Usado só pelo modelo OSI, que anima as pilhas de camadas e o encapsulamento da PDU em `src/sims/osi/stage.ts`, interpolando a posição entre quadros-chave derivados dos passos e das mensagens do trace.
 4. **Padrão visual e didático:** abas Cenário, Captura, Mensagem, abas próprias, Experimento, Referência e Log; ajuda em cada campo; uma informação em um único lugar.
 5. **Estilo:** `src/sim-core/ui/simnet.css`, com todos os seletores restritos a `.simnet`, para não interferir no hub (Tailwind).
 
-## 6. Plano de migração
+## 6. Plano de evolução
 
 | Fase | Entrega | Situação |
 | --- | --- | --- |
-| 1 | Hub com registro e simuladores em páginas autônomas incorporadas | concluída; as páginas foram substituídas pelas versões nativas |
-| 2 | Núcleo (`src/sim-core`), bancada React e migração do SSH, HTTPS e FTP para módulos TypeScript, com paridade verificada contra o legado antes de sua remoção | concluída |
-| 3 | Migração dos demais simuladores legados | **concluída**: DHCP, NAT, ICMP, DNS, Firewall, redes locais, roteamento (OSPF, RIP, BGP, MPLS), TCP e UDP e ataques e defesas TCP/UDP são nativos |
-| 4 | Novos simuladores já nativos (DNS e DNSSEC, VPN, SMTP, IS-IS, SNMP, ARP, HTTP, congestionamento, 802.1X; DNS e DNSSEC, ARP, HTTP e 802.1X já entregues) | prevista; usam o núcleo e a bancada desde o início |
-
-A verificação de paridade foi feita enquanto os dois lados coexistiam: cada cenário e milhares de combinações de parâmetros produziram o mesmo trace, o mesmo Experimento e as mesmas abas. Depois da remoção do legado, essa garantia passou para as impressões digitais (seção 7).
+| 1 | Hub com registro, categorias e cartões | concluída |
+| 2 | Núcleo (`src/sim-core`) e bancada React | concluída |
+| 3 | Simuladores de enlace, rede, transporte e protocolos seguros sobre o núcleo (DNS e DNSSEC, ARP, HTTP, 802.1X, Wi-Fi, MPLS, OSPF, RIP, BGP, TCP e UDP, ataques e defesas TCP/UDP e os demais já listados no registro) | concluída |
+| 4 | Novos simuladores (VPN, SMTP, IS-IS, SNMP, congestionamento) | prevista; usam o núcleo e a bancada desde o início |
 
 ## 7. Testes
 
-- **Registro:** identificadores únicos, categorias válidas, arquivos existentes, ausência de travessão longo e de meia-risca.
-- **Páginas autônomas (se houver):** título, descrição, canônica, crédito e link de volta ao Simul-Net; hoje o teste não tem páginas a verificar.
+- **Registro:** identificadores únicos, categorias válidas, documento de cada simulador existente, todos os simuladores disponíveis com motor nativo, ausência de travessão longo e de meia-risca.
 - **Interface:** páginas inicial, de categoria e de simulador, com verificação de acessibilidade (axe-core).
 - **Página de documentação (`doc-ui.test.tsx`):** leitura dos documentos, índice lateral, âncoras, links, diagramas (o Mermaid é simulado no jsdom), página 404 e axe-core.
 - **Núcleo e bancada (`tests/sim-core/`):** valores determinísticos e trace (`core.test.ts`); geometria do diagrama, reprodução e cenários (`ui-logic.test.ts`); e a bancada completa com um protocolo de exemplo, incluindo destacar, maximizar, recolher, Esc, zoom, a alça de altura e a alternância entre sequência e topologia, com axe-core em todas as abas (`workbench.test.tsx`).
@@ -83,8 +80,6 @@ O portal continua com suas páginas de simuladores até o Simul-Net estar public
 
 ## 10. Como adicionar um simulador
 
-**Nativo (recomendado para simuladores novos):**
-
 1. **Levante as fontes antes de escrever.** Liste as RFCs e os padrões vigentes do protocolo em https://www.rfc-editor.org e confira se algum foi substituído ou atualizado (por exemplo, a RFC 8446 foi substituída pela RFC 9846). Anote o que o simulador vai simplificar em relação a elas.
 2. Crie `src/sims/<nome>/` com o motor (`engine`, função pura que devolve um `Trace`), o conteúdo (`content`: controles, cenários, textos, abas, Experimento e Referência) e `protocol.ts`, que exporta um `ProtocolDef`. Cada cenário precisa de `scenDoc` completo (conceito, o que observar, mensagens, por que importa), cada campo precisa de ajuda e a aba Referência precisa citar a RFC e a seção nos pontos técnicos e registrar as limitações. Declare `topology` quando houver topologia.
 3. Registre o módulo em `src/sims/native.ts` e acrescente a entrada em `src/sims/registry.ts` com `engine: 'nativo'`, preenchendo `rfcs`. O mesmo vale para `rfcs` no `protocol.ts`.
@@ -92,8 +87,6 @@ O portal continua com suas páginas de simuladores até o Simul-Net estar public
 5. **Documentação.** Rode `npm run docs:simuladores`. Isso gera `docs/simuladores/<id>.md` e atualiza o índice. Confira o arquivo (travessões, diagramas, textos) e versione-o junto com o simulador. O gerador transforma toda citação de RFC (e de BCP) em link para o rfc-editor.org; IEEE e ISO ficam em texto. O texto dos cenários dentro do simulador pode citar a RFC sem link. O teste do registro falha se o documento não existir ou se houver uma RFC sem link.
 6. **Wiki.** Rode `npm run wiki -- <pasta>`, clone `Simul-Net.wiki.git`, copie os `.md` gerados, faça o commit e o push. Como a wiki é pública, a publicação só é feita com autorização expressa do autor.
 7. **Link no cartão.** Nada a fazer: o cartão do hub mostra o link "Documentação" a partir do `id` do registro (`docUrl`).
-
-**Página autônoma (não usada hoje):** coloque o arquivo em `public/sims/` e acrescente a entrada em `src/sims/registry.ts` com `engine: 'legado'`. Prefira sempre o motor nativo.
 
 ## 11. Limitações
 
