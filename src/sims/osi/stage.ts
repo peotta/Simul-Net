@@ -102,7 +102,9 @@ export function stage(tr: Trace, clock: number): string {
   const A = kfs[k];
   const B = kfs[k + 1] || A;
   const span = B.r - A.r;
-  const f = k + 1 < kfs.length && span > 0 && clock > A.r ? ease(Math.min(1, (clock - A.r) / span)) : 0;
+  // suave dentro de um nó (de um passo ao seguinte); linear nos trechos do cabo, para o quadro não parar a cada quadro-chave
+  const u = k + 1 < kfs.length && span > 0 && clock > A.r ? Math.min(1, (clock - A.r) / span) : 0;
+  const f = A.step >= 0 && B.step >= 0 ? ease(u) : u;
   const px = A.x + (B.x - A.x) * f;
   const py = A.y + (B.y - A.y) * f;
   const al: Record<number, number> = {};

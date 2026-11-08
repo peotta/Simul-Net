@@ -103,6 +103,31 @@ describe('palco (vistas 1 e 2)', () => {
   });
 });
 
+describe('passos por camada (sem saltar camadas)', () => {
+  const tr = run({}, 'jor');
+  const st = tr.raw.steps as { who: string; layers: number[]; dir: string }[];
+  it('o switch passa pela camada 1, pela 2 e de novo pela 1, um passo para cada', () => {
+    const i = st.findIndex((s) => s.who === 'sw');
+    expect(st.slice(i, i + 3).map((s) => s.who + s.layers.join(''))).toEqual(['sw1', 'sw2', 'sw1']);
+    expect(st.slice(i, i + 3).map((s) => s.dir)).toEqual(['up', 'fwd', 'down']);
+  });
+  it('o roteador passa por 1, 2, 3, 2 e 1, um passo para cada', () => {
+    const i = st.findIndex((s) => s.who === 'rt');
+    expect(st.slice(i, i + 5).map((s) => s.layers.join(''))).toEqual(['1', '2', '3', '2', '1']);
+    expect(st.slice(i, i + 5).map((s) => s.dir)).toEqual(['up', 'up', 'fwd', 'down', 'down']);
+  });
+  it('em nenhum nó um passo pula camadas em relação ao anterior (as camadas 5 e 6 formam um passo só)', () => {
+    let prev: { who: string; layers: number[] } | null = null;
+    st.forEach((s) => {
+      if (prev && prev.who === s.who) {
+        const gap = Math.min(...prev.layers.flatMap((a) => s.layers.map((b) => Math.abs(a - b))));
+        expect(gap, s.who + ' ' + s.layers.join(',')).toBeLessThanOrEqual(1);
+      }
+      prev = { who: s.who, layers: s.layers };
+    });
+  });
+});
+
 describe('determinismo e cenários', () => {
   it('o mesmo parâmetro produz o mesmo trace', () => {
     expect(JSON.stringify(run({ vlan: true }, 'jor'))).toBe(JSON.stringify(run({ vlan: true }, 'jor')));

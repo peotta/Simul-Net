@@ -162,7 +162,7 @@ function Bench({ def }: Props) {
   const topoDef = useMemo(() => (def.topology ? def.topology(sub, tr) : null), [def, sub, tr]);
   const showTopo = !!topoDef && view === 'topo';
   // na topologia o pacote percorre vários enlaces: a animação anda mais devagar para dar tempo de acompanhar
-  const player = usePlayer(endR, showTopo ? TOPO_SLOW : 1);
+  const player = usePlayer(endR, showTopo ? TOPO_SLOW : 1, !!def.stage);
   const { clock } = player;
 
   // Um trace novo recomeça a reprodução e limpa a mensagem selecionada.

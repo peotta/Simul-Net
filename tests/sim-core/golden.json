@@ -498,9 +498,9 @@
     "textos": "6a481ff75f0aecf2"
   },
   "osi": {
-    "j-get": "e72274f6f54ac172",
-    "j-vlan": "5ed76d7cd22cc023",
-    "amostra:jor": "8c12dcfa125cb62e",
+    "j-get": "5360106937cb65a3",
+    "j-vlan": "6c6e7cd4eef30efa",
+    "amostra:jor": "297ff8abc2644dda",
     "textos": "e76a168463874156"
   },
   "udp": {
@@ -517,5 +517,40 @@
     "amostra:vid": "a1e0b2f54d2e5a9b",
     "amostra:cmp": "73809bb93de10aee",
     "textos": "3e39686effb46594"
+  },
+  "ipv4": {
+    "f-lpm16": "1fddb5dadd86a401",
+    "f-lpm24": "14414dd7ad4e92e8",
+    "f-default": "d5cfe757e8f50b64",
+    "f-ad": "0f084bea0f546b9f",
+    "f-metric": "09f32fe8eb39bb04",
+    "f-noroute": "36fb9a37a41e14c5",
+    "f-nodef": "e630bcfa4222ed71",
+    "f-leak": "b45f47e8280a58e4",
+    "f-blackhole": "9ac5b3fea357db02",
+    "f-noback": "8469b5ff52252dbf",
+    "f-ttl": "5bb24cb3f8095023",
+    "f-loop": "0d5cbd5de02e4161",
+    "f-spoof": "58cea1e619a85054",
+    "f-strict": "78b30632ebfcd54e",
+    "f-loose": "6130f9877d86e201",
+    "f-legit": "d3682bcf4cd3f491",
+    "e-local": "cc575a9fe73895f9",
+    "e-gw": "e92d3de1b1f2c032",
+    "e-nogw": "bacefde03d282961",
+    "e-badgw": "af04ecdd8180d4c7",
+    "e-mask16": "7a3e8839576c443e",
+    "e-ovl": "7ae6b800b38c6e18",
+    "e-31": "fe49f9f27ceccf34",
+    "e-bcast": "236ff618ea53ce6f",
+    "e-lbcast": "b8b2e9646da1f646",
+    "e-dbcast": "a0b9c91192fd3e24",
+    "e-dbfw": "a918478c9f547373",
+    "e-ll": "966a9791a83ddf5c",
+    "e-cgnat": "741429dcec31291c",
+    "e-doc": "f52994be2bef9e3d",
+    "amostra:fwd": "5c5449be86bc960d",
+    "amostra:end": "14ff829914366cd4",
+    "textos": "a2c3c4fd31a09bbf"
   }
 }

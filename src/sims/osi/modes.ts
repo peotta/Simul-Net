@@ -128,15 +128,19 @@ export function buildOsi(P: OsiParams, _sub: string): Trace {
     const s = f.spec;
     const retag = (s.vid === null) !== (next.spec.vid === null) ? (next.spec.vid !== null ? 'add' : 'drop') : null;
     const sw = retag === 'add' ? 'L2: põe a etiqueta 802.1Q' : retag === 'drop' ? 'L2: tira a etiqueta 802.1Q' : 'L2: encaminha pelo MAC';
-    step('sw', [1, 2], 'fwd', sw, 'camadas 1 e 2 (o switch só lê a camada 2): recebe os bits, confere o FCS (' + hex(f.fcsCalc, 8) + ', confere), aprende o MAC de origem ' + s.smac + ' nesta porta e encaminha pela porta do MAC de destino ' + s.dmac + ' (' + toward + '). Não olha o IP, o TTL nem a porta.' + (retag === 'add' ? ' Ao sair pelo enlace tronco, acrescenta a etiqueta 802.1Q (VLAN ' + VLAN_ID + ') e recalcula o FCS.' : retag === 'drop' ? ' Ao sair pela porta de acesso, retira a etiqueta 802.1Q e recalcula o FCS.' : ''));
+    step('sw', [1], 'up', 'L1 recebe os bits', 'camada 1 (física): o switch recebe os bits na porta, sincroniza pelo preâmbulo, reconhece o SFD e entrega os ' + f.sizes.l2 + ' bytes do quadro à camada 2.');
+    step('sw', [2], 'fwd', sw, 'camada 2 (enlace; o switch só lê a camada 2): confere o FCS (' + hex(f.fcsCalc, 8) + ', confere), aprende o MAC de origem ' + s.smac + ' nesta porta e escolhe a porta do MAC de destino ' + s.dmac + ' (' + toward + '). Não olha o IP, o TTL nem a porta.' + (retag === 'add' ? ' Para sair pelo enlace tronco, acrescenta a etiqueta 802.1Q (VLAN ' + VLAN_ID + ') e recalcula o FCS.' : retag === 'drop' ? ' Para sair pela porta de acesso, retira a etiqueta 802.1Q e recalcula o FCS.' : ''));
+    step('sw', [1], 'down', 'L1 transmite', 'camada 1 (física): transmite o quadro pela porta de saída, bit a bit, ' + (retag === 'add' ? 'já com a etiqueta 802.1Q.' : retag === 'drop' ? 'já sem a etiqueta 802.1Q.' : 'sem alterá-lo.'));
   };
 
   /** Roteador: sobe a camada 2, decide na camada 3 e desce a camada 2 do próximo enlace. */
   const rtRelay = (fIn: Frame, fOut: Frame, toward: string, net: string): void => {
     const s = fIn.spec;
-    step('rt', [1, 2], 'up', 'L1 e L2: recebe', 'camadas 1 e 2: recebe os bits, confere o FCS (' + hex(fIn.fcsCalc, 8) + ', confere), reconhece o próprio MAC de destino (' + s.dmac + ')' + (s.vid !== null ? ', retira a etiqueta 802.1Q da subinterface' : '') + ' e retira o cabeçalho Ethernet. A PDU volta a ser o pacote.');
+    step('rt', [1], 'up', 'L1 recebe os bits', 'camada 1 (física): o roteador recebe os bits na interface, sincroniza pelo preâmbulo e entrega os ' + fIn.sizes.l2 + ' bytes do quadro à camada 2.');
+    step('rt', [2], 'up', 'L2 FCS confere', 'camada 2 (enlace): o FCS recalculado (' + hex(fIn.fcsCalc, 8) + ') confere, o MAC de destino (' + s.dmac + ') é o desta interface' + (s.vid !== null ? ', retira a etiqueta 802.1Q da subinterface' : '') + ' e o tipo 0x0800 manda o conteúdo ao IPv4. O cabeçalho Ethernet é retirado e a PDU volta a ser o pacote.');
     step('rt', [3], 'fwd', 'L3: TTL ' + s.ttl + ' para ' + fOut.spec.ttl, 'camada 3 (rede): confere o checksum do IP, decrementa o TTL de ' + s.ttl + ' para ' + fOut.spec.ttl + ' (RFC 1812, seção 5.3.1), recalcula o checksum do cabeçalho (' + hex(fIn.ipSum, 4) + ' para ' + hex(fOut.ipSum, 4) + ') e consulta a tabela de rotas: ' + net + ' sai pela interface ' + toward + '. O IP de origem e o de destino não mudam.');
-    step('rt', [2, 1], 'down', 'L2 e L1: novo quadro', 'camadas 2 e 1: monta um quadro novo para o próximo enlace: MAC de origem ' + fOut.spec.smac + ', MAC de destino ' + fOut.spec.dmac + ' (da tabela ARP), novo FCS (' + hex(fOut.fcs, 8) + ') e transmite. Por isso o MAC muda em cada salto, e o IP não.');
+    step('rt', [2], 'down', 'L2: novo quadro', 'camada 2 (enlace): monta um quadro novo para o próximo enlace: MAC de origem ' + fOut.spec.smac + ', MAC de destino ' + fOut.spec.dmac + ' (da tabela ARP) e novo FCS (' + hex(fOut.fcs, 8) + '). Por isso o MAC muda em cada salto, e o IP não.');
+    step('rt', [1], 'down', 'L1 transmite', 'camada 1 (física): antepõe o preâmbulo e o SFD e transmite os ' + fOut.sizes.l2 + ' bytes do novo quadro pela interface de saída, bit a bit.');
   };
 
   const hopOf = (dir: Dirn, i: number): Hop => {
