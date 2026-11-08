@@ -412,7 +412,7 @@
 .simnet .osi-l3{--c:#5b9be0;}
 .simnet .osi-l4{--c:#3fb5a0;}
 .simnet .osi-l7{--c:#e0a030;}
-.simnet .osi-b{background:color-mix(in srgb,var(--c) 30%,transparent);border-bottom:2px solid var(--c);padding:0 2px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
+.simnet .osi-b{color:var(--ink);background:color-mix(in srgb,var(--c) 30%,transparent);border-bottom:2px solid var(--c);padding:0 2px;border-radius:2px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;}
 .simnet .osi-legend{display:flex;flex-wrap:wrap;gap:6px;}
 .simnet .osi-box{border:2px solid var(--c);border-radius:8px;padding:6px 10px;margin:6px 0;background:color-mix(in srgb,var(--c) 14%,transparent);font-size:13px;}
 .simnet .osi-hex{line-height:1.9;}
