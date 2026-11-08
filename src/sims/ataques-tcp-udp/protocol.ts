@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -36,6 +37,7 @@ export const ataquesProtocol: ProtocolDef = {
   build: (P, sub) => buildAtaques(P as unknown as AtkParams, sub),
   explain: (tr) => explain(tr),
   reference,
+  fundamentacao,
   setup,
 };
 

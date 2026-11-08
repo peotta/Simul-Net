@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios } from './content/scenarios';
@@ -25,6 +26,7 @@ export const sshProtocol: ProtocolDef = {
   build: (P, sub) => buildSsh(P as unknown as SshParams, sub),
   explain: (tr, P) => explain(tr, P as unknown as SshParams),
   reference,
+  fundamentacao,
   setup,
 };
 

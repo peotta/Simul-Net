@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -27,6 +28,7 @@ export const ftpProtocol: ProtocolDef = {
   build: (P, sub) => buildFtp(P as unknown as FtpParams, sub),
   explain: (tr, P) => explain(tr, P as unknown as FtpParams),
   reference,
+  fundamentacao,
   setup,
 };
 

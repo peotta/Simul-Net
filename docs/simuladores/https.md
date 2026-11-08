@@ -12,12 +12,101 @@ Handshake TLS 1.3 e 1.2, validação de certificados X.509, retomada e 0-RTT, HS
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Handshake TLS | TLS 1.3 completo (1 RTT) | 5.1.1 a 5.1.9 |
-| Certificados | Certificado válido | 5.2.1 a 5.2.8 |
-| HTTP, HTTPS e HSTS | Primeiro acesso: HTTP e 301 | 5.3.1 a 5.3.5 |
-| Comparação HTTP x HTTPS | Login: senha em claro x cifrada | 5.4.1 a 5.4.6 |
+| Handshake TLS | TLS 1.3 completo (1 RTT) | 6.1.1 a 6.1.9 |
+| Certificados | Certificado válido | 6.2.1 a 6.2.8 |
+| HTTP, HTTPS e HSTS | Primeiro acesso: HTTP e 301 | 6.3.1 a 6.3.5 |
+| Comparação HTTP x HTTPS | Login: senha em claro x cifrada | 6.4.1 a 6.4.6 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o HTTPS resolve
+
+O HTTP puro trafega **em claro**: quem estiver no caminho (rede Wi-Fi aberta, provedor, roteador comprometido) pode **ler** e **alterar** o que passa, inclusive logins e senhas. O **HTTPS** é o HTTP dentro de uma conexão **TLS** (*Transport Layer Security*), normalmente na porta 443. O TLS oferece três garantias:
+
+- **Confidencialidade:** os dados são cifrados, e o observador não os lê.
+- **Integridade:** qualquer alteração no caminho é detectada.
+- **Autenticação do servidor:** o certificado X.509 ([RFC 5280](https://www.rfc-editor.org/rfc/rfc5280)) prova que o servidor é mesmo o do nome acessado. Opcionalmente, o cliente também se autentica (mTLS).
+
+O TLS roda sobre o TCP. O HTTP/3 usa o QUIC, que integra o TLS 1.3 sobre UDP (veja o simulador de versões do HTTP).
+
+### 2.2 O diagrama do handshake do TLS 1.3
+
+```mermaid
+sequenceDiagram
+  participant C as Cliente
+  participant S as Servidor
+  C->>S: ClientHello: versões, cifras, key_share, SNI, ALPN
+  S->>C: ServerHello: versão, cifra, key_share
+  Note over C,S: a partir daqui, tudo é cifrado com as chaves do handshake
+  S->>C: EncryptedExtensions, Certificate, CertificateVerify, Finished
+  C->>S: Finished
+  Note over C,S: dados da aplicação cifrados: o handshake levou 1 RTT
+```
+
+*Esquema 1 (handshake do TLS 1.3).* O cliente envia a sua metade do **ECDHE** (*key_share*) já no primeiro passo, então as duas pontas calculam o **mesmo segredo** sem que ele trafegue. O servidor prova a identidade com o **certificado** e com uma **assinatura** (CertificateVerify) sobre o hash da conversa, e os dois confirmam com o **Finished**. O cliente já pode enviar dados depois de **1 RTT**.
+
+O **SNI** (*Server Name Indication*) é o nome do site, enviado em claro no ClientHello, para o servidor escolher o certificado certo. O **ALPN** negocia o protocolo de aplicação (por exemplo, HTTP/2).
+
+### 2.3 TLS 1.3 e TLS 1.2
+
+| Aspecto | TLS 1.3 ([RFC 9846](https://www.rfc-editor.org/rfc/rfc9846)) | TLS 1.2 ([RFC 5246](https://www.rfc-editor.org/rfc/rfc5246)) |
+| --- | --- | --- |
+| Handshake | 1 RTT (0-RTT na retomada) | 2 RTT (1 RTT na retomada) |
+| Certificado | cifrado | em claro |
+| Sigilo futuro | sempre (só ECDHE e DHE) | só nas suítes ECDHE e DHE, não na troca RSA |
+| Cifras | só AEAD (AES-GCM, ChaCha20-Poly1305) | AEAD e também CBC, 3DES e RC4 (legado) |
+| Derivação de chaves | HKDF | PRF |
+| Proteção contra downgrade | sentinela no campo random | sem proteção própria |
+
+O sigilo futuro (*forward secrecy*) significa que o vazamento da chave do servidor no futuro **não** decifra as conversas antigas, porque a chave de cada sessão é efêmera. As versões TLS 1.0 e 1.1 estão obsoletas ([RFC 8996](https://www.rfc-editor.org/rfc/rfc8996)).
+
+### 2.4 O certificado e a cadeia de confiança
+
+```mermaid
+flowchart TD
+  R["Autoridade certificadora raiz<br/>já confiada pelo navegador"] -- "assina" --> I["Certificado intermediário"]
+  I -- "assina" --> F["Certificado do servidor:<br/>nome, chave pública, validade"]
+  F --> V{"O navegador verifica"}
+  V --> V1["Assinatura da cadeia até uma raiz confiada"]
+  V --> V2["Nome do site confere com o certificado (RFC 9525)"]
+  V --> V3["Dentro do prazo de validade"]
+```
+
+*Esquema 2 (como o navegador valida o certificado).* O navegador confia em um conjunto de **autoridades certificadoras (CA)** raiz. O servidor envia o seu certificado e os intermediários, e o navegador confere três coisas: a cadeia de assinaturas até uma raiz confiada, o **nome** (a regra de verificação está na [RFC 9525](https://www.rfc-editor.org/rfc/rfc9525)) e a **validade**. Se **qualquer** uma falha, o navegador avisa o usuário: certificado expirado, nome diferente, ou autoridade desconhecida.
+
+### 2.5 Do HTTP ao HTTPS: o HSTS
+
+```mermaid
+flowchart LR
+  U["Usuário digita o endereço sem https"] --> H1["Primeiro acesso por HTTP"]
+  H1 --> RD["Redirecionamento para HTTPS"]
+  RD --> HS["Resposta com Strict-Transport-Security"]
+  HS --> N["Próximos acessos: o navegador<br/>só usa HTTPS, sem passar pelo HTTP"]
+```
+
+*Esquema 3 (redirecionamento e HSTS).* O redirecionamento de HTTP para HTTPS tem uma janela de risco: o **primeiro** pedido ainda vai em claro e pode ser interceptado. O **HSTS** ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)) manda o navegador usar **só HTTPS** daquele site por um prazo, fechando a janela nos acessos seguintes.
+
+### 2.6 O que o observador ainda vê
+
+O TLS esconde o **conteúdo**, mas não esconde tudo. Quem observa a rede ainda vê os **endereços IP**, o **momento e o volume** do tráfego e, em geral, o **nome do site** (pelo SNI). O que fica protegido são o caminho da página, os cabeçalhos, os cookies, o corpo e as senhas.
+
+### 2.7 Como ler o diagrama do simulador
+
+- **Diagrama de sequência:** as mensagens do handshake e, depois, os pedidos e as respostas já cifrados.
+- **Aba O que o observador vê:** o que um intermediário consegue ler em cada momento, em HTTP e em HTTPS.
+- **Aba Comparação:** HTTP e HTTPS lado a lado para o mesmo acesso.
+- **Aba Chaves e sessão:** os segredos e as chaves derivados em cada fase do handshake.
+- **Aba Certificado:** os campos do certificado e o resultado da validação.
+- **Aba Configuração:** um exemplo ilustrativo de configuração do servidor.
+- **Modos:** *Handshake TLS* (1.3 e 1.2), *Certificados* (válido e com erro), *HTTP, HTTPS e HSTS* e *Comparação HTTP x HTTPS*.
+
+### 2.8 Limites do modelo e do diagrama
+
+- **Nenhuma criptografia real** é feita: chaves, hashes e identificadores são ilustrativos, e os tempos são didáticos.
+- O handshake aparece **simplificado**: não há negociação completa de extensões, retomada de sessão com tíquetes, 0-RTT detalhado, autenticação do cliente nem *certificate transparency*.
+- Os trechos de configuração são exemplos: confira a sintaxe na documentação do servidor e da versão em uso antes de aplicá-los.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -25,7 +114,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | --- | --- | --- | --- |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo B (sequência)**
 
@@ -35,46 +124,46 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo B (sequência)**
 
-- [Figura 5.1.1](#511-tls-13-completo-1-rtt): sequência de "TLS 1.3 completo (1 RTT)"
-- [Figura 5.1.2](#512-tls-12-completo-2-rtt): sequência de "TLS 1.2 completo (2 RTT)"
-- [Figura 5.1.3](#513-retomada-de-sessão-ticket): sequência de "Retomada de sessão (ticket)"
-- [Figura 5.1.4](#514-0-rtt-e-risco-de-replay): sequência de "0-RTT e risco de replay"
-- [Figura 5.1.5](#515-mtls-certificado-de-cliente): sequência de "mTLS (certificado de cliente)"
-- [Figura 5.1.6](#516-sem-versão-em-comum): sequência de "Sem versão em comum"
-- [Figura 5.1.7](#517-sem-cifra-em-comum): sequência de "Sem cifra em comum"
-- [Figura 5.1.8](#518-tls-legado-sem-sigilo-futuro): sequência de "TLS legado sem sigilo futuro"
-- [Figura 5.1.9](#519-downgrade-detectado): sequência de "Downgrade detectado"
-- [Figura 5.2.1](#521-certificado-válido): sequência de "Certificado válido"
-- [Figura 5.2.2](#522-certificado-expirado): sequência de "Certificado expirado"
-- [Figura 5.2.3](#523-nome-não-confere): sequência de "Nome não confere"
-- [Figura 5.2.4](#524-autoassinado-ca-desconhecida): sequência de "Autoassinado (CA desconhecida)"
-- [Figura 5.2.5](#525-cadeia-incompleta): sequência de "Cadeia incompleta"
-- [Figura 5.2.6](#526-revogado-com-stapling): sequência de "Revogado (com stapling)"
-- [Figura 5.2.7](#527-sem-stapling-consulta-ocsp): sequência de "Sem stapling: consulta OCSP"
-- [Figura 5.2.8](#528-revogado-sem-stapling): sequência de "Revogado, sem stapling"
-- [Figura 5.3.1](#531-primeiro-acesso-http-e-301): sequência de "Primeiro acesso: HTTP e 301"
-- [Figura 5.3.2](#532-com-hsts-em-cache): sequência de "Com HSTS em cache"
-- [Figura 5.3.3](#533-hsts-preload): sequência de "HSTS preload"
-- [Figura 5.3.4](#534-sem-redirecionamento): sequência de "Sem redirecionamento"
-- [Figura 5.3.5](#535-sem-https): sequência de "Sem HTTPS"
-- [Figura 5.4.1](#541-login-senha-em-claro-x-cifrada): sequência de "Login: senha em claro x cifrada"
-- [Figura 5.4.2](#542-busca-o-termo-vai-na-url): sequência de "Busca: o termo vai na URL"
-- [Figura 5.4.3](#543-página-com-cookie-de-sessão): sequência de "Página com cookie de sessão"
-- [Figura 5.4.4](#544-conteúdo-alterado-no-caminho): sequência de "Conteúdo alterado no caminho"
-- [Figura 5.4.5](#545-custo-do-https-com-tls-12): sequência de "Custo do HTTPS com TLS 1.2"
-- [Figura 5.4.6](#546-custo-em-rtt-alto-tls-13): sequência de "Custo em RTT alto (TLS 1.3)"
+- [Figura 6.1.1](#611-tls-13-completo-1-rtt): sequência de "TLS 1.3 completo (1 RTT)"
+- [Figura 6.1.2](#612-tls-12-completo-2-rtt): sequência de "TLS 1.2 completo (2 RTT)"
+- [Figura 6.1.3](#613-retomada-de-sessão-ticket): sequência de "Retomada de sessão (ticket)"
+- [Figura 6.1.4](#614-0-rtt-e-risco-de-replay): sequência de "0-RTT e risco de replay"
+- [Figura 6.1.5](#615-mtls-certificado-de-cliente): sequência de "mTLS (certificado de cliente)"
+- [Figura 6.1.6](#616-sem-versão-em-comum): sequência de "Sem versão em comum"
+- [Figura 6.1.7](#617-sem-cifra-em-comum): sequência de "Sem cifra em comum"
+- [Figura 6.1.8](#618-tls-legado-sem-sigilo-futuro): sequência de "TLS legado sem sigilo futuro"
+- [Figura 6.1.9](#619-downgrade-detectado): sequência de "Downgrade detectado"
+- [Figura 6.2.1](#621-certificado-válido): sequência de "Certificado válido"
+- [Figura 6.2.2](#622-certificado-expirado): sequência de "Certificado expirado"
+- [Figura 6.2.3](#623-nome-não-confere): sequência de "Nome não confere"
+- [Figura 6.2.4](#624-autoassinado-ca-desconhecida): sequência de "Autoassinado (CA desconhecida)"
+- [Figura 6.2.5](#625-cadeia-incompleta): sequência de "Cadeia incompleta"
+- [Figura 6.2.6](#626-revogado-com-stapling): sequência de "Revogado (com stapling)"
+- [Figura 6.2.7](#627-sem-stapling-consulta-ocsp): sequência de "Sem stapling: consulta OCSP"
+- [Figura 6.2.8](#628-revogado-sem-stapling): sequência de "Revogado, sem stapling"
+- [Figura 6.3.1](#631-primeiro-acesso-http-e-301): sequência de "Primeiro acesso: HTTP e 301"
+- [Figura 6.3.2](#632-com-hsts-em-cache): sequência de "Com HSTS em cache"
+- [Figura 6.3.3](#633-hsts-preload): sequência de "HSTS preload"
+- [Figura 6.3.4](#634-sem-redirecionamento): sequência de "Sem redirecionamento"
+- [Figura 6.3.5](#635-sem-https): sequência de "Sem HTTPS"
+- [Figura 6.4.1](#641-login-senha-em-claro-x-cifrada): sequência de "Login: senha em claro x cifrada"
+- [Figura 6.4.2](#642-busca-o-termo-vai-na-url): sequência de "Busca: o termo vai na URL"
+- [Figura 6.4.3](#643-página-com-cookie-de-sessão): sequência de "Página com cookie de sessão"
+- [Figura 6.4.4](#644-conteúdo-alterado-no-caminho): sequência de "Conteúdo alterado no caminho"
+- [Figura 6.4.5](#645-custo-do-https-com-tls-12): sequência de "Custo do HTTPS com TLS 1.2"
+- [Figura 6.4.6](#646-custo-em-rtt-alto-tls-13): sequência de "Custo em RTT alto (TLS 1.3)"
 
-## 3. Abas da bancada
+## 4. Abas da bancada
 
 Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x HTTPS), Comparação (modos: Comparação HTTP x HTTPS), Chaves e sessão, Certificado, Configuração, Experimento, Referência e Log.
 
-## 4. Configurações (campos do painel)
+## 5. Configurações (campos do painel)
 
-### 4.1 Rede
+### 5.1 Rede
 
 - **RTT (ms)**. Valores: 5; 20; 50; 100; 200. Padrão: 50. Modos: todos.
   - Tempo de ida e volta entre navegador e servidor.
@@ -83,7 +172,7 @@ Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x 
   - Um equipamento remove o TLS 1.3 do ClientHello.
   - O servidor vê só TLS 1.2 e responde com a versão menor. Mas, se ele suporta TLS 1.3, coloca um valor sentinela no final do campo random do ServerHello, e o cliente que suporta 1.3 percebe e aborta.
 
-### 4.2 Navegador
+### 5.2 Navegador
 
 - **Perfil do navegador**. Valores: Moderno (TLS 1.3 e 1.2); Intermediário (só TLS 1.2); Legado (TLS 1.0 e 1.1). Padrão: Moderno (TLS 1.3 e 1.2). Modos: todos.
   - Versões e cifras que o cliente oferece.
@@ -96,7 +185,7 @@ Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x 
   - **Em cache:** o navegador lembra do cabeçalho Strict-Transport-Security de uma visita anterior e troca http por https internamente.
   - **Preload:** o domínio já vem na lista embutida do navegador, protegendo até a primeira visita.
 
-### 4.3 Handshake
+### 5.3 Handshake
 
 - **Tipo de conexão**. Valores: Completa (primeira visita); Retomada de sessão (ticket); Retomada com 0-RTT (dados antecipados). Padrão: Completa (primeira visita). Modos: Handshake TLS.
   - Handshake completo ou retomado.
@@ -107,7 +196,7 @@ Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x 
   - O servidor também autentica o cliente.
   - Com mTLS, o servidor envia CertificateRequest e o cliente apresenta o próprio certificado. É comum em APIs internas e redes de confiança zero.
 
-### 4.4 Certificado
+### 5.4 Certificado
 
 - **Situação do certificado**. Valores: Válido; Expirado; Nome não confere (SAN); Autoassinado (CA desconhecida); Cadeia incompleta (sem intermediário); Revogado. Padrão: Válido. Modos: Certificados.
   - O que o navegador encontra ao validar.
@@ -118,7 +207,7 @@ Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x 
   - Com stapling, o servidor entrega a resposta OCSP da CA junto ao certificado. O navegador não consulta a CA, o que é mais rápido e preserva a privacidade.
   - Sem stapling, o navegador pergunta à CA, gastando 1 RTT e revelando a ela qual site você visita.
 
-### 4.5 Servidor
+### 5.5 Servidor
 
 - **Perfil do servidor**. Valores: Moderno (TLS 1.3 e 1.2); Intermediário (só TLS 1.2); Legado (TLS 1.0 a 1.2, RSA); Endurecido (só TLS 1.3). Padrão: Moderno (TLS 1.3 e 1.2). Modos: todos.
   - Versões e cifras que o servidor aceita.
@@ -138,7 +227,7 @@ Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x 
   - Tipo de chave do servidor.
   - ECDSA gera assinaturas e certificados menores e mais rápidos. As cifras RSA do TLS 1.2 exigem chave RSA.
 
-### 4.6 Comparação
+### 5.6 Comparação
 
 - **O que o usuário faz**. Valores: Login com usuário e senha; Busca (GET com termo); Página com sessão (cookie). Padrão: Login com usuário e senha. Modos: Comparação HTTP x HTTPS.
   - A mesma ação é feita em HTTP e em HTTPS.
@@ -152,15 +241,15 @@ Cenário, Captura, Mensagem, O que o observador vê (modos: Comparação HTTP x 
   - Em HTTPS, o registro alterado falha na verificação de autenticidade (AEAD) e a conexão é encerrada.
   - É a diferença entre confidencialidade e integridade: o HTTPS protege as duas.
 
-## 5. Cenários
+## 6. Cenários
 
-### 5.1 Modo: Handshake TLS
+### 6.1 Modo: Handshake TLS
 
 > **Grupo:** Handshake
 
 Como o TLS abre a conexão: versões, retomada e 0-RTT.
 
-#### 5.1.1 TLS 1.3 completo (1 RTT)
+#### 6.1.1 TLS 1.3 completo (1 RTT)
 
 *O handshake mais curto: 1 RTT e certificado cifrado.*
 
@@ -200,7 +289,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.1 (Tipo B, sequência).* Mensagens do cenário "TLS 1.3 completo (1 RTT)", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração padrão.
+*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "TLS 1.3 completo (1 RTT)", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração padrão.
 
 **Mensagens**
 
@@ -214,7 +303,7 @@ sequenceDiagram
 
 **Por que importa.** Menos latência e menos exposição: o certificado deixa de ser visível a quem observa a rede, e só suítes com sigilo futuro existem no TLS 1.3.
 
-#### 5.1.2 TLS 1.2 completo (2 RTT)
+#### 6.1.2 TLS 1.2 completo (2 RTT)
 
 *Dois RTTs e o certificado trafegando em claro.*
 
@@ -259,7 +348,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.2 (Tipo B, sequência).* Mensagens do cenário "TLS 1.2 completo (2 RTT)", na ordem do tempo, entre Navegador, Servidor HTTPS: 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 5 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "TLS 1.2 completo (2 RTT)", na ordem do tempo, entre Navegador, Servidor HTTPS: 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 5 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -273,7 +362,7 @@ sequenceDiagram
 
 **Por que importa.** O TLS 1.2 ainda é muito usado. Os servidores que só o oferecem pagam mais latência e expõem o certificado e metadados.
 
-#### 5.1.3 Retomada de sessão (ticket)
+#### 6.1.3 Retomada de sessão (ticket)
 
 *Ticket de sessão: sem certificado, mantendo o sigilo futuro.*
 
@@ -315,7 +404,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.3 (Tipo B, sequência).* Mensagens do cenário "Retomada de sessão (ticket)", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Retomada de sessão (ticket)", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -326,7 +415,7 @@ sequenceDiagram
 
 **Por que importa.** Reduz CPU e tamanho do handshake. A chave de tickets do servidor precisa ser rotacionada, senão compromete o sigilo futuro.
 
-#### 5.1.4 0-RTT e risco de replay
+#### 6.1.4 0-RTT e risco de replay
 
 *Dados antecipados: mais rápido, com risco de replay.*
 
@@ -368,7 +457,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.4 (Tipo B, sequência).* Mensagens do cenário "0-RTT e risco de replay", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "0-RTT e risco de replay", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -380,7 +469,7 @@ sequenceDiagram
 
 **Por que importa.** Aceite 0-RTT apenas em requisições idempotentes (GET sem efeito colateral) e use proteção contra replay no servidor ou no CDN.
 
-#### 5.1.5 mTLS (certificado de cliente)
+#### 6.1.5 mTLS (certificado de cliente)
 
 *Cliente e servidor se autenticam com certificados.*
 
@@ -422,7 +511,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.5 (Tipo B, sequência).* Mensagens do cenário "mTLS (certificado de cliente)", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "mTLS (certificado de cliente)", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -437,7 +526,7 @@ sequenceDiagram
 
 Versão e cifra em comum, TLS legado e a proteção contra downgrade.
 
-#### 5.1.6 Sem versão em comum
+#### 6.1.6 Sem versão em comum
 
 *Sem versão em comum: alerta protocol_version.*
 
@@ -469,7 +558,7 @@ sequenceDiagram
   n_s ->> n_c: ACK
 ```
 
-*Figura 5.1.6 (Tipo B, sequência).* Mensagens do cenário "Sem versão em comum", na ordem do tempo, entre Navegador, Servidor HTTPS: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.6 (Tipo B, sequência).* Mensagens do cenário "Sem versão em comum", na ordem do tempo, entre Navegador, Servidor HTTPS: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -480,7 +569,7 @@ sequenceDiagram
 
 **Por que importa.** Desativar protocolos antigos reduz a superfície de ataque (POODLE, BEAST) ao custo de perder clientes muito velhos.
 
-#### 5.1.7 Sem cifra em comum
+#### 6.1.7 Sem cifra em comum
 
 *Versão em comum, mas nenhuma cifra utilizável.*
 
@@ -512,7 +601,7 @@ sequenceDiagram
   n_s ->> n_c: ACK
 ```
 
-*Figura 5.1.7 (Tipo B, sequência).* Mensagens do cenário "Sem cifra em comum", na ordem do tempo, entre Navegador, Servidor HTTPS: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.7 (Tipo B, sequência).* Mensagens do cenário "Sem cifra em comum", na ordem do tempo, entre Navegador, Servidor HTTPS: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -523,7 +612,7 @@ sequenceDiagram
 
 **Por que importa.** A escolha do tipo de chave do certificado também limita as cifras que o servidor consegue oferecer.
 
-#### 5.1.8 TLS legado sem sigilo futuro
+#### 6.1.8 TLS legado sem sigilo futuro
 
 *TLS 1.1 com RSA e CBC: funciona, sem sigilo futuro.*
 
@@ -568,7 +657,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.8 (Tipo B, sequência).* Mensagens do cenário "TLS legado sem sigilo futuro", na ordem do tempo, entre Navegador, Servidor HTTPS: 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 5 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.8 (Tipo B, sequência).* Mensagens do cenário "TLS legado sem sigilo futuro", na ordem do tempo, entre Navegador, Servidor HTTPS: 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 5 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -578,7 +667,7 @@ sequenceDiagram
 
 **Por que importa.** O sigilo futuro (ECDHE) é o que impede que um vazamento futuro da chave do servidor exponha o tráfego passado.
 
-#### 5.1.9 Downgrade detectado
+#### 6.1.9 Downgrade detectado
 
 *A proteção do TLS 1.3 contra downgrade.*
 
@@ -612,7 +701,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.9 (Tipo B, sequência).* Mensagens do cenário "Downgrade detectado", na ordem do tempo, entre Navegador, Servidor HTTPS: 9 mensagens, numeradas de 1 a 9 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
+*Figura 6.1.9 (Tipo B, sequência).* Mensagens do cenário "Downgrade detectado", na ordem do tempo, entre Navegador, Servidor HTTPS: 9 mensagens, numeradas de 1 a 9 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Handshake TLS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -624,13 +713,13 @@ sequenceDiagram
 
 **Por que importa.** Sem essa proteção, ataques de downgrade levariam o cliente a versões e cifras fracas.
 
-### 5.2 Modo: Certificados
+### 6.2 Modo: Certificados
 
 > **Grupo:** Validação
 
 O que o navegador confere em um certificado antes de confiar no servidor.
 
-#### 5.2.1 Certificado válido
+#### 6.2.1 Certificado válido
 
 *Sete testes antes de confiar no servidor.*
 
@@ -670,7 +759,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.1 (Tipo B, sequência).* Mensagens do cenário "Certificado válido", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração padrão.
+*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Certificado válido", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração padrão.
 
 **Mensagens**
 
@@ -681,7 +770,7 @@ sequenceDiagram
 
 **Por que importa.** A confiança da web depende dessa validação: sem ela, qualquer um poderia se passar pelo site.
 
-#### 5.2.2 Certificado expirado
+#### 6.2.2 Certificado expirado
 
 *Validade vencida: ERR_CERT_DATE_INVALID.*
 
@@ -716,7 +805,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.2 (Tipo B, sequência).* Mensagens do cenário "Certificado expirado", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Certificado expirado", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -727,7 +816,7 @@ sequenceDiagram
 
 **Por que importa.** Certificados expirados são uma das causas mais comuns de indisponibilidade. Automatize a renovação e monitore os prazos.
 
-#### 5.2.3 Nome não confere
+#### 6.2.3 Nome não confere
 
 *Certificado de outro nome: ERR_CERT_COMMON_NAME_INVALID.*
 
@@ -762,7 +851,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.3 (Tipo B, sequência).* Mensagens do cenário "Nome não confere", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Nome não confere", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -773,7 +862,7 @@ sequenceDiagram
 
 **Por que importa.** É a checagem que liga a chave ao nome do site: a identidade vem do SAN, validado pela CA.
 
-#### 5.2.4 Autoassinado (CA desconhecida)
+#### 6.2.4 Autoassinado (CA desconhecida)
 
 *Sem CA de confiança: ERR_CERT_AUTHORITY_INVALID.*
 
@@ -808,7 +897,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.4 (Tipo B, sequência).* Mensagens do cenário "Autoassinado (CA desconhecida)", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Autoassinado (CA desconhecida)", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -819,7 +908,7 @@ sequenceDiagram
 
 **Por que importa.** Em redes internas, use uma CA privada instalada nos clientes. Aceitar exceções por hábito derruba a proteção contra interceptação.
 
-#### 5.2.5 Cadeia incompleta
+#### 6.2.5 Cadeia incompleta
 
 *Falta o certificado intermediário.*
 
@@ -854,7 +943,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.5 (Tipo B, sequência).* Mensagens do cenário "Cadeia incompleta", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "Cadeia incompleta", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -865,7 +954,7 @@ sequenceDiagram
 
 **Por que importa.** É um erro comum de configuração: sempre sirva o "fullchain".
 
-#### 5.2.6 Revogado (com stapling)
+#### 6.2.6 Revogado (com stapling)
 
 *Revogado: a CA diz que o certificado não vale mais.*
 
@@ -900,7 +989,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.6 (Tipo B, sequência).* Mensagens do cenário "Revogado (com stapling)", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "Revogado (com stapling)", na ordem do tempo, entre Navegador, Servidor HTTPS: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -915,7 +1004,7 @@ sequenceDiagram
 
 Como o navegador descobre que um certificado foi revogado.
 
-#### 5.2.7 Sem stapling: consulta OCSP
+#### 6.2.7 Sem stapling: consulta OCSP
 
 *Sem stapling: o navegador pergunta à CA.*
 
@@ -960,7 +1049,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.7 (Tipo B, sequência).* Mensagens do cenário "Sem stapling: consulta OCSP", na ordem do tempo, entre Navegador, Servidor HTTPS, CA (responder OCSP): 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.7 (Tipo B, sequência).* Mensagens do cenário "Sem stapling: consulta OCSP", na ordem do tempo, entre Navegador, Servidor HTTPS, CA (responder OCSP): 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 4 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -971,7 +1060,7 @@ sequenceDiagram
 
 **Por que importa.** Stapling e a extensão Must-Staple evitam a consulta e o vazamento de privacidade.
 
-#### 5.2.8 Revogado, sem stapling
+#### 6.2.8 Revogado, sem stapling
 
 *Revogado e descoberto só depois da consulta à CA.*
 
@@ -1009,7 +1098,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.2.8 (Tipo B, sequência).* Mensagens do cenário "Revogado, sem stapling", na ordem do tempo, entre Navegador, Servidor HTTPS, CA (responder OCSP): 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
+*Figura 6.2.8 (Tipo B, sequência).* Mensagens do cenário "Revogado, sem stapling", na ordem do tempo, entre Navegador, Servidor HTTPS, CA (responder OCSP): 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Certificados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1020,13 +1109,13 @@ sequenceDiagram
 
 **Por que importa.** Revogação em tempo real é difícil: por isso os certificados são cada vez mais curtos.
 
-### 5.3 Modo: HTTP, HTTPS e HSTS
+### 6.3 Modo: HTTP, HTTPS e HSTS
 
 > **Grupo:** HSTS
 
 Do HTTP ao HTTPS e como o HSTS fecha a janela de exposição.
 
-#### 5.3.1 Primeiro acesso: HTTP e 301
+#### 6.3.1 Primeiro acesso: HTTP e 301
 
 *A primeira requisição em HTTP é a janela de exposição.*
 
@@ -1075,7 +1164,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.3.1 (Tipo B, sequência).* Mensagens do cenário "Primeiro acesso: HTTP e 301", na ordem do tempo, entre Navegador, Servidor HTTPS: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração padrão.
+*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "Primeiro acesso: HTTP e 301", na ordem do tempo, entre Navegador, Servidor HTTPS: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração padrão.
 
 **Mensagens**
 
@@ -1087,7 +1176,7 @@ sequenceDiagram
 
 **Por que importa.** O redirecionamento sozinho não basta: HSTS (com preload) fecha a janela em que um intermediário poderia impedir o HTTPS.
 
-#### 5.3.2 Com HSTS em cache
+#### 6.3.2 Com HSTS em cache
 
 *Segunda visita: o navegador nem tenta HTTP.*
 
@@ -1131,7 +1220,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.3.2 (Tipo B, sequência).* Mensagens do cenário "Com HSTS em cache", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
+*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "Com HSTS em cache", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1141,7 +1230,7 @@ sequenceDiagram
 
 **Por que importa.** HSTS elimina o SSL stripping para quem já visitou o site, e também torna os erros de certificado impossíveis de ignorar.
 
-#### 5.3.3 HSTS preload
+#### 6.3.3 HSTS preload
 
 *A lista de preload protege até a primeira visita.*
 
@@ -1185,7 +1274,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.3.3 (Tipo B, sequência).* Mensagens do cenário "HSTS preload", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
+*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "HSTS preload", na ordem do tempo, entre Navegador, Servidor HTTPS: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1199,7 +1288,7 @@ sequenceDiagram
 
 Configurações que deixam o usuário exposto mesmo com certificado.
 
-#### 5.3.4 Sem redirecionamento
+#### 6.3.4 Sem redirecionamento
 
 *HTTPS existe, mas o usuário não é levado a ele.*
 
@@ -1228,7 +1317,7 @@ sequenceDiagram
   n_s ->> n_c: HTTP/1.1 200 OK
 ```
 
-*Figura 5.3.4 (Tipo B, sequência).* Mensagens do cenário "Sem redirecionamento", na ordem do tempo, entre Navegador, Servidor HTTPS: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
+*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "Sem redirecionamento", na ordem do tempo, entre Navegador, Servidor HTTPS: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1239,7 +1328,7 @@ sequenceDiagram
 
 **Por que importa.** Configure o redirecionamento 301 e o cabeçalho HSTS em todos os hosts do domínio.
 
-#### 5.3.5 Sem HTTPS
+#### 6.3.5 Sem HTTPS
 
 *Sem TLS: nada é cifrado nem autenticado.*
 
@@ -1268,7 +1357,7 @@ sequenceDiagram
   n_s ->> n_c: HTTP/1.1 200 OK
 ```
 
-*Figura 5.3.5 (Tipo B, sequência).* Mensagens do cenário "Sem HTTPS", na ordem do tempo, entre Navegador, Servidor HTTPS: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
+*Figura 6.3.5 (Tipo B, sequência).* Mensagens do cenário "Sem HTTPS", na ordem do tempo, entre Navegador, Servidor HTTPS: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP, HTTPS e HSTS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1279,13 +1368,13 @@ sequenceDiagram
 
 **Por que importa.** Hoje HTTPS é o padrão mínimo: gratuito (ACME) e exigido por navegadores e APIs modernas.
 
-### 5.4 Modo: Comparação HTTP x HTTPS
+### 6.4 Modo: Comparação HTTP x HTTPS
 
 > **Grupo:** HTTP x HTTPS
 
 A mesma ação do usuário em HTTP e em HTTPS, com um observador na rede.
 
-#### 5.4.1 Login: senha em claro x cifrada
+#### 6.4.1 Login: senha em claro x cifrada
 
 *A senha viaja em texto puro no HTTP e cifrada no HTTPS.*
 
@@ -1337,7 +1426,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.4.1 (Tipo B, sequência).* Mensagens do cenário "Login: senha em claro x cifrada", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
+*Figura 6.4.1 (Tipo B, sequência).* Mensagens do cenário "Login: senha em claro x cifrada", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1349,7 +1438,7 @@ sequenceDiagram
 
 **Por que importa.** É a razão pela qual formulários de login, APIs e qualquer página com sessão precisam de HTTPS: a senha e o cookie são exatamente o que um observador quer capturar.
 
-#### 5.4.2 Busca: o termo vai na URL
+#### 6.4.2 Busca: o termo vai na URL
 
 *A URL e o termo pesquisado ficam expostos no HTTP.*
 
@@ -1401,7 +1490,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.4.2 (Tipo B, sequência).* Mensagens do cenário "Busca: o termo vai na URL", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
+*Figura 6.4.2 (Tipo B, sequência).* Mensagens do cenário "Busca: o termo vai na URL", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1412,7 +1501,7 @@ sequenceDiagram
 
 **Por que importa.** Metadados também importam: o HTTPS protege o conteúdo e a URL, mas o SNI ainda revela o site (o ECH esconderia).
 
-#### 5.4.3 Página com cookie de sessão
+#### 6.4.3 Página com cookie de sessão
 
 *O cookie de sessão em claro permite assumir a sessão.*
 
@@ -1464,7 +1553,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.4.3 (Tipo B, sequência).* Mensagens do cenário "Página com cookie de sessão", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
+*Figura 6.4.3 (Tipo B, sequência).* Mensagens do cenário "Página com cookie de sessão", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1479,7 +1568,7 @@ sequenceDiagram
 
 O que acontece quando um equipamento no caminho altera a resposta.
 
-#### 5.4.4 Conteúdo alterado no caminho
+#### 6.4.4 Conteúdo alterado no caminho
 
 *O HTTPS não só esconde, também detecta a alteração.*
 
@@ -1528,7 +1617,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.4.4 (Tipo B, sequência).* Mensagens do cenário "Conteúdo alterado no caminho", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 5 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
+*Figura 6.4.4 (Tipo B, sequência).* Mensagens do cenário "Conteúdo alterado no caminho", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 5 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1544,7 +1633,7 @@ sequenceDiagram
 
 O que o HTTPS acrescenta em tempo e em bytes.
 
-#### 5.4.5 Custo do HTTPS com TLS 1.2
+#### 6.4.5 Custo do HTTPS com TLS 1.2
 
 *Com TLS 1.2, o HTTPS acrescenta 2 RTT ao TCP.*
 
@@ -1599,7 +1688,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.4.5 (Tipo B, sequência).* Mensagens do cenário "Custo do HTTPS com TLS 1.2", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 7 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
+*Figura 6.4.5 (Tipo B, sequência).* Mensagens do cenário "Custo do HTTPS com TLS 1.2", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 7 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1610,7 +1699,7 @@ sequenceDiagram
 
 **Por que importa.** Para diminuir o custo: TLS 1.3, retomada de sessão, conexões persistentes (keep-alive) e HTTP/2 ou HTTP/3.
 
-#### 5.4.6 Custo em RTT alto (TLS 1.3)
+#### 6.4.6 Custo em RTT alto (TLS 1.3)
 
 *O preço do HTTPS cai com conexões reutilizadas.*
 
@@ -1662,7 +1751,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.4.6 (Tipo B, sequência).* Mensagens do cenário "Custo em RTT alto (TLS 1.3)", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
+*Figura 6.4.6 (Tipo B, sequência).* Mensagens do cenário "Custo em RTT alto (TLS 1.3)", na ordem do tempo, entre Navegador, Observador na rede, Servidor: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases; 7 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação HTTP x HTTPS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1672,13 +1761,13 @@ sequenceDiagram
 
 **Por que importa.** O custo do HTTPS é pequeno frente ao benefício, e desaparece quase por completo com conexões reutilizadas.
 
-## 6. Referência
+## 7. Referência
 
-### 6.1 HTTPS = HTTP sobre TLS
+### 7.1 HTTPS = HTTP sobre TLS
 
 O **HTTPS** é o HTTP dentro de uma conexão **TLS**, normalmente na porta 443. O TLS oferece **confidencialidade** (cifragem), **integridade** (detecção de alteração) e **autenticação do servidor** (por certificado X.509) e, opcionalmente, do cliente (mTLS). Ele roda sobre o TCP; o QUIC (HTTP/3) integra o TLS 1.3 sobre UDP.
 
-### 6.2 TLS 1.3 contra TLS 1.2
+### 7.2 TLS 1.3 contra TLS 1.2
 
 | Aspecto | TLS 1.3 ([RFC 9846](https://www.rfc-editor.org/rfc/rfc9846)) | TLS 1.2 ([RFC 5246](https://www.rfc-editor.org/rfc/rfc5246), obsoleta pela [RFC 9846](https://www.rfc-editor.org/rfc/rfc9846), que mantém o TLS 1.2 no apêndice D) |
 | --- | --- | --- |
@@ -1690,14 +1779,14 @@ O **HTTPS** é o HTTP dentro de uma conexão **TLS**, normalmente na porta 443. 
 | Derivação | HKDF | PRF |
 | Downgrade | sentinela DOWNGRD no random | sem proteção própria |
 
-### 6.3 O handshake do TLS 1.3
+### 7.3 O handshake do TLS 1.3
 
 - **ClientHello:** versões (supported_versions), cifras, **key_share** (metade do ECDHE), **SNI** (nome do site, em claro), ALPN e outras extensões.
 - **ServerHello:** versão, cifra e key_share. A partir daqui, as chaves de handshake saem do HKDF e tudo é cifrado.
 - **EncryptedExtensions, Certificate, CertificateVerify, Finished:** identidade do servidor, assinatura do hash da conversa e confirmação.
 - **Finished do cliente:** o cliente já pode enviar dados. Depois, o servidor entrega o **NewSessionTicket**.
 
-### 6.4 Certificados e validação
+### 7.4 Certificados e validação
 
 - O navegador valida: **cadeia** até uma raiz confiável, **assinaturas**, **validade**, **nome no SAN**, **uso permitido** (EKU), **revogação** e **Certificate Transparency** (SCT).
 - A identidade vem do **SAN**; o campo CN é ignorado ([RFC 9525](https://www.rfc-editor.org/rfc/rfc9525)).
@@ -1705,14 +1794,14 @@ O **HTTPS** é o HTTP dentro de uma conexão **TLS**, normalmente na porta 443. 
 - Os prazos são curtos (até 200 dias desde 15/03/2026, caindo para 100 em 2027 e 47 em 2029, CA/B Forum SC-081v3), e a renovação deve ser automática (ACME, Let's Encrypt).
 - O servidor deve enviar o **fullchain** (leaf e intermediários).
 
-### 6.5 Retomada, 0-RTT e privacidade
+### 7.5 Retomada, 0-RTT e privacidade
 
 - **Ticket (PSK):** evita novo certificado e assinatura. Em modo psk_dhe_ke mantém o sigilo futuro.
 - **0-RTT:** envia dados no primeiro voo. Sem proteção contra **replay** e sem sigilo futuro para esses dados: só para requisições idempotentes.
 - **SNI** em claro revela o site visitado; o **ECH** (Encrypted Client Hello) o esconde.
 - **ALPN** negocia o protocolo de aplicação (h2 ou http/1.1).
 
-### 6.6 HTTP x HTTPS: o que muda
+### 7.6 HTTP x HTTPS: o que muda
 
 | Aspecto | HTTP | HTTPS |
 | --- | --- | --- |
@@ -1725,13 +1814,13 @@ O **HTTPS** é o HTTP dentro de uma conexão **TLS**, normalmente na porta 443. 
 
 O custo do HTTPS é pago uma vez por conexão e diminui com TLS 1.3, retomada de sessão, conexões persistentes e HTTP/2 ou HTTP/3. Por isso, hoje o HTTPS é o padrão mínimo, inclusive para conteúdo público.
 
-### 6.7 HSTS e a primeira requisição
+### 7.7 HSTS e a primeira requisição
 
 - Sem HSTS, a primeira requisição pode sair em **HTTP** e o redirecionamento 301 também: um intermediário pode alterá-lo ou impedir o upgrade (*SSL stripping*).
 - O cabeçalho `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)) faz o navegador usar só HTTPS, trocando http por https internamente.
 - A **lista de preload** protege até a primeira visita, mas exige HTTPS em todo o domínio e é difícil de desfazer. O atributo `preload` não faz parte da [RFC 6797](https://www.rfc-editor.org/rfc/rfc6797): é uma convenção dos navegadores, que mantêm a lista por fora da especificação.
 
-### 6.8 Boas práticas de hardening
+### 7.8 Boas práticas de hardening
 
 - Habilitar TLS 1.3 e 1.2; desativar TLS 1.0, 1.1 e SSL.
 - Só suítes com sigilo futuro e AEAD; sem CBC, 3DES e RC4.
@@ -1740,18 +1829,18 @@ O custo do HTTPS é pago uma vez por conexão e diminui com TLS 1.3, retomada de
 - 0-RTT só quando o servidor tem proteção contra replay.
 - Testar com SSL Labs ou testssl.sh e acompanhar os logs de Certificate Transparency do próprio domínio.
 
-### 6.9 O que este simulador simplifica
+### 7.9 O que este simulador simplifica
 
 Não há criptografia real: chaves, assinaturas e hashes são valores ilustrativos. Não são simulados o HelloRetryRequest, o pós-handshake (KeyUpdate), a compressão, o DTLS, o QUIC, o ECH, o certificate pinning e o Must-Staple. Os tamanhos de registro são aproximados.
 
-### 6.10 Segurança
+### 7.10 Segurança
 
 - O TLS protege o **canal**: não protege contra um servidor malicioso nem contra vulnerabilidades da aplicação.
 - Aceitar exceções de certificado por hábito remove a proteção contra interceptação.
 - Proxies de inspeção TLS corporativos reencerram a conexão com uma CA privada: a confiança passa a ser neles.
 - Para praticar a defesa de serviços sobre TCP, use o Simulador de Ataques e Defesas TCP/UDP. Para o acesso remoto seguro, veja o SSH neste simulador.
 
-### 6.11 Roteiro de exercícios
+### 7.11 Roteiro de exercícios
 
 1. **TLS 1.3 completo:** a partir de qual mensagem as setas ficam cifradas? O que continua visível a quem observa a rede (SNI, tamanhos, tempos)?
 2. **TLS 1.2 completo:** compare o número de RTTs e a visibilidade do certificado com o TLS 1.3.
@@ -1765,7 +1854,7 @@ Não há criptografia real: chaves, assinaturas e hashes são valores ilustrativ
 10. **Conteúdo alterado no caminho:** o que acontece com a página em HTTP e em HTTPS? Que mecanismo do TLS detecta a alteração?
 
 
-## 7. Glossário
+## 8. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

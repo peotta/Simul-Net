@@ -12,10 +12,115 @@ SSH-2 por dentro: negociação de versão e algoritmos, troca de chaves, known_h
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Sessão e autenticação | Conexão moderna com chave | 5.1.1 a 5.1.13 |
-| Túneis e encaminhamento | Túnel local (-L) | 5.2.1 a 5.2.6 |
+| Sessão e autenticação | Conexão moderna com chave | 6.1.1 a 6.1.13 |
+| Túneis e encaminhamento | Túnel local (-L) | 6.2.1 a 6.2.6 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o SSH resolve
+
+Administrar um servidor remoto exige abrir um terminal e transferir arquivos por uma rede **não confiável**. Os protocolos antigos (Telnet, rlogin) enviavam usuário, senha e comandos **em claro**. O **SSH-2** (*Secure Shell*, [RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acesso remoto com **cifra**, **integridade** e **autenticação** do servidor e do usuário, normalmente em uma conexão TCP na porta 22.
+
+### 2.2 O diagrama das três camadas
+
+```mermaid
+flowchart TB
+  C["Camada de conexão, RFC 4254<br/>canais: shell, comando, SFTP, túneis"]
+  A["Camada de autenticação, RFC 4252<br/>identifica o usuário"]
+  T["Camada de transporte, RFC 4253<br/>negocia algoritmos, troca chaves,<br/>autentica o servidor e cifra os pacotes"]
+  TCP["TCP, porta 22"]
+  C --> A --> T --> TCP
+```
+
+*Esquema 1 (as três camadas do SSH).* A camada de **transporte** protege tudo o que vem depois. A camada de **autenticação** identifica o usuário. A camada de **conexão** **multiplexa** vários canais (uma sessão de terminal, uma transferência SFTP, vários túneis) sobre a mesma conexão cifrada.
+
+### 2.3 As fases da sessão
+
+```mermaid
+sequenceDiagram
+  participant C as Cliente
+  participant S as Servidor
+  C->>S: versão: SSH-2.0 e o software
+  S->>C: versão: SSH-2.0 e o software
+  C->>S: KEXINIT: listas de algoritmos
+  S->>C: KEXINIT: listas de algoritmos
+  C->>S: KEX_ECDH_INIT: parte pública efêmera do cliente
+  S->>C: KEX_ECDH_REPLY: parte pública, chave de host, assinatura de H
+  C->>S: NEWKEYS
+  S->>C: NEWKEYS
+  Note over C,S: a partir daqui, tudo é cifrado
+  C->>S: autenticação do usuário
+  S->>C: sucesso
+  C->>S: abre um canal
+```
+
+*Esquema 2 (da versão ao canal).* As quatro primeiras fases, de versão até o NEWKEYS, ocorrem **em claro**, mas não expõem segredos. A autenticação e os canais já vão **cifrados**.
+
+| Fase | Mensagens | Em claro? | Objetivo |
+| --- | --- | --- | --- |
+| Versões | texto SSH-2.0 e o software | sim | combinar a versão do protocolo |
+| Negociação | KEXINIT | sim | listas de algoritmos; vale o primeiro do cliente que o servidor aceita |
+| Troca de chaves | KEX_ECDH_INIT, KEX_ECDH_REPLY, NEWKEYS | sim | segredo efêmero, assinatura pela chave de host, chaves da sessão |
+| Autenticação | SERVICE_REQUEST, USERAUTH | não | identificar o usuário |
+| Canais | CHANNEL | não | shell, comando, SFTP e túneis, com janela de fluxo por canal |
+
+### 2.4 Troca de chaves e sigilo futuro
+
+- Cada lado gera um par **efêmero** e envia só a parte pública. O segredo **K** é calculado nas pontas e **nunca trafega**.
+- O servidor **assina** o hash **H** da troca com a sua **chave de host**. Isso prova que ele possui a chave e amarra a troca à sua identidade: um intermediário não consegue se passar por ele.
+- Como o par efêmero é descartado, o comprometimento futuro da chave de host **não decifra** sessões antigas (sigilo futuro).
+
+### 2.5 Confiar no servidor: a chave de host
+
+```mermaid
+flowchart TD
+  P["Primeira conexão ao servidor"] --> I["O cliente mostra a impressão digital da chave de host"]
+  I --> Q{"O usuário confere com uma fonte confiável?"}
+  Q -- "sim" --> G["Guarda a chave no arquivo known_hosts"]
+  Q -- "aceita sem conferir" --> R["Risco: se há um intermediário,<br/>ele passa a ser o 'servidor' confiado"]
+  G --> N["Próximas conexões: se a chave mudar,<br/>o cliente alerta"]
+```
+
+*Esquema 3 (confiança na primeira vez).* O SSH não usa uma autoridade certificadora por padrão. O cliente confia na chave que **viu na primeira conexão** (modelo *trust on first use*) e a guarda. Se, depois, a chave mudar, o cliente **alerta**: pode ser uma reinstalação legítima ou um intermediário. A defesa é **conferir a impressão digital** por um canal independente na primeira vez, ou distribuir as chaves de host de forma administrada.
+
+### 2.6 Autenticação do usuário
+
+| Método | Como funciona | Observação |
+| --- | --- | --- |
+| Chave pública | o usuário prova que possui a chave privada, assinando um desafio | a mais forte; a chave privada nunca sai do cliente |
+| Senha | o usuário envia a senha dentro do canal cifrado | exposta a adivinhação em massa se o servidor aceita tentativas ilimitadas |
+| *Keyboard-interactive* ([RFC 4256](https://www.rfc-editor.org/rfc/rfc4256)) | o servidor faz perguntas, por exemplo um segundo fator | flexível, para dois fatores |
+
+Algoritmos de assinatura usados hoje incluem o RSA com SHA-2 ([RFC 8332](https://www.rfc-editor.org/rfc/rfc8332)) e o Ed25519 ([RFC 8709](https://www.rfc-editor.org/rfc/rfc8709)).
+
+### 2.7 Túneis: o canal além do terminal
+
+```mermaid
+flowchart LR
+  subgraph LOC["Encaminhamento local"]
+    A1["Aplicação local"] --> P1["Porta no cliente"] -- "dentro do SSH" --> S1["Servidor SSH"] --> D1["Serviço interno da rede do servidor"]
+  end
+  subgraph REM["Encaminhamento remoto"]
+    D2["Serviço do cliente"] --> P2["Porta no servidor SSH"] -- "dentro do SSH" --> A2["Cliente SSH"]
+  end
+```
+
+*Esquema 4 (túneis).* O SSH permite **encaminhar portas**: uma porta local é ligada, por dentro da conexão cifrada, a um serviço do lado do servidor (e o contrário, no encaminhamento remoto). É muito útil para administrar serviços internos. Também é **um caminho a mais para o tráfego**, que pode atravessar o firewall sem ser visto. Do ponto de vista defensivo, o administrador deve **restringir o encaminhamento** nos servidores que não o exigem e registrar quem o usa.
+
+### 2.8 Como ler o diagrama do simulador
+
+- **Diagrama de sequência:** as fases da sessão e, no modo de túneis, os canais abertos.
+- **Aba Chaves e sessão:** os segredos e as chaves de cada fase e a impressão digital da chave de host.
+- **Aba Configuração:** um exemplo ilustrativo de configuração do servidor.
+- **Modos:** *Sessão e autenticação* (do handshake ao shell, e os casos de falha) e *Túneis e encaminhamento*.
+
+### 2.9 Limites do modelo e do diagrama
+
+- **Nenhuma criptografia real** é feita: chaves, hashes e impressões digitais são ilustrativos, e os tempos são didáticos.
+- O simulador mostra o caminho principal: não há renegociação de chaves, *agent forwarding*, certificados SSH nem autenticação por GSSAPI.
+- Os trechos de configuração são exemplos: confira a sintaxe e os parâmetros na documentação do produto e da versão em uso antes de aplicá-los.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -23,7 +128,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | --- | --- | --- | --- |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo B (sequência)**
 
@@ -33,43 +138,43 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo B (sequência)**
 
-- [Figura 5.1.1](#511-conexão-moderna-com-chave): sequência de "Conexão moderna com chave"
-- [Figura 5.1.2](#512-primeira-conexão-tofu): sequência de "Primeira conexão (TOFU)"
-- [Figura 5.1.3](#513-chave-do-servidor-mudou): sequência de "Chave do servidor mudou"
-- [Figura 5.1.4](#514-sem-algoritmo-em-comum): sequência de "Sem algoritmo em comum"
-- [Figura 5.1.5](#515-algoritmos-fracos-aceitos): sequência de "Algoritmos fracos aceitos"
-- [Figura 5.1.6](#516-login-por-senha): sequência de "Login por senha"
-- [Figura 5.1.7](#517-senha-desativada-no-servidor): sequência de "Senha desativada no servidor"
-- [Figura 5.1.8](#518-muitas-tentativas-de-senha): sequência de "Muitas tentativas de senha"
-- [Figura 5.1.9](#519-chave--totp-2-fatores): sequência de "Chave + TOTP (2 fatores)"
-- [Figura 5.1.10](#5110-login-de-root-bloqueado): sequência de "Login de root bloqueado"
-- [Figura 5.1.11](#5111-comando-remoto): sequência de "Comando remoto"
-- [Figura 5.1.12](#5112-transferência-sftp): sequência de "Transferência SFTP"
-- [Figura 5.1.13](#5113-forwardagent-e-seus-riscos): sequência de "ForwardAgent e seus riscos"
-- [Figura 5.2.1](#521-túnel-local--l): sequência de "Túnel local (-L)"
-- [Figura 5.2.2](#522-túnel-remoto--r): sequência de "Túnel remoto (-R)"
-- [Figura 5.2.3](#523-túnel-remoto-sem-gatewayports): sequência de "Túnel remoto sem GatewayPorts"
-- [Figura 5.2.4](#524-proxy-socks--d): sequência de "Proxy SOCKS (-D)"
-- [Figura 5.2.5](#525-proxyjump-bastion): sequência de "ProxyJump (bastion)"
-- [Figura 5.2.6](#526-encaminhamento-bloqueado): sequência de "Encaminhamento bloqueado"
+- [Figura 6.1.1](#611-conexão-moderna-com-chave): sequência de "Conexão moderna com chave"
+- [Figura 6.1.2](#612-primeira-conexão-tofu): sequência de "Primeira conexão (TOFU)"
+- [Figura 6.1.3](#613-chave-do-servidor-mudou): sequência de "Chave do servidor mudou"
+- [Figura 6.1.4](#614-sem-algoritmo-em-comum): sequência de "Sem algoritmo em comum"
+- [Figura 6.1.5](#615-algoritmos-fracos-aceitos): sequência de "Algoritmos fracos aceitos"
+- [Figura 6.1.6](#616-login-por-senha): sequência de "Login por senha"
+- [Figura 6.1.7](#617-senha-desativada-no-servidor): sequência de "Senha desativada no servidor"
+- [Figura 6.1.8](#618-muitas-tentativas-de-senha): sequência de "Muitas tentativas de senha"
+- [Figura 6.1.9](#619-chave--totp-2-fatores): sequência de "Chave + TOTP (2 fatores)"
+- [Figura 6.1.10](#6110-login-de-root-bloqueado): sequência de "Login de root bloqueado"
+- [Figura 6.1.11](#6111-comando-remoto): sequência de "Comando remoto"
+- [Figura 6.1.12](#6112-transferência-sftp): sequência de "Transferência SFTP"
+- [Figura 6.1.13](#6113-forwardagent-e-seus-riscos): sequência de "ForwardAgent e seus riscos"
+- [Figura 6.2.1](#621-túnel-local--l): sequência de "Túnel local (-L)"
+- [Figura 6.2.2](#622-túnel-remoto--r): sequência de "Túnel remoto (-R)"
+- [Figura 6.2.3](#623-túnel-remoto-sem-gatewayports): sequência de "Túnel remoto sem GatewayPorts"
+- [Figura 6.2.4](#624-proxy-socks--d): sequência de "Proxy SOCKS (-D)"
+- [Figura 6.2.5](#625-proxyjump-bastion): sequência de "ProxyJump (bastion)"
+- [Figura 6.2.6](#626-encaminhamento-bloqueado): sequência de "Encaminhamento bloqueado"
 
-## 3. Abas da bancada
+## 4. Abas da bancada
 
 Cenário, Captura, Mensagem, Chaves e sessão, Configuração, Experimento, Referência e Log.
 
-## 4. Configurações (campos do painel)
+## 5. Configurações (campos do painel)
 
-### 4.1 Rede
+### 5.1 Rede
 
 - **RTT (ms)**. Valores: 5; 20; 50; 100; 200. Padrão: 20. Modos: todos.
   - Tempo de ida e volta entre cliente e servidor.
   - Cada mensagem do SSH que espera resposta custa meia ida e volta. O handshake do SSH leva vários RTTs antes do primeiro comando.
 
-### 4.2 Cliente
+### 5.2 Cliente
 
 - **Perfil do cliente**. Valores: Moderno (OpenSSH 9.x); Intermediário (OpenSSH 7.x); Legado (OpenSSH 5.x). Padrão: Moderno (OpenSSH 9.x). Modos: todos.
   - Conjunto de algoritmos que o cliente oferece.
@@ -102,7 +207,7 @@ Cenário, Captura, Mensagem, Chaves e sessão, Configuração, Experimento, Refe
   - Encaminhar o agente SSH ao servidor.
   - Permite usar suas chaves a partir do servidor, sem copiá-las. Quem tiver privilégio no servidor pode usar o agente enquanto a sessão durar. Prefira ProxyJump.
 
-### 4.3 Sessão
+### 5.3 Sessão
 
 - **Uso da sessão**. Valores: Shell interativo; Comando remoto; Transferência SFTP. Padrão: Shell interativo. Modos: Sessão e autenticação.
   - O que o cliente pede depois de autenticado.
@@ -110,7 +215,7 @@ Cenário, Captura, Mensagem, Chaves e sessão, Configuração, Experimento, Refe
   - **Comando:** executa um comando e encerra.
   - **SFTP:** subsistema de transferência de arquivos sobre o mesmo canal SSH.
 
-### 4.4 Túnel
+### 5.4 Túnel
 
 - **Tipo de túnel**. Valores: Local (-L): acessar um serviço interno; Remoto (-R): expor um serviço local; Dinâmico (-D): proxy SOCKS; ProxyJump (-J): salto por bastion. Padrão: Local (-L): acessar um serviço interno. Modos: Túneis e encaminhamento.
   - Direção do encaminhamento de porta.
@@ -119,7 +224,7 @@ Cenário, Captura, Mensagem, Chaves e sessão, Configuração, Experimento, Refe
   - **-D:** o cliente vira um proxy SOCKS5 e cada destino abre um canal.
   - **-J:** o cliente chega a um alvo interno passando por um bastion, com SSH de ponta a ponta.
 
-### 4.5 Servidor
+### 5.5 Servidor
 
 - **Perfil do servidor**. Valores: Moderno (OpenSSH 9.x); Intermediário (OpenSSH 7.x); Legado (OpenSSH 5.x); Endurecido (só algoritmos modernos). Padrão: Moderno (OpenSSH 9.x). Modos: todos.
   - Algoritmos que o sshd aceita.
@@ -146,15 +251,15 @@ Cenário, Captura, Mensagem, Chaves e sessão, Configuração, Experimento, Refe
   - Porta remota aberta para toda a rede.
   - Em túneis -R, o padrão é abrir a porta só no loopback do servidor. Com GatewayPorts ligado, qualquer host que alcance o servidor usa o túnel.
 
-## 5. Cenários
+## 6. Cenários
 
-### 5.1 Modo: Sessão e autenticação
+### 6.1 Modo: Sessão e autenticação
 
 > **Grupo:** Conexão
 
 Abertura da sessão: banner, negociação, troca de chaves e a verificação da chave do servidor.
 
-#### 5.1.1 Conexão moderna com chave
+#### 6.1.1 Conexão moderna com chave
 
 *Do banner ao shell, tudo cifrado depois do NEWKEYS.*
 
@@ -221,7 +326,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.1 (Tipo B, sequência).* Mensagens do cenário "Conexão moderna com chave", na ordem do tempo, entre Cliente SSH, Servidor SSH: 37 mensagens, numeradas de 1 a 37 na ordem da comunicação (em 7 fases; 23 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração padrão.
+*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Conexão moderna com chave", na ordem do tempo, entre Cliente SSH, Servidor SSH: 37 mensagens, numeradas de 1 a 37 na ordem da comunicação (em 7 fases; 23 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração padrão.
 
 **Mensagens**
 
@@ -236,7 +341,7 @@ sequenceDiagram
 
 **Por que importa.** O SSH protege confidencialidade, integridade e autenticidade do servidor (e do cliente), em uma só conexão. É a base da administração remota segura, de rsync, git e do túnel de outros protocolos.
 
-#### 5.1.2 Primeira conexão (TOFU)
+#### 6.1.2 Primeira conexão (TOFU)
 
 *O cliente nunca viu o servidor: o fingerprint precisa ser conferido.*
 
@@ -305,7 +410,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.2 (Tipo B, sequência).* Mensagens do cenário "Primeira conexão (TOFU)", na ordem do tempo, entre Cliente SSH, Servidor SSH: 37 mensagens, numeradas de 1 a 37 na ordem da comunicação (em 7 fases; 23 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Primeira conexão (TOFU)", na ordem do tempo, entre Cliente SSH, Servidor SSH: 37 mensagens, numeradas de 1 a 37 na ordem da comunicação (em 7 fases; 23 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -316,7 +421,7 @@ sequenceDiagram
 
 **Por que importa.** Quem aceita o fingerprint sem conferir fica exposto a um intermediário na primeira conexão. Publicar os fingerprints (ou usar certificados de host e SSHFP no DNS) elimina o risco do TOFU.
 
-#### 5.1.3 Chave do servidor mudou
+#### 6.1.3 Chave do servidor mudou
 
 *A chave do servidor não confere: pode ser interceptação.*
 
@@ -357,7 +462,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.3 (Tipo B, sequência).* Mensagens do cenário "Chave do servidor mudou", na ordem do tempo, entre Cliente SSH, Servidor SSH: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Chave do servidor mudou", na ordem do tempo, entre Cliente SSH, Servidor SSH: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -372,7 +477,7 @@ sequenceDiagram
 
 O que acontece quando cliente e servidor não concordam, ou concordam em algo fraco.
 
-#### 5.1.4 Sem algoritmo em comum
+#### 6.1.4 Sem algoritmo em comum
 
 *Sem algoritmo em comum: a conexão cai no KEXINIT.*
 
@@ -411,7 +516,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.4 (Tipo B, sequência).* Mensagens do cenário "Sem algoritmo em comum", na ordem do tempo, entre Cliente SSH, Servidor SSH: 11 mensagens, numeradas de 1 a 11 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "Sem algoritmo em comum", na ordem do tempo, entre Cliente SSH, Servidor SSH: 11 mensagens, numeradas de 1 a 11 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -422,7 +527,7 @@ sequenceDiagram
 
 **Por que importa.** Endurecer o servidor tem custo de compatibilidade: dispositivos e clientes antigos deixam de conectar. Faça a transição planejada e atualize os clientes.
 
-#### 5.1.5 Algoritmos fracos aceitos
+#### 6.1.5 Algoritmos fracos aceitos
 
 *Funciona, mas com SHA-1, DSA/RSA e CBC ou 3DES.*
 
@@ -491,7 +596,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.5 (Tipo B, sequência).* Mensagens do cenário "Algoritmos fracos aceitos", na ordem do tempo, entre Cliente SSH, Servidor SSH: 37 mensagens, numeradas de 1 a 37 na ordem da comunicação (em 7 fases; 23 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "Algoritmos fracos aceitos", na ordem do tempo, entre Cliente SSH, Servidor SSH: 37 mensagens, numeradas de 1 a 37 na ordem da comunicação (em 7 fases; 23 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -505,7 +610,7 @@ sequenceDiagram
 
 Chave, senha, 2 fatores e as defesas contra tentativas repetidas.
 
-#### 5.1.6 Login por senha
+#### 6.1.6 Login por senha
 
 *A senha viaja cifrada, mas continua sendo um segredo reutilizável.*
 
@@ -570,7 +675,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.6 (Tipo B, sequência).* Mensagens do cenário "Login por senha", na ordem do tempo, entre Cliente SSH, Servidor SSH: 35 mensagens, numeradas de 1 a 35 na ordem da comunicação (em 7 fases; 21 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.6 (Tipo B, sequência).* Mensagens do cenário "Login por senha", na ordem do tempo, entre Cliente SSH, Servidor SSH: 35 mensagens, numeradas de 1 a 35 na ordem da comunicação (em 7 fases; 21 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -582,7 +687,7 @@ sequenceDiagram
 
 **Por que importa.** Senhas são alvo de força bruta e de reutilização de credenciais vazadas. Chaves públicas e segundo fator são a prática recomendada.
 
-#### 5.1.7 Senha desativada no servidor
+#### 6.1.7 Senha desativada no servidor
 
 *Sem senha no servidor, a força bruta de senhas perde o alvo.*
 
@@ -629,7 +734,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.7 (Tipo B, sequência).* Mensagens do cenário "Senha desativada no servidor", na ordem do tempo, entre Cliente SSH, Servidor SSH: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 5 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.7 (Tipo B, sequência).* Mensagens do cenário "Senha desativada no servidor", na ordem do tempo, entre Cliente SSH, Servidor SSH: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 5 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -639,7 +744,7 @@ sequenceDiagram
 
 **Por que importa.** Desativar a senha é uma das medidas de maior efeito: o ataque de adivinhação deixa de existir, restando proteger as chaves privadas.
 
-#### 5.1.8 Muitas tentativas de senha
+#### 6.1.8 Muitas tentativas de senha
 
 *Falhas repetidas: o servidor desconecta e registra cada uma.*
 
@@ -693,7 +798,7 @@ sequenceDiagram
   n_s ->> n_c: ACK
 ```
 
-*Figura 5.1.8 (Tipo B, sequência).* Mensagens do cenário "Muitas tentativas de senha", na ordem do tempo, entre Cliente SSH, Servidor SSH: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 5 fases; 10 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.8 (Tipo B, sequência).* Mensagens do cenário "Muitas tentativas de senha", na ordem do tempo, entre Cliente SSH, Servidor SSH: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 5 fases; 10 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -705,7 +810,7 @@ sequenceDiagram
 
 **Por que importa.** Limitar tentativas por conexão não basta: o atacante reconecta. Defesas em camadas: sem senha, chaves, 2 fatores, fail2ban, restrição de origem por firewall e portas não padrão como complemento.
 
-#### 5.1.9 Chave + TOTP (2 fatores)
+#### 6.1.9 Chave + TOTP (2 fatores)
 
 *Duas etapas: chave e código TOTP.*
 
@@ -776,7 +881,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.9 (Tipo B, sequência).* Mensagens do cenário "Chave + TOTP (2 fatores)", na ordem do tempo, entre Cliente SSH, Servidor SSH: 41 mensagens, numeradas de 1 a 41 na ordem da comunicação (em 7 fases; 27 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.9 (Tipo B, sequência).* Mensagens do cenário "Chave + TOTP (2 fatores)", na ordem do tempo, entre Cliente SSH, Servidor SSH: 41 mensagens, numeradas de 1 a 41 na ordem da comunicação (em 7 fases; 27 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -789,7 +894,7 @@ sequenceDiagram
 
 **Por que importa.** Um segundo fator impede que uma chave privada roubada ou uma senha vazada dê acesso sozinha.
 
-#### 5.1.10 Login de root bloqueado
+#### 6.1.10 Login de root bloqueado
 
 *Root recusado, mesmo com a credencial certa.*
 
@@ -842,7 +947,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.10 (Tipo B, sequência).* Mensagens do cenário "Login de root bloqueado", na ordem do tempo, entre Cliente SSH, Servidor SSH: 25 mensagens, numeradas de 1 a 25 na ordem da comunicação (em 5 fases; 11 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.10 (Tipo B, sequência).* Mensagens do cenário "Login de root bloqueado", na ordem do tempo, entre Cliente SSH, Servidor SSH: 25 mensagens, numeradas de 1 a 25 na ordem da comunicação (em 5 fases; 11 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -857,7 +962,7 @@ sequenceDiagram
 
 O que o cliente faz depois de autenticado: shell, comando e arquivos.
 
-#### 5.1.11 Comando remoto
+#### 6.1.11 Comando remoto
 
 *Um canal, um comando, um código de saída.*
 
@@ -919,7 +1024,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.11 (Tipo B, sequência).* Mensagens do cenário "Comando remoto", na ordem do tempo, entre Cliente SSH, Servidor SSH: 32 mensagens, numeradas de 1 a 32 na ordem da comunicação (em 7 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.11 (Tipo B, sequência).* Mensagens do cenário "Comando remoto", na ordem do tempo, entre Cliente SSH, Servidor SSH: 32 mensagens, numeradas de 1 a 32 na ordem da comunicação (em 7 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -932,7 +1037,7 @@ sequenceDiagram
 
 **Por que importa.** O comando executa com os privilégios do usuário. Chaves com "command=" em authorized_keys limitam o que cada chave pode executar.
 
-#### 5.1.12 Transferência SFTP
+#### 6.1.12 Transferência SFTP
 
 *Arquivos sobre o canal SSH, com controle de fluxo.*
 
@@ -1003,7 +1108,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.12 (Tipo B, sequência).* Mensagens do cenário "Transferência SFTP", na ordem do tempo, entre Cliente SSH, Servidor SSH: 41 mensagens, numeradas de 1 a 41 na ordem da comunicação (em 7 fases; 27 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.12 (Tipo B, sequência).* Mensagens do cenário "Transferência SFTP", na ordem do tempo, entre Cliente SSH, Servidor SSH: 41 mensagens, numeradas de 1 a 41 na ordem da comunicação (em 7 fases; 27 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1015,7 +1120,7 @@ sequenceDiagram
 
 **Por que importa.** Substitui o FTP e o scp clássico com autenticação e cifragem. O servidor pode restringir o usuário a um diretório (ChrootDirectory).
 
-#### 5.1.13 ForwardAgent e seus riscos
+#### 6.1.13 ForwardAgent e seus riscos
 
 *O agente encaminhado dá acesso às suas chaves enquanto a sessão durar.*
 
@@ -1086,7 +1191,7 @@ sequenceDiagram
   n_c ->> n_s: ACK
 ```
 
-*Figura 5.1.13 (Tipo B, sequência).* Mensagens do cenário "ForwardAgent e seus riscos", na ordem do tempo, entre Cliente SSH, Servidor SSH: 39 mensagens, numeradas de 1 a 39 na ordem da comunicação (em 7 fases; 25 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
+*Figura 6.1.13 (Tipo B, sequência).* Mensagens do cenário "ForwardAgent e seus riscos", na ordem do tempo, entre Cliente SSH, Servidor SSH: 39 mensagens, numeradas de 1 a 39 na ordem da comunicação (em 7 fases; 25 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessão e autenticação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1097,13 +1202,13 @@ sequenceDiagram
 
 **Por que importa.** Em máquinas compartilhadas ou comprometidas, o agente encaminhado vira trampolim para o resto da infraestrutura. Use ProxyJump e chaves por máquina.
 
-### 5.2 Modo: Túneis e encaminhamento
+### 6.2 Modo: Túneis e encaminhamento
 
 > **Grupo:** Túneis
 
 Encaminhamento de portas e salto por bastion, dentro do canal cifrado.
 
-#### 5.2.1 Túnel local (-L)
+#### 6.2.1 Túnel local (-L)
 
 *Porta local até um serviço interno, passando pelo servidor SSH.*
 
@@ -1146,7 +1251,7 @@ sequenceDiagram
   n_s ->> n_d: FIN
 ```
 
-*Figura 5.2.1 (Tipo B, sequência).* Mensagens do cenário "Túnel local (-L)", na ordem do tempo, entre Aplicação (psql), Cliente SSH, Servidor SSH, Banco interno: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 3 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
+*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Túnel local (-L)", na ordem do tempo, entre Aplicação (psql), Cliente SSH, Servidor SSH, Banco interno: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 3 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1158,7 +1263,7 @@ sequenceDiagram
 
 **Por que importa.** Permite acessar serviços internos sem expô-los. Também pode servir de pivô: restrinja o encaminhamento e use bastions com política clara.
 
-#### 5.2.2 Túnel remoto (-R)
+#### 6.2.2 Túnel remoto (-R)
 
 *O servidor abre uma porta e leva as conexões até o cliente.*
 
@@ -1200,7 +1305,7 @@ sequenceDiagram
   n_s ->> n_x: HTTP/1.1 200 OK
 ```
 
-*Figura 5.2.2 (Tipo B, sequência).* Mensagens do cenário "Túnel remoto (-R)", na ordem do tempo, entre Usuário externo, Servidor SSH, Cliente SSH, Serviço local: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 3 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
+*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Túnel remoto (-R)", na ordem do tempo, entre Usuário externo, Servidor SSH, Cliente SSH, Serviço local: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 3 fases; 6 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1212,7 +1317,7 @@ sequenceDiagram
 
 **Por que importa.** É a técnica usada para expor serviços atrás de NAT, e também para contornar firewalls. Monitore e restrinja túneis reversos.
 
-#### 5.2.3 Túnel remoto sem GatewayPorts
+#### 6.2.3 Túnel remoto sem GatewayPorts
 
 *Sem GatewayPorts, a porta remota só aceita conexões locais.*
 
@@ -1243,7 +1348,7 @@ sequenceDiagram
   n_s ->> n_x: RST (porta fechada)
 ```
 
-*Figura 5.2.3 (Tipo B, sequência).* Mensagens do cenário "Túnel remoto sem GatewayPorts", na ordem do tempo, entre Usuário externo, Servidor SSH, Cliente SSH, Serviço local: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
+*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Túnel remoto sem GatewayPorts", na ordem do tempo, entre Usuário externo, Servidor SSH, Cliente SSH, Serviço local: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1255,7 +1360,7 @@ sequenceDiagram
 
 **Por que importa.** Boas práticas: manter GatewayPorts no e expor serviços por proxy reverso controlado, com autenticação e TLS.
 
-#### 5.2.4 Proxy SOCKS (-D)
+#### 6.2.4 Proxy SOCKS (-D)
 
 *O cliente SSH vira um proxy SOCKS5.*
 
@@ -1296,7 +1401,7 @@ sequenceDiagram
   n_c ->> n_b: TLS ServerHello, Certificate
 ```
 
-*Figura 5.2.4 (Tipo B, sequência).* Mensagens do cenário "Proxy SOCKS (-D)", na ordem do tempo, entre Navegador, Cliente SSH (SOCKS5), Servidor SSH, Site de destino: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
+*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Proxy SOCKS (-D)", na ordem do tempo, entre Navegador, Cliente SSH (SOCKS5), Servidor SSH, Site de destino: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1308,7 +1413,7 @@ sequenceDiagram
 
 **Por que importa.** Protege o trecho até o servidor SSH em redes não confiáveis, mas o servidor passa a ver os destinos acessados (nomes e IPs).
 
-#### 5.2.5 ProxyJump (bastion)
+#### 6.2.5 ProxyJump (bastion)
 
 *Salto por bastion com SSH de ponta a ponta até o alvo.*
 
@@ -1346,7 +1451,7 @@ sequenceDiagram
   n_c ->> n_t: [cifrado] CHANNEL_DATA (shell)
 ```
 
-*Figura 5.2.5 (Tipo B, sequência).* Mensagens do cenário "ProxyJump (bastion)", na ordem do tempo, entre Cliente, Bastion (ProxyJump), Alvo interno: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 2 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
+*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "ProxyJump (bastion)", na ordem do tempo, entre Cliente, Bastion (ProxyJump), Alvo interno: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 2 fases; 5 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1357,7 +1462,7 @@ sequenceDiagram
 
 **Por que importa.** Melhor que o ForwardAgent: o bastion não vê credenciais nem tem acesso ao agente, e continua sendo um ponto único de entrada auditável.
 
-#### 5.2.6 Encaminhamento bloqueado
+#### 6.2.6 Encaminhamento bloqueado
 
 *AllowTcpForwarding no: o pedido de túnel é recusado.*
 
@@ -1387,7 +1492,7 @@ sequenceDiagram
   n_c ->> n_a: RST
 ```
 
-*Figura 5.2.6 (Tipo B, sequência).* Mensagens do cenário "Encaminhamento bloqueado", na ordem do tempo, entre Aplicação (psql), Cliente SSH, Servidor SSH, Banco interno: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
+*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "Encaminhamento bloqueado", na ordem do tempo, entre Aplicação (psql), Cliente SSH, Servidor SSH, Banco interno: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase; 2 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Túneis e encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1398,13 +1503,13 @@ sequenceDiagram
 
 **Por que importa.** Em servidores que só precisam de shell, desativar o encaminhamento reduz o risco de usar a máquina como pivô.
 
-## 6. Referência
+## 7. Referência
 
-### 6.1 O SSH em três camadas
+### 7.1 O SSH em três camadas
 
 O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acesso remoto a sistemas com três camadas sobre uma conexão TCP, normalmente na porta 22. A **camada de transporte** ([RFC 4253](https://www.rfc-editor.org/rfc/rfc4253)) negocia algoritmos, troca chaves, autentica o servidor e cifra os pacotes. A **camada de autenticação** ([RFC 4252](https://www.rfc-editor.org/rfc/rfc4252)) identifica o usuário. A **camada de conexão** ([RFC 4254](https://www.rfc-editor.org/rfc/rfc4254)) multiplexa canais (sessões, SFTP, túneis) sobre a mesma conexão cifrada.
 
-### 6.2 Fases e o que cada uma protege
+### 7.2 Fases e o que cada uma protege
 
 | Fase | Mensagens | Em claro? | Objetivo |
 | --- | --- | --- | --- |
@@ -1414,14 +1519,14 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 | Autenticação | SERVICE_REQUEST (5), USERAUTH_* (50 a 61) | não | identificar o usuário (chave, senha, 2 fatores) |
 | Canais | CHANNEL_* (90 a 100) | não | shell, comando, SFTP, túneis, com janela de fluxo por canal |
 
-### 6.3 Troca de chaves e sigilo futuro
+### 7.3 Troca de chaves e sigilo futuro
 
 - Cada lado gera um par **efêmero** e envia só a parte pública. O segredo **K** é calculado nas pontas e nunca trafega.
 - O servidor assina o hash **H** da troca com a chave de host. Isso prova que ele possui a chave e amarra a troca à identidade: um intermediário não consegue forjar.
 - Como o par é descartado, o comprometimento futuro da chave de host não decifra sessões antigas (**forward secrecy**).
 - As seis chaves da sessão (IVs, cifra e integridade nos dois sentidos) saem de `HASH(K || H || letra || session_id)` ([RFC 4253](https://www.rfc-editor.org/rfc/rfc4253), seção 7.2).
 
-### 6.4 Algoritmos recomendados e legados
+### 7.4 Algoritmos recomendados e legados
 
 | Categoria | Preferir | Evitar |
 | --- | --- | --- |
@@ -1430,14 +1535,14 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 | Cifra | chacha20-poly1305, aes256-gcm, aes-ctr | 3des-cbc, aes-cbc |
 | MAC | hmac-sha2-512-etm, hmac-sha2-256-etm (ou AEAD) | hmac-md5, hmac-sha1 |
 
-### 6.5 known_hosts e confiança no primeiro uso (TOFU)
+### 7.5 known_hosts e confiança no primeiro uso (TOFU)
 
 - O cliente guarda o **fingerprint** de cada servidor em ~/.ssh/known_hosts e compara nas conexões seguintes.
 - Na primeira conexão não há o que comparar: o usuário decide (**TOFU**). Conferir o fingerprint por outro canal fecha essa janela.
 - Chave diferente gera **WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED**. Pode ser reinstalação ou interceptação (MITM).
 - Alternativas: certificados de host (CA SSH) e registros SSHFP no DNS (com DNSSEC).
 
-### 6.6 Autenticação do usuário
+### 7.6 Autenticação do usuário
 
 - **Chave pública:** o cliente assina o session_id com a chave privada. Não trafega segredo reutilizável.
 - **Senha:** viaja dentro do canal cifrado, mas o servidor a recebe. Vulnerável a adivinhação e a reutilização de credenciais vazadas.
@@ -1445,7 +1550,7 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 - **AuthenticationMethods publickey,keyboard-interactive:** exige as duas etapas. A primeira termina em sucesso parcial.
 - **MaxAuthTries** limita falhas por conexão; **fail2ban** e firewall limitam por origem.
 
-### 6.7 Canais, SFTP e túneis
+### 7.7 Canais, SFTP e túneis
 
 - Cada canal tem número e janela de fluxo (WINDOW_ADJUST). Sessão, SFTP e túneis compartilham a mesma conexão cifrada.
 - **SFTP** é um subsistema do SSH, não é FTP sobre SSL. Não tem RFC publicada (só drafts do IETF, o mais usado é o draft-ietf-secsh-filexfer-02, versão 3). O encaminhamento de agente (auth-agent-req@openssh.com) também é extensão do OpenSSH, sem RFC.
@@ -1453,7 +1558,7 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 - O trecho entre o servidor SSH e o destino final **não é protegido pelo SSH**.
 - **ForwardAgent** expõe o agente a quem tem privilégio no servidor; prefira ProxyJump.
 
-### 6.8 Boas práticas de hardening
+### 7.8 Boas práticas de hardening
 
 - Desativar a senha e usar chaves (com passphrase) ou, melhor, certificados de usuário.
 - PermitRootLogin no ou prohibit-password; contas nominais com sudo.
@@ -1463,21 +1568,21 @@ O **SSH-2** ([RFC 4251](https://www.rfc-editor.org/rfc/rfc4251)) protege o acess
 - AllowTcpForwarding no (ou restrito com PermitOpen) nos servidores que não precisam de túneis.
 - Manter o OpenSSH atualizado e monitorar o auth.log.
 
-### 6.9 Terrapin (CVE-2023-48795)
+### 7.9 Terrapin (CVE-2023-48795)
 
 O ataque **Terrapin** permite a um intermediário no caminho remover mensagens logo após o NEWKEYS e assim degradar a conexão. Afeta o chacha20-poly1305 e as cifras CBC com EtM. A mitigação é o **strict KEX**, uma extensão negociada nos dois lados (presente a partir do OpenSSH 9.6), descrita em um draft do IETF (draft-ietf-sshm-strict-kex) que ainda não é RFC. O simulador não reproduz o ataque. A defesa prática é atualizar cliente e servidor.
 
-### 6.10 O que este simulador simplifica
+### 7.10 O que este simulador simplifica
 
 Não há criptografia real: chaves, fingerprints e hashes são valores determinísticos e ilustrativos. O SSH-1, o group-exchange, a compressão, o rekeying, o X11 forwarding e os certificados SSH não são simulados. As sequências seguem o OpenSSH, mas os tamanhos de pacote são aproximados.
 
-### 6.11 Segurança
+### 7.11 Segurança
 
 - Um canal cifrado não protege contra um servidor **malicioso** nem contra o uso de algoritmos fracos negociados.
 - Banners e versões expostos facilitam o inventário por atacantes: mantenha o software atualizado em vez de depender de esconder a versão.
 - Para praticar a defesa dos serviços que usam TCP, use o Simulador de Ataques e Defesas TCP/UDP.
 
-### 6.12 Roteiro de exercícios
+### 7.12 Roteiro de exercícios
 
 1. **Conexão moderna com chave:** identifique na aba Captura quais mensagens estão em claro e a partir de qual aparecem só "Encrypted packet". O que o NEWKEYS faz?
 2. **Primeira conexão (TOFU):** o que o usuário precisa conferir antes de digitar "yes"? Por que isso é uma fraqueza?
@@ -1489,7 +1594,7 @@ Não há criptografia real: chaves, fingerprints e hashes são valores determin�
 8. **ProxyJump:** por que é melhor que o ForwardAgent? Quem verifica a chave de host do alvo?
 
 
-## 7. Glossário
+## 8. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

@@ -12,11 +12,93 @@ O carregamento de uma página em HTTP/1.1, HTTP/2 e HTTP/3: conexões paralelas 
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| HTTP/1.1 | Seis conexões paralelas | 6.1.1 a 6.1.5 |
-| HTTP/2 | Uma conexão, vários fluxos | 6.2.1 a 6.2.5 |
-| HTTP/3 | Handshake de 1 RTT | 6.3.1 a 6.3.5 |
+| HTTP/1.1 | Seis conexões paralelas | 7.1.1 a 7.1.5 |
+| HTTP/2 | Uma conexão, vários fluxos | 7.2.1 a 7.2.5 |
+| HTTP/3 | Handshake de 1 RTT | 7.3.1 a 7.3.5 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que as versões do HTTP resolvem
+
+Uma página web é composta de **dezenas de recursos** (HTML, estilos, scripts, imagens). O desempenho depende de **como esses pedidos são levados pela rede**: quantas conexões, quanto custa abrir cada uma, e o que acontece quando um pacote se perde. A **semântica** do HTTP ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110)) é a mesma nas três versões: métodos como GET e POST, códigos de status, cabeçalhos e corpo. O que muda é **como a mensagem é levada**: o formato na linha, o uso de conexões e o transporte por baixo.
+
+### 2.2 O diagrama das três pilhas
+
+```mermaid
+flowchart TB
+  subgraph V1["HTTP/1.1, RFC 9112"]
+    A1["Mensagens em texto"] --> B1["TLS"] --> C1["TCP"]
+  end
+  subgraph V2["HTTP/2, RFC 9113"]
+    A2["Quadros binários e fluxos"] --> B2["TLS"] --> C2["TCP"]
+  end
+  subgraph V3["HTTP/3, RFC 9114"]
+    A3["Quadros binários e fluxos"] --> B3["QUIC, RFC 9000<br/>inclui o TLS 1.3"] --> C3["UDP"]
+  end
+```
+
+*Esquema 1 (a pilha de cada versão).* O HTTP/1.1 e o HTTP/2 rodam sobre **TCP**, em geral com TLS por cima. O HTTP/3 roda sobre o **QUIC**, que usa **UDP** e traz a criptografia (TLS 1.3) integrada ao transporte.
+
+### 2.3 HTTP/1.1: texto, uma conexão, um pedido por vez
+
+- **Formato em texto:** linha de requisição, cabeçalhos e corpo, legíveis a olho nu. Os mesmos cabeçalhos (como User-Agent, Accept e Cookie) se repetem em **todo** pedido.
+- **Conexões persistentes:** a conexão TCP é reaproveitada para vários pedidos, mas **um de cada vez**: o segundo pedido espera a resposta do primeiro.
+- **Várias conexões:** para paralelizar, os navegadores abrem até **6 conexões** por servidor, e cada uma paga o handshake de TCP e de TLS.
+
+### 2.4 HTTP/2: uma conexão, vários fluxos
+
+```mermaid
+sequenceDiagram
+  participant N as Navegador
+  participant S as Servidor
+  N->>S: HEADERS fluxo 1: GET /app.js
+  N->>S: HEADERS fluxo 3: GET /estilo.css
+  N->>S: HEADERS fluxo 5: GET /logo.png
+  S->>N: DATA fluxo 3
+  S->>N: DATA fluxo 1
+  S->>N: DATA fluxo 5
+  Note over N,S: os quadros dos fluxos se intercalam na mesma conexão TCP
+```
+
+*Esquema 2 (multiplexação).* O HTTP/2 divide cada mensagem em **quadros binários** (HEADERS, DATA, SETTINGS e outros) e leva **muitos pedidos e respostas ao mesmo tempo** em uma só conexão, cada um em um **fluxo** com identificador próprio. Os cabeçalhos são comprimidos com o **HPACK** ([RFC 7541](https://www.rfc-editor.org/rfc/rfc7541)), que guarda os cabeçalhos repetidos em uma tabela dinâmica: só o primeiro pedido paga o preço integral.
+
+Mas a multiplexação tem um limite: todos os fluxos dividem **uma só conexão TCP**, que entrega os bytes **em ordem**. Se um pacote se perde, o TCP segura **todos** os fluxos até retransmitir: é o **bloqueio de cabeça de fila no nível do TCP**.
+
+### 2.5 HTTP/3: fluxos independentes sobre o QUIC
+
+```mermaid
+flowchart LR
+  P["Um pacote com dados do fluxo 1 se perde"] --> H2["HTTP/2 sobre TCP:<br/>todos os fluxos esperam a retransmissão"]
+  P --> H3["HTTP/3 sobre QUIC:<br/>só o fluxo 1 espera, os outros seguem"]
+```
+
+*Esquema 3 (efeito de uma perda).* No QUIC, cada fluxo tem a sua própria entrega em ordem, e a perda atrasa **só o fluxo afetado**. O handshake também é mais curto: o QUIC combina o transporte e o TLS 1.3 em **1 RTT** (e em 0-RTT na retomada), enquanto o HTTP/1.1 e o HTTP/2 pagam o handshake do TCP **e depois** o do TLS. A compressão de cabeçalhos do HTTP/3 é o **QPACK** ([RFC 9204](https://www.rfc-editor.org/rfc/rfc9204)).
+
+| Aspecto | HTTP/1.1 | HTTP/2 | HTTP/3 |
+| --- | --- | --- | --- |
+| Formato | texto | binário, em quadros | binário, em quadros |
+| Conexões por servidor | até 6 | 1 | 1 |
+| Pedidos ao mesmo tempo | 1 por conexão | muitos, em fluxos | muitos, em fluxos |
+| Compressão de cabeçalhos | não | HPACK | QPACK |
+| Transporte | TCP | TCP | QUIC sobre UDP |
+| Efeito de uma perda | atrasa a conexão | atrasa **todos** os fluxos | atrasa **só** o fluxo |
+
+### 2.6 Como ler o diagrama do simulador
+
+- **Topologia:** o navegador, a internet e o servidor.
+- **Aba Cascata:** cada recurso da página como uma barra no tempo, no estilo das ferramentas de desenvolvedor do navegador. Ela mostra quando cada pedido começou, esperou e terminou.
+- **Aba Comparação:** as versões lado a lado, com o tempo total de carga.
+- **Diagrama de sequência:** a legenda distingue pedido (GET), resposta (200), handshake de TLS ou QUIC, TCP, ACK e SETTINGS, e perda ou entrega retida.
+- **Modos:** *HTTP/1.1* (as seis conexões), *HTTP/2* (a multiplexação) e *HTTP/3* (o handshake de 1 RTT e a perda).
+
+### 2.7 Limites do modelo e do diagrama
+
+- O enlace tem **10 Mbit/s** fixos, dividido em partes iguais entre as respostas em andamento. Não há *slow start*, controle de congestionamento nem priorização de fluxos ([RFC 9218](https://www.rfc-editor.org/rfc/rfc9218)).
+- Os tamanhos de cabeçalho, de handshake e o tempo de processamento do servidor (10 ms) são **ilustrativos**. O HPACK e o QPACK não são codificados de verdade.
+- O HTML é pedido primeiro, e os demais recursos só depois de ele chegar por inteiro. Os navegadores reais começam a pedir enquanto o HTML ainda chega.
+- Não há cache, cookies reais, redirecionamentos, *server push*, migração de conexão nem retomada de sessão TLS no HTTP/1.1 e no HTTP/2. Nenhuma criptografia real é feita.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -25,7 +107,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -45,42 +127,42 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1a](#31-http11): topologia do modo "HTTP/1.1", variante a
-- [Figura 3.1b](#31-http11): topologia do modo "HTTP/1.1", variante b
-- [Figura 3.1c](#31-http11): topologia do modo "HTTP/1.1", variante c
-- [Figura 3.2a](#32-http2): topologia do modo "HTTP/2", variante a
-- [Figura 3.2b](#32-http2): topologia do modo "HTTP/2", variante b
-- [Figura 3.3a](#33-http3): topologia do modo "HTTP/3", variante a
-- [Figura 3.3b](#33-http3): topologia do modo "HTTP/3", variante b
-- [Figura 3.3c](#33-http3): topologia do modo "HTTP/3", variante c
+- [Figura 4.1a](#41-http11): topologia do modo "HTTP/1.1", variante a
+- [Figura 4.1b](#41-http11): topologia do modo "HTTP/1.1", variante b
+- [Figura 4.1c](#41-http11): topologia do modo "HTTP/1.1", variante c
+- [Figura 4.2a](#42-http2): topologia do modo "HTTP/2", variante a
+- [Figura 4.2b](#42-http2): topologia do modo "HTTP/2", variante b
+- [Figura 4.3a](#43-http3): topologia do modo "HTTP/3", variante a
+- [Figura 4.3b](#43-http3): topologia do modo "HTTP/3", variante b
+- [Figura 4.3c](#43-http3): topologia do modo "HTTP/3", variante c
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-seis-conexões-paralelas): sequência de "Seis conexões paralelas"
-- [Figura 6.1.2](#612-uma-conexão-pedidos-em-fila): sequência de "Uma conexão, pedidos em fila"
-- [Figura 6.1.3](#613-imagem-grande-ocupa-a-conexão): sequência de "Imagem grande ocupa a conexão"
-- [Figura 6.1.4](#614-http-sem-tls): sequência de "HTTP sem TLS"
-- [Figura 6.1.5](#615-perda-de-um-pacote): sequência de "Perda de um pacote"
-- [Figura 6.2.1](#621-uma-conexão-vários-fluxos): sequência de "Uma conexão, vários fluxos"
-- [Figura 6.2.2](#622-muitos-recursos): sequência de "Muitos recursos"
-- [Figura 6.2.3](#623-imagem-grande-sem-bloquear): sequência de "Imagem grande sem bloquear"
-- [Figura 6.2.4](#624-rede-de-alta-latência): sequência de "Rede de alta latência"
-- [Figura 6.2.5](#625-perda-bloqueio-no-tcp): sequência de "Perda: bloqueio no TCP"
-- [Figura 6.3.1](#631-handshake-de-1-rtt): sequência de "Handshake de 1 RTT"
-- [Figura 6.3.2](#632-retomada-com-0-rtt): sequência de "Retomada com 0-RTT"
-- [Figura 6.3.3](#633-rede-de-alta-latência): sequência de "Rede de alta latência"
-- [Figura 6.3.4](#634-perda-só-um-fluxo-espera): sequência de "Perda: só um fluxo espera"
-- [Figura 6.3.5](#635-udp-bloqueado-volta-ao-http2): sequência de "UDP bloqueado: volta ao HTTP/2"
+- [Figura 7.1.1](#711-seis-conexões-paralelas): sequência de "Seis conexões paralelas"
+- [Figura 7.1.2](#712-uma-conexão-pedidos-em-fila): sequência de "Uma conexão, pedidos em fila"
+- [Figura 7.1.3](#713-imagem-grande-ocupa-a-conexão): sequência de "Imagem grande ocupa a conexão"
+- [Figura 7.1.4](#714-http-sem-tls): sequência de "HTTP sem TLS"
+- [Figura 7.1.5](#715-perda-de-um-pacote): sequência de "Perda de um pacote"
+- [Figura 7.2.1](#721-uma-conexão-vários-fluxos): sequência de "Uma conexão, vários fluxos"
+- [Figura 7.2.2](#722-muitos-recursos): sequência de "Muitos recursos"
+- [Figura 7.2.3](#723-imagem-grande-sem-bloquear): sequência de "Imagem grande sem bloquear"
+- [Figura 7.2.4](#724-rede-de-alta-latência): sequência de "Rede de alta latência"
+- [Figura 7.2.5](#725-perda-bloqueio-no-tcp): sequência de "Perda: bloqueio no TCP"
+- [Figura 7.3.1](#731-handshake-de-1-rtt): sequência de "Handshake de 1 RTT"
+- [Figura 7.3.2](#732-retomada-com-0-rtt): sequência de "Retomada com 0-RTT"
+- [Figura 7.3.3](#733-rede-de-alta-latência): sequência de "Rede de alta latência"
+- [Figura 7.3.4](#734-perda-só-um-fluxo-espera): sequência de "Perda: só um fluxo espera"
+- [Figura 7.3.5](#735-udp-bloqueado-volta-ao-http2): sequência de "UDP bloqueado: volta ao HTTP/2"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 HTTP/1.1
+### 4.1 HTTP/1.1
 
 ```mermaid
 flowchart LR
@@ -91,7 +173,7 @@ flowchart LR
   n_net -- "porta 443" --- n_srv
 ```
 
-*Figura 3.1a (Tipo A, topologia).* Elementos do modo "HTTP/1.1": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/1.1). Vale para os cenários (6.1.1 a 6.1.3).
+*Figura 4.1a (Tipo A, topologia).* Elementos do modo "HTTP/1.1": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/1.1). Vale para os cenários (7.1.1 a 7.1.3).
 
 ```mermaid
 flowchart LR
@@ -102,7 +184,7 @@ flowchart LR
   n_net -- "porta 80" --- n_srv
 ```
 
-*Figura 3.1b (Tipo A, topologia).* Elementos do modo "HTTP/1.1": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/1.1). Vale para os cenários (6.1.4).
+*Figura 4.1b (Tipo A, topologia).* Elementos do modo "HTTP/1.1": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/1.1). Vale para os cenários (7.1.4).
 
 ```mermaid
 flowchart LR
@@ -113,9 +195,9 @@ flowchart LR
   n_net -- "porta 443" --- n_srv
 ```
 
-*Figura 3.1c (Tipo A, topologia).* Elementos do modo "HTTP/1.1": Navegador (cliente); Internet (RTT de 200 ms); www.example.com (HTTP/1.1). Vale para os cenários (6.1.5).
+*Figura 4.1c (Tipo A, topologia).* Elementos do modo "HTTP/1.1": Navegador (cliente); Internet (RTT de 200 ms); www.example.com (HTTP/1.1). Vale para os cenários (7.1.5).
 
-### 3.2 HTTP/2
+### 4.2 HTTP/2
 
 ```mermaid
 flowchart LR
@@ -126,7 +208,7 @@ flowchart LR
   n_net -- "porta 443" --- n_srv
 ```
 
-*Figura 3.2a (Tipo A, topologia).* Elementos do modo "HTTP/2": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/2). Vale para os cenários (6.2.1 a 6.2.3).
+*Figura 4.2a (Tipo A, topologia).* Elementos do modo "HTTP/2": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/2). Vale para os cenários (7.2.1 a 7.2.3).
 
 ```mermaid
 flowchart LR
@@ -137,9 +219,9 @@ flowchart LR
   n_net -- "porta 443" --- n_srv
 ```
 
-*Figura 3.2b (Tipo A, topologia).* Elementos do modo "HTTP/2": Navegador (cliente); Internet (RTT de 200 ms); www.example.com (HTTP/2). Vale para os cenários (6.2.4 e 6.2.5).
+*Figura 4.2b (Tipo A, topologia).* Elementos do modo "HTTP/2": Navegador (cliente); Internet (RTT de 200 ms); www.example.com (HTTP/2). Vale para os cenários (7.2.4 e 7.2.5).
 
-### 3.3 HTTP/3
+### 4.3 HTTP/3
 
 ```mermaid
 flowchart LR
@@ -150,7 +232,7 @@ flowchart LR
   n_net -- "QUIC" --- n_srv
 ```
 
-*Figura 3.3a (Tipo A, topologia).* Elementos do modo "HTTP/3": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/3). Vale para os cenários (6.3.1 e 6.3.2).
+*Figura 4.3a (Tipo A, topologia).* Elementos do modo "HTTP/3": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/3). Vale para os cenários (7.3.1 e 7.3.2).
 
 ```mermaid
 flowchart LR
@@ -161,7 +243,7 @@ flowchart LR
   n_net -- "QUIC" --- n_srv
 ```
 
-*Figura 3.3b (Tipo A, topologia).* Elementos do modo "HTTP/3": Navegador (cliente); Internet (RTT de 200 ms); www.example.com (HTTP/3). Vale para os cenários (6.3.3 e 6.3.4).
+*Figura 4.3b (Tipo A, topologia).* Elementos do modo "HTTP/3": Navegador (cliente); Internet (RTT de 200 ms); www.example.com (HTTP/3). Vale para os cenários (7.3.3 e 7.3.4).
 
 ```mermaid
 flowchart LR
@@ -172,22 +254,22 @@ flowchart LR
   n_net -- "porta 443" --- n_srv
 ```
 
-*Figura 3.3c (Tipo A, topologia).* Elementos do modo "HTTP/3": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/2). Vale para os cenários (6.3.5).
+*Figura 4.3c (Tipo A, topologia).* Elementos do modo "HTTP/3": Navegador (cliente); Internet (RTT de 80 ms); www.example.com (HTTP/2). Vale para os cenários (7.3.5).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Cascata, Comparação, Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Rede
+### 6.1 Rede
 
 - **Latência da rede (RTT)**. Valores: Fibra ou rede local (20 ms); Móvel 4G (80 ms); Satélite ou rede ruim (200 ms). Padrão: Móvel 4G (80 ms). Modos: todos.
   - Tempo de ida e volta entre o navegador e o servidor.
   - Quanto maior o RTT, mais caro é cada viagem de ida e volta: abrir conexões, esperar a resposta de um pedido antes de enviar o seguinte e recuperar uma perda.
   - A largura de banda é fixa em 10 Mbit/s e dividida em partes iguais entre as respostas em andamento. O que muda entre as versões do HTTP é quantas viagens de ida e volta cada uma gasta.
 
-### 5.2 Página
+### 6.2 Página
 
 - **Recursos da página**. Valores: 4 recursos; 8 recursos; 16 recursos. Padrão: 8 recursos. Modos: todos.
   - Quantos arquivos o navegador baixa, contando o HTML.
@@ -198,7 +280,7 @@ Cenário, Captura, Mensagem, Cascata, Comparação, Experimento, Referência e L
   - No HTTP/1.1, a conexão que baixa a imagem fica ocupada até o último byte e nenhum outro pedido passa por ela (bloqueio de cabeça de fila).
   - No HTTP/2 e no HTTP/3, a imagem divide a banda com os demais fluxos e não impede que os outros terminem.
 
-### 5.3 Conexão
+### 6.3 Conexão
 
 - **Usar TLS (HTTPS)**. Valores: caixa de seleção. Padrão: sim. Modos: HTTP/1.1.
   - HTTP/1.1 sobre TLS (https) ou em texto claro (http).
@@ -213,7 +295,7 @@ Cenário, Captura, Mensagem, Cascata, Comparação, Experimento, Referência e L
   - Com um ticket de uma visita anterior, o QUIC envia o pedido junto do primeiro voo, sem esperar o handshake: o tempo de conexão cai de 1 RTT para zero.
   - Os dados 0-RTT podem ser reenviados por um atacante (replay). Por isso os servidores só os aceitam para pedidos que não alteram estado, como GET ([RFC 8470](https://www.rfc-editor.org/rfc/rfc8470)).
 
-### 5.4 Falhas
+### 6.4 Falhas
 
 - **Perder um pacote de /app.js**. Valores: caixa de seleção. Padrão: não. Modos: todos.
   - Um pacote com dados de /app.js se perde na metade da transferência.
@@ -224,15 +306,15 @@ Cenário, Captura, Mensagem, Cascata, Comparação, Experimento, Referência e L
   - O navegador tenta o QUIC, não recebe resposta e recorre ao HTTP/2 sobre TCP. O tempo de espera do simulador (300 ms) é ilustrativo: cada navegador usa a sua estratégia, como disputar QUIC e TCP em paralelo.
   - É por isso que o HTTP/3 é sempre oferecido junto com uma alternativa por TCP.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: HTTP/1.1
+### 7.1 Modo: HTTP/1.1
 
 > **Grupo:** Conexões
 
 Como o HTTP/1.1 usa conexões TCP: um pedido por vez em cada uma, com várias conexões paralelas para ganhar tempo.
 
-#### 6.1.1 Seis conexões paralelas
+#### 7.1.1 Seis conexões paralelas
 
 *Seis conexões TCP paralelas, um pedido por vez em cada uma.*
 
@@ -298,7 +380,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /foto2.jpg
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Seis conexões paralelas", na ordem do tempo, entre Navegador, www.example.com: 40 mensagens, numeradas de 1 a 40 na ordem da comunicação (em 3 fases; 22 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração padrão.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "Seis conexões paralelas", na ordem do tempo, entre Navegador, www.example.com: 40 mensagens, numeradas de 1 a 40 na ordem da comunicação (em 3 fases; 22 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração padrão.
 
 **Mensagens**
 
@@ -311,7 +393,7 @@ sequenceDiagram
 
 **Por que importa.** Seis conexões consomem memória no servidor, repetem handshakes e competem entre si pela banda. Foi a solução possível dentro do HTTP/1.1, e deu origem a práticas como dividir recursos em vários domínios.
 
-#### 6.1.2 Uma conexão, pedidos em fila
+#### 7.1.2 Uma conexão, pedidos em fila
 
 *Com uma conexão, cada pedido espera a resposta anterior.*
 
@@ -359,7 +441,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /icones.svg
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Uma conexão, pedidos em fila", na ordem do tempo, entre Navegador, www.example.com: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 3 fases; 17 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "Uma conexão, pedidos em fila", na ordem do tempo, entre Navegador, www.example.com: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 3 fases; 17 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -370,7 +452,7 @@ sequenceDiagram
 
 **Por que importa.** É o comportamento do HTTP/1.1 antes do paralelismo de conexões e explica por que a latência (RTT), mais que a banda, domina o tempo de carregamento de páginas com muitos recursos.
 
-#### 6.1.3 Imagem grande ocupa a conexão
+#### 7.1.3 Imagem grande ocupa a conexão
 
 *Uma resposta grande ocupa a conexão e atrasa o que está na fila.*
 
@@ -424,7 +506,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /icones.svg
 ```
 
-*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Imagem grande ocupa a conexão", na ordem do tempo, entre Navegador, www.example.com: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação (em 3 fases; 20 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
+*Figura 7.1.3 (Tipo B, sequência).* Mensagens do cenário "Imagem grande ocupa a conexão", na ordem do tempo, entre Navegador, www.example.com: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação (em 3 fases; 20 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -439,7 +521,7 @@ sequenceDiagram
 
 O HTTP/1.1 sem TLS e com perda de pacote.
 
-#### 6.1.4 HTTP sem TLS
+#### 7.1.4 HTTP sem TLS
 
 *Sem TLS: 1 RTT para abrir, mas tudo em texto claro.*
 
@@ -495,7 +577,7 @@ sequenceDiagram
   n_srv ->> n_cli: 200 /icones.svg
 ```
 
-*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "HTTP sem TLS", na ordem do tempo, entre Navegador, www.example.com: 28 mensagens, numeradas de 1 a 28 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
+*Figura 7.1.4 (Tipo B, sequência).* Mensagens do cenário "HTTP sem TLS", na ordem do tempo, entre Navegador, www.example.com: 28 mensagens, numeradas de 1 a 28 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -506,7 +588,7 @@ sequenceDiagram
 
 **Por que importa.** Sem TLS não há confidencialidade, integridade nem autenticação do servidor. O HTTP/2 e o HTTP/3 são usados na prática apenas sobre conexões cifradas.
 
-#### 6.1.5 Perda de um pacote
+#### 7.1.5 Perda de um pacote
 
 *A perda afeta só a conexão TCP que perdeu o pacote.*
 
@@ -575,7 +657,7 @@ sequenceDiagram
   n_srv ->> n_cli: retransmissão
 ```
 
-*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "Perda de um pacote", na ordem do tempo, entre Navegador, www.example.com: 43 mensagens, numeradas de 1 a 43 na ordem da comunicação (em 3 fases; 1 perdida; 22 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
+*Figura 7.1.5 (Tipo B, sequência).* Mensagens do cenário "Perda de um pacote", na ordem do tempo, entre Navegador, www.example.com: 43 mensagens, numeradas de 1 a 43 na ordem da comunicação (em 3 fases; 1 perdida; 22 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/1.1", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -587,13 +669,13 @@ sequenceDiagram
 
 **Por que importa.** Seis conexões isolam as perdas umas das outras, e esse é um dos poucos benefícios de usar várias conexões.
 
-### 6.2 Modo: HTTP/2
+### 7.2 Modo: HTTP/2
 
 > **Grupo:** Multiplexação
 
 O HTTP/2 divide uma só conexão em fluxos independentes, com cabeçalhos comprimidos.
 
-#### 6.2.1 Uma conexão, vários fluxos
+#### 7.2.1 Uma conexão, vários fluxos
 
 *Uma conexão, muitos fluxos, cabeçalhos comprimidos.*
 
@@ -641,7 +723,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Uma conexão, vários fluxos", na ordem do tempo, entre Navegador, www.example.com: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 3 fases; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração padrão.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Uma conexão, vários fluxos", na ordem do tempo, entre Navegador, www.example.com: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 3 fases; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração padrão.
 
 **Mensagens**
 
@@ -653,7 +735,7 @@ sequenceDiagram
 
 **Por que importa.** Uma conexão só paga um handshake e deixa o controle de congestionamento do TCP trabalhar com mais dados em trânsito. Em compensação, depende de uma única sequência de bytes do TCP.
 
-#### 6.2.2 Muitos recursos
+#### 7.2.2 Muitos recursos
 
 *Dezesseis recursos sem fila nem limite de conexões.*
 
@@ -717,7 +799,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Muitos recursos", na ordem do tempo, entre Navegador, www.example.com: 38 mensagens, numeradas de 1 a 38 na ordem da comunicação (em 3 fases; 35 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "Muitos recursos", na ordem do tempo, entre Navegador, www.example.com: 38 mensagens, numeradas de 1 a 38 na ordem da comunicação (em 3 fases; 35 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -728,7 +810,7 @@ sequenceDiagram
 
 **Por que importa.** Páginas modernas têm dezenas ou centenas de recursos. O HTTP/2 elimina a fila de pedidos sem exigir mais conexões.
 
-#### 6.2.3 Imagem grande sem bloquear
+#### 7.2.3 Imagem grande sem bloquear
 
 *A imagem grande divide a banda e não bloqueia os outros.*
 
@@ -780,7 +862,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /hero.jpg
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Imagem grande sem bloquear", na ordem do tempo, entre Navegador, www.example.com: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 3 fases; 21 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "Imagem grande sem bloquear", na ordem do tempo, entre Navegador, www.example.com: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 3 fases; 21 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -795,7 +877,7 @@ sequenceDiagram
 
 Onde o TCP limita o HTTP/2: o custo dos dois RTT de abertura e o bloqueio de todos os fluxos quando um pacote se perde.
 
-#### 6.2.4 Rede de alta latência
+#### 7.2.4 Rede de alta latência
 
 *Com RTT alto, os dois RTT de abertura pesam.*
 
@@ -845,7 +927,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Rede de alta latência", na ordem do tempo, entre Navegador, www.example.com: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 3 fases; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "Rede de alta latência", na ordem do tempo, entre Navegador, www.example.com: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 3 fases; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -856,7 +938,7 @@ sequenceDiagram
 
 **Por que importa.** Parte do projeto do QUIC foi reduzir esse custo de abertura, que não depende da versão do HTTP, e sim do transporte.
 
-#### 6.2.5 Perda: bloqueio no TCP
+#### 7.2.5 Perda: bloqueio no TCP
 
 *Um pacote perdido retém todos os fluxos da conexão TCP.*
 
@@ -909,7 +991,7 @@ sequenceDiagram
   n_srv ->> n_cli: retransmissão
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "Perda: bloqueio no TCP", na ordem do tempo, entre Navegador, www.example.com: 25 mensagens, numeradas de 1 a 25 na ordem da comunicação (em 3 fases; 1 perdida; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "Perda: bloqueio no TCP", na ordem do tempo, entre Navegador, www.example.com: 25 mensagens, numeradas de 1 a 25 na ordem da comunicação (em 3 fases; 1 perdida; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/2", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -921,13 +1003,13 @@ sequenceDiagram
 
 **Por que importa.** Quanto maior o RTT e a perda, pior o efeito. Em redes móveis com perdas frequentes, esse bloqueio é uma das motivações do HTTP/3.
 
-### 6.3 Modo: HTTP/3
+### 7.3 Modo: HTTP/3
 
 > **Grupo:** Conexão e fluxos
 
 O HTTP/3 sobre QUIC: handshake de 1 RTT (ou zero, na retomada) e fluxos com ordem própria.
 
-#### 6.3.1 Handshake de 1 RTT
+#### 7.3.1 Handshake de 1 RTT
 
 *QUIC: transporte e TLS 1.3 num só handshake, sobre UDP.*
 
@@ -972,7 +1054,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "Handshake de 1 RTT", na ordem do tempo, entre Navegador, www.example.com: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 3 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração padrão.
+*Figura 7.3.1 (Tipo B, sequência).* Mensagens do cenário "Handshake de 1 RTT", na ordem do tempo, entre Navegador, www.example.com: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 3 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração padrão.
 
 **Mensagens**
 
@@ -984,7 +1066,7 @@ sequenceDiagram
 
 **Por que importa.** O QUIC roda em espaço de usuário e criptografa quase todo o cabeçalho de transporte, o que dificulta intervenções de equipamentos no meio do caminho e facilita evoluir o protocolo.
 
-#### 6.3.2 Retomada com 0-RTT
+#### 7.3.2 Retomada com 0-RTT
 
 *Com sessão anterior, o pedido vai no primeiro pacote.*
 
@@ -1031,7 +1113,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "Retomada com 0-RTT", na ordem do tempo, entre Navegador, www.example.com: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 3 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
+*Figura 7.3.2 (Tipo B, sequência).* Mensagens do cenário "Retomada com 0-RTT", na ordem do tempo, entre Navegador, www.example.com: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 3 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1042,7 +1124,7 @@ sequenceDiagram
 
 **Por que importa.** O ganho é real, mas exige cuidado: o servidor deve recusar 0-RTT em pedidos que alteram estado ([RFC 8470](https://www.rfc-editor.org/rfc/rfc8470) define a resposta 425 Too Early).
 
-#### 6.3.3 Rede de alta latência
+#### 7.3.3 Rede de alta latência
 
 *Em rede de 200 ms, o handshake de 1 RTT poupa 200 ms.*
 
@@ -1086,7 +1168,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "Rede de alta latência", na ordem do tempo, entre Navegador, www.example.com: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 3 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
+*Figura 7.3.3 (Tipo B, sequência).* Mensagens do cenário "Rede de alta latência", na ordem do tempo, entre Navegador, www.example.com: 19 mensagens, numeradas de 1 a 19 na ordem da comunicação (em 3 fases; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1101,7 +1183,7 @@ sequenceDiagram
 
 Como o HTTP/3 reage à perda de pacote e a uma rede que bloqueia o UDP.
 
-#### 6.3.4 Perda: só um fluxo espera
+#### 7.3.4 Perda: só um fluxo espera
 
 *Só o fluxo que perdeu dados espera pela retransmissão.*
 
@@ -1151,7 +1233,7 @@ sequenceDiagram
   n_srv ->> n_cli: retransmissão (novo pacote)
 ```
 
-*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "Perda: só um fluxo espera", na ordem do tempo, entre Navegador, www.example.com: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 3 fases; 1 perdida; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
+*Figura 7.3.4 (Tipo B, sequência).* Mensagens do cenário "Perda: só um fluxo espera", na ordem do tempo, entre Navegador, www.example.com: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 3 fases; 1 perdida; 18 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1163,7 +1245,7 @@ sequenceDiagram
 
 **Por que importa.** Na prática um pacote QUIC pode carregar frames de mais de um fluxo e afetar todos eles. O simulador supõe que os dados perdidos pertencem a um só fluxo.
 
-#### 6.3.5 UDP bloqueado: volta ao HTTP/2
+#### 7.3.5 UDP bloqueado: volta ao HTTP/2
 
 *O QUIC não passa pelo firewall; o navegador recorre ao TCP.*
 
@@ -1215,7 +1297,7 @@ sequenceDiagram
   n_srv ->> n_cli: [cifrado] 200 /app.js
 ```
 
-*Figura 6.3.5 (Tipo B, sequência).* Mensagens do cenário "UDP bloqueado: volta ao HTTP/2", na ordem do tempo, entre Navegador, www.example.com: 23 mensagens, numeradas de 1 a 23 na ordem da comunicação (em 4 fases; 1 perdida; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
+*Figura 7.3.5 (Tipo B, sequência).* Mensagens do cenário "UDP bloqueado: volta ao HTTP/2", na ordem do tempo, entre Navegador, www.example.com: 23 mensagens, numeradas de 1 a 23 na ordem da comunicação (em 4 fases; 1 perdida; 19 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "HTTP/3", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1226,20 +1308,20 @@ sequenceDiagram
 
 **Por que importa.** A possibilidade de fallback é o que permite implantar o HTTP/3 aos poucos, sem quebrar redes que não o suportam. A espera de 300 ms do simulador é ilustrativa.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 O que muda entre as versões
+### 8.1 O que muda entre as versões
 
 A **semântica** do HTTP ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110)) é a mesma nas três versões: métodos como GET e POST, códigos de status, cabeçalhos e corpo. Cada versão muda apenas **como** essas mensagens são levadas pela rede: o formato na linha, o uso de conexões e o transporte por baixo.
 
-### 7.2 HTTP/1.1 ([RFC 9112](https://www.rfc-editor.org/rfc/rfc9112))
+### 8.2 HTTP/1.1 ([RFC 9112](https://www.rfc-editor.org/rfc/rfc9112))
 
 - **Formato em texto:** linha de requisição, cabeçalhos e corpo, legíveis a olho nu. Os mesmos cabeçalhos (User-Agent, Accept, Cookie) se repetem em todo pedido.
 - **Conexões persistentes** (keep-alive): a conexão TCP é reaproveitada para vários pedidos, mas um de cada vez.
 - **Pipelining:** a especificação permite enviar vários pedidos sem esperar as respostas, que voltam na mesma ordem. Na prática os navegadores o desativaram por causa do bloqueio de cabeça de fila e de intermediários problemáticos. O simulador não usa pipelining.
 - **Várias conexões:** para paralelizar, os navegadores abrem até 6 conexões por servidor, e cada uma paga o handshake de TCP e TLS.
 
-### 7.3 HTTP/2 ([RFC 9113](https://www.rfc-editor.org/rfc/rfc9113))
+### 8.3 HTTP/2 ([RFC 9113](https://www.rfc-editor.org/rfc/rfc9113))
 
 - **Formato binário em frames** (HEADERS, DATA, SETTINGS...). A semântica não muda, mas a mensagem passa a ser fatiada.
 - **Fluxos (streams):** uma só conexão TCP leva muitos pedidos e respostas ao mesmo tempo, cada um com seu identificador (ímpar quando iniciado pelo cliente). Os frames de fluxos diferentes se intercalam.
@@ -1249,7 +1331,7 @@ A **semântica** do HTTP ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110)) é
 - **Limite:** tudo viaja na mesma sequência de bytes do TCP. Um segmento perdido retém a entrega de todos os fluxos até a retransmissão (bloqueio de cabeça de fila no TCP).
 - O *server push* do HTTP/2 foi pouco usado e removido dos principais navegadores. Não é simulado.
 
-### 7.4 HTTP/3 e QUIC ([RFC 9114](https://www.rfc-editor.org/rfc/rfc9114), 9000, 9001 e 9002)
+### 8.4 HTTP/3 e QUIC ([RFC 9114](https://www.rfc-editor.org/rfc/rfc9114), 9000, 9001 e 9002)
 
 - **QUIC sobre UDP:** o transporte é reimplementado em espaço de usuário, com o TLS 1.3 embutido ([RFC 9001](https://www.rfc-editor.org/rfc/rfc9001)). O handshake de transporte e de criptografia ocorre junto, em 1 RTT.
 - **Fluxos com ordem própria:** cada pedido do HTTP/3 usa um fluxo QUIC (identificador múltiplo de 4 para fluxos bidirecionais iniciados pelo cliente). Uma perda só atrasa o fluxo afetado.
@@ -1259,7 +1341,7 @@ A **semântica** do HTTP ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110)) é
 - **Descoberta:** o navegador costuma saber que o servidor fala HTTP/3 pelo cabeçalho `Alt-Svc` ([RFC 7838](https://www.rfc-editor.org/rfc/rfc7838)) ou por registros DNS do tipo HTTPS ([RFC 9460](https://www.rfc-editor.org/rfc/rfc9460)). Se o UDP 443 estiver bloqueado, usa HTTP/2 sobre TCP.
 - O QUIC também permite **migração de conexão** (trocar de Wi-Fi para 4G sem recomeçar) e limita as respostas a endereços não validados, para reduzir ataques de amplificação. Nenhum dos dois é simulado.
 
-### 7.5 Comparação resumida
+### 8.5 Comparação resumida
 
 |  | HTTP/1.1 | HTTP/2 | HTTP/3 |
 | --- | --- | --- | --- |
@@ -1270,14 +1352,14 @@ A **semântica** do HTTP ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110)) é
 | Compressão de cabeçalhos | nenhuma | HPACK | QPACK |
 | Bloqueio por perda | só a conexão | todos os fluxos | só o fluxo |
 
-### 7.6 Considerações de segurança (nível defensivo)
+### 8.6 Considerações de segurança (nível defensivo)
 
 - **HTTP sem TLS** não protege confidencialidade nem integridade: o conteúdo pode ser lido ou alterado no caminho. Use HTTPS e HSTS ([RFC 6797](https://www.rfc-editor.org/rfc/rfc6797)). A [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112) foi atualizada pela [RFC 9931](https://www.rfc-editor.org/rfc/rfc9931), que trata das considerações de segurança de transições otimistas de protocolo no HTTP/1.1 (Upgrade); o simulador não modela essa transição.
 - **0-RTT e replay:** aceite 0-RTT apenas em pedidos idempotentes e sem efeito colateral, ou desative-o quando isso não puder ser garantido.
 - **Abuso de fluxos no HTTP/2:** servidores devem limitar fluxos simultâneos, frames e a taxa de abertura e cancelamento de fluxos (o ataque conhecido como Rapid Reset, de 2023, explorou a falta desse limite) e manter o software atualizado.
 - **Visibilidade:** o QUIC cifra quase todo o cabeçalho de transporte, o que reduz o que firewalls e sensores no caminho conseguem ver. A inspeção passa a depender de pontos de terminação do TLS e de telemetria nos extremos.
 
-### 7.7 Limitações do simulador
+### 8.7 Limitações do simulador
 
 - O enlace tem 10 Mbit/s fixos, dividido em partes iguais entre as respostas em andamento. Não há slow start, controle de congestionamento nem priorização de fluxos ([RFC 9218](https://www.rfc-editor.org/rfc/rfc9218)).
 - Os tamanhos de cabeçalho, de handshake e do tempo de processamento do servidor (10 ms) são ilustrativos. O HPACK e o QPACK não são codificados de verdade.
@@ -1287,7 +1369,7 @@ A **semântica** do HTTP ([RFC 9110](https://www.rfc-editor.org/rfc/rfc9110)) é
 - Nenhuma criptografia real é feita: valores como chaves e identificadores são ilustrativos.
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

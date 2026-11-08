@@ -12,12 +12,130 @@ Como uma rede local sem fio funciona: varredura passiva e ativa, autenticação 
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Descoberta e associação | Varredura passiva e rede aberta | 6.1.1 a 6.1.5 |
-| Acesso ao meio | Esperar, sortear o backoff, transmitir e receber o ACK | 6.2.1 a 6.2.6 |
-| Roaming e energia | O cliente se afasta e troca de AP | 6.3.1 a 6.3.6 |
-| Canais | Canais 1 e 6: independentes | 6.4.1 a 6.4.4 |
+| Descoberta e associação | Varredura passiva e rede aberta | 7.1.1 a 7.1.5 |
+| Acesso ao meio | Esperar, sortear o backoff, transmitir e receber o ACK | 7.2.1 a 7.2.6 |
+| Roaming e energia | O cliente se afasta e troca de AP | 7.3.1 a 7.3.6 |
+| Canais | Canais 1 e 6: independentes | 7.4.1 a 7.4.4 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o 802.11 resolve
+
+Em uma rede cabeada, cada enlace é um meio dedicado. Em uma rede sem fio, **todos compartilham o ar**: ninguém consegue ouvir e falar ao mesmo tempo no mesmo canal, o sinal chega com intensidades diferentes e as mensagens se perdem por interferência. O **IEEE 802.11** (Wi-Fi é a marca da Wi-Fi Alliance) define a camada de enlace (MAC) e a camada física dessas redes. Este simulador trata da **operação da camada MAC**: descobrir e entrar em uma rede, disputar o meio, trocar de AP, economizar energia e escolher canais.
+
+### 2.2 Os atores
+
+| Termo | Significado |
+| --- | --- |
+| STA | estação: o cliente (notebook, celular) |
+| AP | ponto de acesso: liga os clientes sem fio à rede cabeada |
+| BSS e BSSID | o conjunto de um AP e seus clientes; o BSSID é o endereço MAC do AP |
+| SSID | o nome da rede, de até 32 bytes |
+| ESS | vários APs com o mesmo SSID, em que o cliente pode circular |
+| DS | sistema de distribuição: a rede, em geral cabeada, que liga os APs |
+
+### 2.3 O diagrama da entrada em uma rede
+
+```mermaid
+sequenceDiagram
+  participant C as Cliente
+  participant A as AP
+  A->>C: Beacon, periódico: SSID, taxas, capacidades
+  C->>A: Probe Request, descoberta ativa
+  A->>C: Probe Response
+  C->>A: Authentication
+  A->>C: Authentication
+  C->>A: Association Request
+  A->>C: Association Response, com o AID
+  Note over C,A: handshake de quatro vias: EAPOL-Key, 4 quadros
+  C->>A: Data
+  A->>C: ACK
+```
+
+*Esquema 1 (descoberta, associação e dados).* O cliente descobre a rede de dois modos: **passivo** (escuta os Beacons que o AP envia periodicamente) ou **ativo** (envia um Probe Request e recebe um Probe Response). Depois vêm a **autenticação** (no 802.11, só uma etapa inicial) e a **associação**, em que o AP concede ao cliente um identificador (AID). Em redes protegidas, o **handshake de quatro vias** deriva as chaves de cifra. A segurança (WPA2 e WPA3) está em outro simulador.
+
+Os quadros 802.11 são de três tipos:
+
+| Tipo | Exemplos | Função |
+| --- | --- | --- |
+| Gerência | Beacon, Probe, Authentication, Association, Reassociation | descobrir, entrar, sair e negociar recursos |
+| Controle | RTS, CTS, ACK, PS-Poll | coordenar o acesso ao meio; são curtos e sem corpo |
+| Dados | Data, Null | carregar os dados e sinalizar o modo de energia |
+
+### 2.4 O acesso ao meio: CSMA/CA
+
+Como o rádio não detecta colisão enquanto transmite, o Wi-Fi **evita** a colisão (CSMA/CA, *Carrier Sense Multiple Access with Collision Avoidance*), em vez de detectá-la, como a Ethernet antiga.
+
+```mermaid
+flowchart TD
+  Q["Estação tem um quadro para enviar"] --> S{"Meio livre durante o DIFS?"}
+  S -- "não" --> W["Espera o meio ficar livre"]
+  W --> S
+  S -- "sim" --> B["Sorteia o backoff e conta<br/>só enquanto o meio está livre"]
+  B --> Z{"Contador zerou?"}
+  Z -- "não" --> B
+  Z -- "sim" --> T["Transmite"]
+  T --> K{"Chegou o ACK, depois do SIFS?"}
+  K -- "sim" --> OK["Sucesso: janela de contenção volta ao mínimo"]
+  K -- "não" --> R["Colisão ou perda: dobra a janela<br/>e tenta de novo"]
+```
+
+*Esquema 2 (disputa do meio).* Antes de transmitir, a estação ouve o meio por um intervalo (**DIFS**) e depois espera um **backoff** aleatório. O **SIFS**, mais curto, é o intervalo antes de uma resposta (como o ACK), o que garante a prioridade da resposta sobre os novos quadros. Cada quadro de dados precisa de um **ACK**: sem ele, o emissor assume que houve perda e **dobra** a janela do sorteio.
+
+### 2.5 Terminal escondido e RTS/CTS
+
+```mermaid
+sequenceDiagram
+  participant A as Estação A
+  participant P as AP
+  participant B as Estação B
+  A->>P: RTS
+  P->>A: CTS
+  Note over B: ouve o CTS, ajusta o NAV e fica em silêncio
+  A->>P: Data
+  P->>A: ACK
+```
+
+*Esquema 3 (reserva do meio).* Duas estações podem não se ouvir, mas ambas ouvem o AP: é o problema do **terminal escondido**. O **RTS** pede a reserva e o **CTS**, que o AP envia, é ouvido por todos: quem o ouve acerta o seu **NAV** (*Network Allocation Vector*, um temporizador de silêncio virtual) e espera. O custo são dois quadros extras por transmissão.
+
+### 2.6 Roaming e economia de energia
+
+- **Roaming:** quando o sinal do AP cai, o cliente procura outro AP **com o mesmo SSID** e envia uma **Reassociation** a ele. O AP novo e o antigo trocam informações pela rede cabeada. O tempo de troca é o que o usuário sente como corte em uma chamada.
+- **Economia de energia:** o cliente avisa que vai dormir com um quadro Null (bit de gerência de energia). O AP **guarda** os quadros que chegam e indica nos Beacons (no mapa de tráfego) que há dados. O cliente acorda, consulta (**PS-Poll**) e recebe os quadros guardados.
+
+### 2.7 Os canais
+
+```mermaid
+flowchart LR
+  subgraph B24["Banda de 2,4 GHz: canais de 20 MHz se sobrepõem"]
+    C1["Canal 1"]
+    C6["Canal 6"]
+    C11["Canal 11"]
+  end
+  C1 -. "sem sobreposição" .- C6
+  C6 -. "sem sobreposição" .- C11
+```
+
+*Esquema 4 (canais sem sobreposição em 2,4 GHz).* Em 2,4 GHz, os canais adjacentes se sobrepõem. Os canais **1, 6 e 11** são o conjunto que não se sobrepõe, e por isso são os preferidos. Dois APs no mesmo canal (ou em canais sobrepostos) **dividem o tempo de ar**: cada um ouve o outro e adia a transmissão, e o desempenho cai.
+
+### 2.8 Como ler o diagrama do simulador
+
+- **Topologia:** clientes, pontos de acesso e a rede cabeada. A legenda distingue gerência (beacon, probe, autenticação, associação), controle (ACK, RTS, CTS, PS-Poll), dados e Ethernet, o handshake de chaves (EAPOL-Key) e colisão, quadro perdido ou descartado.
+- **Aba Estados:** o estado do cliente (sem autenticar, autenticado, associado) a cada instante.
+- **Aba Temporização:** SIFS, DIFS, slot, backoff e a duração de cada quadro.
+- **Aba Canais:** a ocupação e a sobreposição dos canais.
+- **Aba Energia:** o ciclo de sono e vigília do cliente e os quadros guardados no AP.
+- **Modos:** *Descoberta e associação*, *Acesso ao meio*, *Roaming e energia* e *Canais*.
+
+### 2.9 Limites do modelo e do diagrama
+
+- É **um BSS por vez** (ou duas redes vizinhas, no modo Canais), um fluxo por cliente e taxas fixas: 54 Mb/s nos dados e 6 Mb/s nos quadros de controle e de gerência. Não há agregação, fragmentação, QoS (EDCA) nem camada física detalhada.
+- Os tempos usam os valores do OFDM em 5 GHz (SIFS de 16 µs e slot de 9 µs) em todos os cenários, inclusive nos de 2,4 GHz, onde o SIFS é de 10 µs. O foco são as **proporções**.
+- Os sorteios do backoff são fixos por cenário, para o resultado ser reproduzível. Os tempos de varredura, roaming e handshake são ilustrativos e menores que os de equipamentos reais.
+- Não há Wi-Fi 6, 6E e 7 (OFDMA, MU-MIMO, TWT, múltiplos links), mesh, modo ad hoc nem Wi-Fi Direct. O handshake de quatro vias é resumido, sem criptografia real, PMF, SAE e OWE.
+- Os MACs são de documentação ([RFC 9542](https://www.rfc-editor.org/rfc/rfc9542)). O texto do IEEE 802.11 não é de acesso livre: confira a edição vigente antes de citar uma cláusula.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -26,7 +144,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -46,50 +164,50 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1a](#31-descoberta-e-associação): topologia do modo "Descoberta e associação", variante a
-- [Figura 3.1b](#31-descoberta-e-associação): topologia do modo "Descoberta e associação", variante b
-- [Figura 3.2a](#32-acesso-ao-meio): topologia do modo "Acesso ao meio", variante a
-- [Figura 3.2b](#32-acesso-ao-meio): topologia do modo "Acesso ao meio", variante b
-- [Figura 3.3a](#33-roaming-e-energia): topologia do modo "Roaming e energia", variante a
-- [Figura 3.3b](#33-roaming-e-energia): topologia do modo "Roaming e energia", variante b
-- [Figura 3.4a](#34-canais): topologia do modo "Canais", variante a
-- [Figura 3.4b](#34-canais): topologia do modo "Canais", variante b
-- [Figura 3.4c](#34-canais): topologia do modo "Canais", variante c
-- [Figura 3.4d](#34-canais): topologia do modo "Canais", variante d
+- [Figura 4.1a](#41-descoberta-e-associação): topologia do modo "Descoberta e associação", variante a
+- [Figura 4.1b](#41-descoberta-e-associação): topologia do modo "Descoberta e associação", variante b
+- [Figura 4.2a](#42-acesso-ao-meio): topologia do modo "Acesso ao meio", variante a
+- [Figura 4.2b](#42-acesso-ao-meio): topologia do modo "Acesso ao meio", variante b
+- [Figura 4.3a](#43-roaming-e-energia): topologia do modo "Roaming e energia", variante a
+- [Figura 4.3b](#43-roaming-e-energia): topologia do modo "Roaming e energia", variante b
+- [Figura 4.4a](#44-canais): topologia do modo "Canais", variante a
+- [Figura 4.4b](#44-canais): topologia do modo "Canais", variante b
+- [Figura 4.4c](#44-canais): topologia do modo "Canais", variante c
+- [Figura 4.4d](#44-canais): topologia do modo "Canais", variante d
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-varredura-passiva-e-rede-aberta): sequência de "Varredura passiva e rede aberta"
-- [Figura 6.1.2](#612-varredura-ativa-com-probe-request): sequência de "Varredura ativa com Probe Request"
-- [Figura 6.1.3](#613-rede-com-ssid-oculto): sequência de "Rede com SSID oculto"
-- [Figura 6.1.4](#614-rede-protegida-a-associação-não-basta): sequência de "Rede protegida: a associação não basta"
-- [Figura 6.1.5](#615-ap-lotado-recusa-a-associação): sequência de "AP lotado recusa a associação"
-- [Figura 6.2.1](#621-esperar-sortear-o-backoff-transmitir-e-receber-o-ack): sequência de "Esperar, sortear o backoff, transmitir e receber o ACK"
-- [Figura 6.2.2](#622-o-ack-se-perde-e-o-frame-é-repetido): sequência de "O ACK se perde e o frame é repetido"
-- [Figura 6.2.3](#623-dois-clientes-escolhem-o-mesmo-slot): sequência de "Dois clientes escolhem o mesmo slot"
-- [Figura 6.2.4](#624-a-mesma-colisão-agora-com-rtscts): sequência de "A mesma colisão, agora com RTS/CTS"
-- [Figura 6.2.5](#625-nó-oculto-sem-rtscts): sequência de "Nó oculto sem RTS/CTS"
-- [Figura 6.2.6](#626-nó-oculto-com-rtscts): sequência de "Nó oculto com RTS/CTS"
-- [Figura 6.3.1](#631-o-cliente-se-afasta-e-troca-de-ap): sequência de "O cliente se afasta e troca de AP"
-- [Figura 6.3.2](#632-roaming-rápido-com-80211r): sequência de "Roaming rápido com 802.11r"
-- [Figura 6.3.3](#633-o-cliente-não-troca-de-ap): sequência de "O cliente não troca de AP"
-- [Figura 6.3.4](#634-o-ap-sugere-a-troca-80211v): sequência de "O AP sugere a troca (802.11v)"
-- [Figura 6.3.5](#635-cliente-que-acorda-a-cada-beacon): sequência de "Cliente que acorda a cada beacon"
-- [Figura 6.3.6](#636-cliente-que-acorda-a-cada-5-beacons): sequência de "Cliente que acorda a cada 5 beacons"
-- [Figura 6.4.1](#641-canais-1-e-6-independentes): sequência de "Canais 1 e 6: independentes"
-- [Figura 6.4.2](#642-mesmo-canal-as-redes-dividem-o-tempo): sequência de "Mesmo canal: as redes dividem o tempo"
-- [Figura 6.4.3](#643-canais-1-e-3-sobrepostos): sequência de "Canais 1 e 3: sobrepostos"
-- [Figura 6.4.4](#644-canais-de-40-mhz-em-24-ghz): sequência de "Canais de 40 MHz em 2,4 GHz"
+- [Figura 7.1.1](#711-varredura-passiva-e-rede-aberta): sequência de "Varredura passiva e rede aberta"
+- [Figura 7.1.2](#712-varredura-ativa-com-probe-request): sequência de "Varredura ativa com Probe Request"
+- [Figura 7.1.3](#713-rede-com-ssid-oculto): sequência de "Rede com SSID oculto"
+- [Figura 7.1.4](#714-rede-protegida-a-associação-não-basta): sequência de "Rede protegida: a associação não basta"
+- [Figura 7.1.5](#715-ap-lotado-recusa-a-associação): sequência de "AP lotado recusa a associação"
+- [Figura 7.2.1](#721-esperar-sortear-o-backoff-transmitir-e-receber-o-ack): sequência de "Esperar, sortear o backoff, transmitir e receber o ACK"
+- [Figura 7.2.2](#722-o-ack-se-perde-e-o-frame-é-repetido): sequência de "O ACK se perde e o frame é repetido"
+- [Figura 7.2.3](#723-dois-clientes-escolhem-o-mesmo-slot): sequência de "Dois clientes escolhem o mesmo slot"
+- [Figura 7.2.4](#724-a-mesma-colisão-agora-com-rtscts): sequência de "A mesma colisão, agora com RTS/CTS"
+- [Figura 7.2.5](#725-nó-oculto-sem-rtscts): sequência de "Nó oculto sem RTS/CTS"
+- [Figura 7.2.6](#726-nó-oculto-com-rtscts): sequência de "Nó oculto com RTS/CTS"
+- [Figura 7.3.1](#731-o-cliente-se-afasta-e-troca-de-ap): sequência de "O cliente se afasta e troca de AP"
+- [Figura 7.3.2](#732-roaming-rápido-com-80211r): sequência de "Roaming rápido com 802.11r"
+- [Figura 7.3.3](#733-o-cliente-não-troca-de-ap): sequência de "O cliente não troca de AP"
+- [Figura 7.3.4](#734-o-ap-sugere-a-troca-80211v): sequência de "O AP sugere a troca (802.11v)"
+- [Figura 7.3.5](#735-cliente-que-acorda-a-cada-beacon): sequência de "Cliente que acorda a cada beacon"
+- [Figura 7.3.6](#736-cliente-que-acorda-a-cada-5-beacons): sequência de "Cliente que acorda a cada 5 beacons"
+- [Figura 7.4.1](#741-canais-1-e-6-independentes): sequência de "Canais 1 e 6: independentes"
+- [Figura 7.4.2](#742-mesmo-canal-as-redes-dividem-o-tempo): sequência de "Mesmo canal: as redes dividem o tempo"
+- [Figura 7.4.3](#743-canais-1-e-3-sobrepostos): sequência de "Canais 1 e 3: sobrepostos"
+- [Figura 7.4.4](#744-canais-de-40-mhz-em-24-ghz): sequência de "Canais de 40 MHz em 2,4 GHz"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 Descoberta e associação
+### 4.1 Descoberta e associação
 
 ```mermaid
 flowchart LR
@@ -100,7 +218,7 @@ flowchart LR
   n_ap -- "cabo" --- n_lan
 ```
 
-*Figura 3.1a (Tipo A, topologia).* Elementos do modo "Descoberta e associação": Notebook (cliente (STA)); AP-01 (LabRedes, canal 6); Rede cabeada (sistema de distribuição). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.1.1 e 6.1.2; 6.1.4 e 6.1.5).
+*Figura 4.1a (Tipo A, topologia).* Elementos do modo "Descoberta e associação": Notebook (cliente (STA)); AP-01 (LabRedes, canal 6); Rede cabeada (sistema de distribuição). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.1.1 e 7.1.2; 7.1.4 e 7.1.5).
 
 ```mermaid
 flowchart LR
@@ -111,9 +229,9 @@ flowchart LR
   n_ap -- "cabo" --- n_lan
 ```
 
-*Figura 3.1b (Tipo A, topologia).* Elementos do modo "Descoberta e associação": Notebook (cliente (STA)); AP-01 (SSID oculto, canal 6); Rede cabeada (sistema de distribuição). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.1.3).
+*Figura 4.1b (Tipo A, topologia).* Elementos do modo "Descoberta e associação": Notebook (cliente (STA)); AP-01 (SSID oculto, canal 6); Rede cabeada (sistema de distribuição). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.1.3).
 
-### 3.2 Acesso ao meio
+### 4.2 Acesso ao meio
 
 ```mermaid
 flowchart LR
@@ -125,7 +243,7 @@ flowchart LR
   n_a -. "se ouvem" .- n_c
 ```
 
-*Figura 3.2a (Tipo A, topologia).* Elementos do modo "Acesso ao meio": AP-01 (ponto de acesso); Cliente A (STA); Cliente C (STA). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.2.1 a 6.2.4).
+*Figura 4.2a (Tipo A, topologia).* Elementos do modo "Acesso ao meio": AP-01 (ponto de acesso); Cliente A (STA); Cliente C (STA). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.2.1 a 7.2.4).
 
 ```mermaid
 flowchart LR
@@ -137,9 +255,9 @@ flowchart LR
   n_a -. "não se ouvem" .- n_c
 ```
 
-*Figura 3.2b (Tipo A, topologia).* Elementos do modo "Acesso ao meio": AP-01 (ponto de acesso); Cliente A (STA); Cliente C (fora do alcance de A). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.2.5 e 6.2.6).
+*Figura 4.2b (Tipo A, topologia).* Elementos do modo "Acesso ao meio": AP-01 (ponto de acesso); Cliente A (STA); Cliente C (fora do alcance de A). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.2.5 e 7.2.6).
 
-### 3.3 Roaming e energia
+### 4.3 Roaming e energia
 
 ```mermaid
 flowchart LR
@@ -153,7 +271,7 @@ flowchart LR
   n_sta -. "rádio" .- n_ap2
 ```
 
-*Figura 3.3a (Tipo A, topologia).* Elementos do modo "Roaming e energia": Rede cabeada (sistema de distribuição); AP-01 (canal 1); AP-02 (canal 6); Notebook (cliente (STA)). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.3.1 a 6.3.4).
+*Figura 4.3a (Tipo A, topologia).* Elementos do modo "Roaming e energia": Rede cabeada (sistema de distribuição); AP-01 (canal 1); AP-02 (canal 6); Notebook (cliente (STA)). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.3.1 a 7.3.4).
 
 ```mermaid
 flowchart LR
@@ -164,9 +282,9 @@ flowchart LR
   n_ap1 -- "cabo" --- n_lan
 ```
 
-*Figura 3.3b (Tipo A, topologia).* Elementos do modo "Roaming e energia": Notebook (cliente (STA)); AP-01 (ponto de acesso); Rede cabeada (origem do pacote). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.3.5 e 6.3.6).
+*Figura 4.3b (Tipo A, topologia).* Elementos do modo "Roaming e energia": Notebook (cliente (STA)); AP-01 (ponto de acesso); Rede cabeada (origem do pacote). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.3.5 e 7.3.6).
 
-### 3.4 Canais
+### 4.4 Canais
 
 ```mermaid
 flowchart LR
@@ -179,7 +297,7 @@ flowchart LR
   n_ap1 -. "independentes" .- n_ap2
 ```
 
-*Figura 3.4a (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 20 MHz); AP-02 (canal 6, 20 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.4.1).
+*Figura 4.4a (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 20 MHz); AP-02 (canal 6, 20 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.4.1).
 
 ```mermaid
 flowchart LR
@@ -192,7 +310,7 @@ flowchart LR
   n_ap1 -. "mesmo canal" .- n_ap2
 ```
 
-*Figura 3.4b (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 20 MHz); AP-02 (canal 1, 20 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.4.2).
+*Figura 4.4b (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 20 MHz); AP-02 (canal 1, 20 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.4.2).
 
 ```mermaid
 flowchart LR
@@ -205,7 +323,7 @@ flowchart LR
   n_ap1 -. "sobrepostos" .- n_ap2
 ```
 
-*Figura 3.4c (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 20 MHz); AP-02 (canal 3, 20 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.4.3).
+*Figura 4.4c (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 20 MHz); AP-02 (canal 3, 20 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.4.3).
 
 ```mermaid
 flowchart LR
@@ -218,15 +336,15 @@ flowchart LR
   n_ap1 -. "sobrepostos" .- n_ap2
 ```
 
-*Figura 3.4d (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 40 MHz); AP-02 (canal 6, 40 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.4.4).
+*Figura 4.4d (Tipo A, topologia).* Elementos do modo "Canais": Cliente 1 (rede 1); AP-01 (canal 1, 40 MHz); AP-02 (canal 6, 40 MHz); Cliente 2 (rede 2). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.4.4).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Estados (modos: Descoberta e associação; Roaming e energia), Temporização (modos: Acesso ao meio; Canais), Canais (modos: Descoberta e associação; Canais), Energia (modos: Roaming e energia), Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Descoberta
+### 6.1 Descoberta
 
 - **Tipo de varredura**. Valores: Passiva: só escuta os beacons; Ativa: envia Probe Request. Padrão: Passiva: só escuta os beacons. Modos: Descoberta e associação.
   - Como o cliente descobre os APs ao redor.
@@ -237,13 +355,13 @@ Cenário, Captura, Mensagem, Estados (modos: Descoberta e associação; Roaming 
   - Com o SSID oculto, o beacon traz o campo de nome vazio e o AP não responde a Probe Request com nome curinga. O cliente só descobre a rede se já souber o nome e perguntar por ele.
   - **Isto não é segurança:** o nome passa em claro nos Probe Requests do cliente e nos pedidos de associação. Quem escuta o ar o descobre assim que um cliente legítimo se conecta.
 
-### 5.2 Rede
+### 6.2 Rede
 
 - **Canal do AP (2,4 GHz)**. Valores: 1; 6; 11. Padrão: 6. Modos: Descoberta e associação.
   - Em qual canal o AP opera.
   - O cliente precisa procurar em todos os canais, um de cada vez. Quanto mais longe do primeiro canal o AP estiver, mais a varredura demora até achá-lo. Os canais 1, 6 e 11 são os que não se sobrepõem na faixa de 2,4 GHz com 20 MHz de largura.
 
-### 5.3 Associação
+### 6.3 Associação
 
 - **Segurança da rede**. Valores: Aberta, sem proteção; Protegida (WPA2 ou WPA3). Padrão: Aberta, sem proteção. Modos: Descoberta e associação.
   - Define o que o AP anuncia e o que acontece depois da associação.
@@ -254,7 +372,7 @@ Cenário, Captura, Mensagem, Estados (modos: Descoberta e associação; Roaming 
   - O Status Code da Association Response informa o resultado. O código 0 é sucesso. O código 17 significa que o AP não consegue tratar mais estações associadas, o que acontece quando a tabela de clientes enche ou o AP aplica um limite.
   - O cliente que recebe uma recusa continua no estado 2 e deve procurar outro AP.
 
-### 5.4 Situação
+### 6.4 Situação
 
 - **O que acontece**. Valores: Um cliente, transmissão normal; O ACK se perde; Dois clientes escolhem o mesmo slot; Nó oculto: os clientes não se ouvem. Padrão: Um cliente, transmissão normal. Modos: Acesso ao meio.
   - Quatro casos do acesso ao meio.
@@ -273,21 +391,21 @@ Cenário, Captura, Mensagem, Estados (modos: Descoberta e associação; Roaming 
   - **O AP sugere a troca:** o AP-01 pede, com o 802.11v, que o cliente vá para o AP-02.
   - **Economia de energia:** o cliente dorme e o AP guarda os frames até ele acordar.
 
-### 5.5 Roaming
+### 6.5 Roaming
 
 - **Fast BSS Transition (802.11r)**. Valores: caixa de seleção. Padrão: não. Modos: Roaming e energia.
   - Uma troca de AP mais rápida em redes protegidas.
   - Sem o 802.11r, depois de reassociar o cliente refaz o handshake de quatro vias com o novo AP, e a conexão fica parada nesse tempo.
   - Com o FT, o cliente já leva ao novo AP o material para derivar as chaves, dentro da própria autenticação e reassociação, e o handshake completo some. É mais rápido, mas exige que o AP e o cliente suportem o recurso.
 
-### 5.6 Energia
+### 6.6 Energia
 
 - **Intervalo de escuta (beacons)**. Valores: 1 (acorda a cada beacon); 3; 5. Padrão: 1 (acorda a cada beacon). Modos: Roaming e energia.
   - De quantos em quantos beacons o cliente dormindo acorda.
   - O cliente informa esse valor na associação, e o AP precisa guardar os frames por pelo menos esse tempo.
   - Um valor maior economiza energia, porque o rádio fica desligado mais tempo, mas o cliente demora mais a receber o que chegou durante o sono.
 
-### 5.7 Canais
+### 6.7 Canais
 
 - **Canal da segunda rede**. Valores: 1 (o mesmo da primeira); 3 (sobreposto); 6; 11. Padrão: 6. Modos: Canais.
   - A primeira rede usa sempre o canal 1.
@@ -297,15 +415,15 @@ Cenário, Captura, Mensagem, Estados (modos: Descoberta e associação; Roaming 
   - Quanto da faixa cada rede ocupa.
   - Canais mais largos dão taxas maiores, mas ocupam mais faixa. Na faixa de 2,4 GHz, que tem espaço para só três canais de 20 MHz sem sobreposição, usar 40 MHz faz as redes vizinhas se sobreporem.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: Descoberta e associação
+### 7.1 Modo: Descoberta e associação
 
 > **Grupo:** Descobrir e entrar na rede
 
 Um cliente Wi-Fi passa por três passos antes de usar a rede: descobrir os APs (varredura passiva ou ativa), autenticar (no 802.11, um passo de sistema aberto) e associar. O padrão descreve isso como três estados do cliente em relação ao AP.
 
-#### 6.1.1 Varredura passiva e rede aberta
+#### 7.1.1 Varredura passiva e rede aberta
 
 *Escutar, autenticar, associar e só então enviar dados.*
 
@@ -347,7 +465,7 @@ sequenceDiagram
   n_ap ->> n_lan: DHCPDISCOVER (Ethernet)
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Varredura passiva e rede aberta", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "Varredura passiva e rede aberta", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -361,7 +479,7 @@ sequenceDiagram
 
 **Por que importa.** É o caminho que todo cliente Wi-Fi percorre. Entender os três estados explica por que um cliente "conectado" ainda pode estar sem acesso.
 
-#### 6.1.2 Varredura ativa com Probe Request
+#### 7.1.2 Varredura ativa com Probe Request
 
 *Perguntar em vez de esperar.*
 
@@ -403,7 +521,7 @@ sequenceDiagram
   n_ap ->> n_lan: DHCPDISCOVER (Ethernet)
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Varredura ativa com Probe Request", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "Varredura ativa com Probe Request", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -415,7 +533,7 @@ sequenceDiagram
 
 **Por que importa.** Os celulares usam a varredura ativa para reconectar-se depressa. O efeito colateral é que os Probe Requests denunciam as redes que o aparelho já conhece.
 
-#### 6.1.3 Rede com SSID oculto
+#### 7.1.3 Rede com SSID oculto
 
 *Esconder o nome não esconde a rede.*
 
@@ -458,7 +576,7 @@ sequenceDiagram
   n_ap ->> n_lan: DHCPDISCOVER (Ethernet)
 ```
 
-*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Rede com SSID oculto", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
+*Figura 7.1.3 (Tipo B, sequência).* Mensagens do cenário "Rede com SSID oculto", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -470,7 +588,7 @@ sequenceDiagram
 
 **Por que importa.** É um erro comum tratar o SSID oculto como proteção. Além de ineficaz, ele obriga o cliente a procurar a rede por nome, o que o expõe em qualquer lugar.
 
-#### 6.1.4 Rede protegida: a associação não basta
+#### 7.1.4 Rede protegida: a associação não basta
 
 *Associado não é autorizado.*
 
@@ -509,7 +627,7 @@ sequenceDiagram
   n_ap ->> n_sta: ACK
 ```
 
-*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "Rede protegida: a associação não basta", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 11 mensagens, numeradas de 1 a 11 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
+*Figura 7.1.4 (Tipo B, sequência).* Mensagens do cenário "Rede protegida: a associação não basta", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 11 mensagens, numeradas de 1 a 11 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -525,7 +643,7 @@ sequenceDiagram
 
 O AP pode recusar a associação e diz o motivo no Status Code. O cliente continua no estado intermediário e precisa tentar outro AP.
 
-#### 6.1.5 AP lotado recusa a associação
+#### 7.1.5 AP lotado recusa a associação
 
 *O AP pode dizer não.*
 
@@ -561,7 +679,7 @@ sequenceDiagram
   n_sta ->> n_ap: ACK
 ```
 
-*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "AP lotado recusa a associação", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 9 mensagens, numeradas de 1 a 9 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
+*Figura 7.1.5 (Tipo B, sequência).* Mensagens do cenário "AP lotado recusa a associação", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 9 mensagens, numeradas de 1 a 9 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Descoberta e associação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -572,13 +690,13 @@ sequenceDiagram
 
 **Por que importa.** Explica por que um aparelho pode "ver" a rede e não conseguir entrar nela em locais lotados, como auditórios e estádios.
 
-### 6.2 Modo: Acesso ao meio
+### 7.2 Modo: Acesso ao meio
 
 > **Grupo:** CSMA/CA: o acesso normal
 
 O meio de rádio é compartilhado e o cliente não consegue ouvir enquanto fala. Por isso o Wi-Fi evita colisões (CSMA/CA) em vez de detectá-las: espera, sorteia um atraso aleatório e exige a confirmação de cada frame.
 
-#### 6.2.1 Esperar, sortear o backoff, transmitir e receber o ACK
+#### 7.2.1 Esperar, sortear o backoff, transmitir e receber o ACK
 
 *Escutar antes de falar, e esperar o ACK.*
 
@@ -607,7 +725,7 @@ sequenceDiagram
   n_ap ->> n_a: ACK
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Esperar, sortear o backoff, transmitir e receber o ACK", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Esperar, sortear o backoff, transmitir e receber o ACK", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -618,7 +736,7 @@ sequenceDiagram
 
 **Por que importa.** Todo o desempenho do Wi-Fi decorre dessas esperas: elas são a "taxa" que se paga para dividir o ar. Por isso a vazão real fica bem abaixo da taxa anunciada.
 
-#### 6.2.2 O ACK se perde e o frame é repetido
+#### 7.2.2 O ACK se perde e o frame é repetido
 
 *Sem ACK, o frame é repetido e a duplicata é descartada.*
 
@@ -650,7 +768,7 @@ sequenceDiagram
   n_ap ->> n_a: ACK
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "O ACK se perde e o frame é repetido", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "O ACK se perde e o frame é repetido", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -667,7 +785,7 @@ sequenceDiagram
 
 Quando dois clientes sorteiam o mesmo slot, os frames colidem. A resposta é o backoff exponencial: a janela dobra a cada falha, e a chance de repetir o mesmo sorteio cai.
 
-#### 6.2.3 Dois clientes escolhem o mesmo slot
+#### 7.2.3 Dois clientes escolhem o mesmo slot
 
 *Mesmo slot, mesma colisão.*
 
@@ -701,7 +819,7 @@ sequenceDiagram
   n_ap ->> n_c: ACK
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Dois clientes escolhem o mesmo slot", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 4 fases; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "Dois clientes escolhem o mesmo slot", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 4 fases; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -714,7 +832,7 @@ sequenceDiagram
 
 **Por que importa.** O backoff exponencial é o que mantém a rede estável sob carga. Quanto mais clientes, mais colisões e mais tempo desperdiçado.
 
-#### 6.2.4 A mesma colisão, agora com RTS/CTS
+#### 7.2.4 A mesma colisão, agora com RTS/CTS
 
 *Colidir com um frame curto custa pouco.*
 
@@ -751,7 +869,7 @@ sequenceDiagram
   n_ap ->> n_c: ACK
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "A mesma colisão, agora com RTS/CTS", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 4 fases; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "A mesma colisão, agora com RTS/CTS", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 4 fases; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -769,7 +887,7 @@ sequenceDiagram
 
 Dois clientes podem ouvir o AP sem ouvir um ao outro. Cada um acha que o meio está livre, e os frames colidem no AP. O RTS/CTS reduz o custo dessas colisões.
 
-#### 6.2.5 Nó oculto sem RTS/CTS
+#### 7.2.5 Nó oculto sem RTS/CTS
 
 *Quem não se ouve, colide.*
 
@@ -806,7 +924,7 @@ sequenceDiagram
   n_ap ->> n_c: ACK
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "Nó oculto sem RTS/CTS", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 5 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "Nó oculto sem RTS/CTS", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 5 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -819,7 +937,7 @@ sequenceDiagram
 
 **Por que importa.** É o problema clássico das redes sem fio. Aparece em salas grandes, depósitos e escritórios com divisórias, e se resolve com RTS/CTS, posicionamento dos APs ou mais APs.
 
-#### 6.2.6 Nó oculto com RTS/CTS
+#### 7.2.6 Nó oculto com RTS/CTS
 
 *O AP avisa quem o cliente não ouve.*
 
@@ -860,7 +978,7 @@ sequenceDiagram
   n_ap ->> n_c: ACK
 ```
 
-*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "Nó oculto com RTS/CTS", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 5 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
+*Figura 7.2.6 (Tipo B, sequência).* Mensagens do cenário "Nó oculto com RTS/CTS", na ordem do tempo, entre Cliente A, AP-01, Cliente C: 12 mensagens, numeradas de 1 a 12 na ordem da comunicação (em 5 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Acesso ao meio", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -874,13 +992,13 @@ sequenceDiagram
 
 **Por que importa.** Mostra que o AP é o ponto em comum que enxerga todos os clientes, e por isso é quem pode coordenar quem não se ouve.
 
-### 6.3 Modo: Roaming e energia
+### 7.3 Modo: Roaming e energia
 
 > **Grupo:** Roaming: trocar de AP
 
 Numa rede com vários APs, quem decide trocar de AP é o cliente. A troca exige procurar, autenticar, reassociar e, em redes protegidas, refazer as chaves, e a conexão fica parada durante esse tempo.
 
-#### 6.3.1 O cliente se afasta e troca de AP
+#### 7.3.1 O cliente se afasta e troca de AP
 
 *Para o AP novo, o cliente começa do zero.*
 
@@ -933,7 +1051,7 @@ sequenceDiagram
   n_ap2 ->> n_sta: ACK
 ```
 
-*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "O cliente se afasta e troca de AP", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 21 mensagens, numeradas de 1 a 21 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
+*Figura 7.3.1 (Tipo B, sequência).* Mensagens do cenário "O cliente se afasta e troca de AP", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 21 mensagens, numeradas de 1 a 21 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -947,7 +1065,7 @@ sequenceDiagram
 
 **Por que importa.** Quem usa chamadas de voz ou vídeo sente cada milissegundo da troca. Por isso os recursos de roaming rápido existem.
 
-#### 6.3.2 Roaming rápido com 802.11r
+#### 7.3.2 Roaming rápido com 802.11r
 
 *As chaves viajam junto com a reassociação.*
 
@@ -993,7 +1111,7 @@ sequenceDiagram
   n_ap2 ->> n_sta: ACK
 ```
 
-*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "Roaming rápido com 802.11r", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
+*Figura 7.3.2 (Tipo B, sequência).* Mensagens do cenário "Roaming rápido com 802.11r", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 17 mensagens, numeradas de 1 a 17 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1009,7 +1127,7 @@ sequenceDiagram
 
 Um cliente que não troca de AP, mesmo com sinal ruim, pesa na rede toda: o frame lento ocupa o meio por mais tempo. Os recursos 802.11k e 802.11v ajudam o AP a empurrar o cliente.
 
-#### 6.3.3 O cliente não troca de AP
+#### 7.3.3 O cliente não troca de AP
 
 *Um cliente lento atrasa todos.*
 
@@ -1043,7 +1161,7 @@ sequenceDiagram
   n_ap1 ->> n_sta: ACK
 ```
 
-*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "O cliente não troca de AP", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 7 mensagens, numeradas de 1 a 7 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
+*Figura 7.3.3 (Tipo B, sequência).* Mensagens do cenário "O cliente não troca de AP", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 7 mensagens, numeradas de 1 a 7 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1055,7 +1173,7 @@ sequenceDiagram
 
 **Por que importa.** Explica por que "uma pessoa com sinal fraco deixa a rede lenta para todos" e por que as redes corporativas empurram os clientes distantes para outro AP.
 
-#### 6.3.4 O AP sugere a troca (802.11v)
+#### 7.3.4 O AP sugere a troca (802.11v)
 
 *O AP empurra o cliente, sem forçá-lo.*
 
@@ -1111,7 +1229,7 @@ sequenceDiagram
   n_ap2 ->> n_sta: ACK
 ```
 
-*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "O AP sugere a troca (802.11v)", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 25 mensagens, numeradas de 1 a 25 na ordem da comunicação (em 7 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
+*Figura 7.3.4 (Tipo B, sequência).* Mensagens do cenário "O AP sugere a troca (802.11v)", na ordem do tempo, entre Notebook, AP-01, AP-02, Rede cabeada: 25 mensagens, numeradas de 1 a 25 na ordem da comunicação (em 7 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1127,7 +1245,7 @@ sequenceDiagram
 
 O rádio é um dos maiores consumidores de energia de um celular ou notebook. O cliente dorme e o AP guarda os frames até ele acordar para ouvir o beacon.
 
-#### 6.3.5 Cliente que acorda a cada beacon
+#### 7.3.5 Cliente que acorda a cada beacon
 
 *Dormir entre os beacons, acordar só para o que importa.*
 
@@ -1164,7 +1282,7 @@ sequenceDiagram
   n_sta ->> n_ap1: ACK
 ```
 
-*Figura 6.3.5 (Tipo B, sequência).* Mensagens do cenário "Cliente que acorda a cada beacon", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
+*Figura 7.3.5 (Tipo B, sequência).* Mensagens do cenário "Cliente que acorda a cada beacon", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1177,7 +1295,7 @@ sequenceDiagram
 
 **Por que importa.** É o que permite a um celular ficar horas conectado sem esgotar a bateria. O preço é a latência: o pacote espera o próximo beacon.
 
-#### 6.3.6 Cliente que acorda a cada 5 beacons
+#### 7.3.6 Cliente que acorda a cada 5 beacons
 
 *Mais sono, mais espera.*
 
@@ -1211,7 +1329,7 @@ sequenceDiagram
   n_sta ->> n_ap1: ACK
 ```
 
-*Figura 6.3.6 (Tipo B, sequência).* Mensagens do cenário "Cliente que acorda a cada 5 beacons", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 7 mensagens, numeradas de 1 a 7 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
+*Figura 7.3.6 (Tipo B, sequência).* Mensagens do cenário "Cliente que acorda a cada 5 beacons", na ordem do tempo, entre Notebook, AP-01, Rede cabeada: 7 mensagens, numeradas de 1 a 7 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roaming e energia", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1224,13 +1342,13 @@ sequenceDiagram
 
 **Por que importa.** Mostra a troca direta entre energia e latência, que o projetista de um dispositivo alimentado por bateria precisa escolher.
 
-### 6.4 Modo: Canais
+### 7.4 Modo: Canais
 
 > **Grupo:** Planejamento de canais
 
 Na faixa de 2,4 GHz só há três canais de 20 MHz que não se sobrepõem (1, 6 e 11). Escolher o canal de cada AP é uma decisão de planejamento que afeta a capacidade de todos os vizinhos.
 
-#### 6.4.1 Canais 1 e 6: independentes
+#### 7.4.1 Canais 1 e 6: independentes
 
 *Canais separados, redes independentes.*
 
@@ -1261,7 +1379,7 @@ sequenceDiagram
   n_ap2 ->> n_sta2: ACK
 ```
 
-*Figura 6.4.1 (Tipo B, sequência).* Mensagens do cenário "Canais 1 e 6: independentes", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
+*Figura 7.4.1 (Tipo B, sequência).* Mensagens do cenário "Canais 1 e 6: independentes", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1272,7 +1390,7 @@ sequenceDiagram
 
 **Por que importa.** É a regra prática de planejamento em 2,4 GHz: use 1, 6 e 11. Em 5 GHz há muito mais canais independentes.
 
-#### 6.4.2 Mesmo canal: as redes dividem o tempo
+#### 7.4.2 Mesmo canal: as redes dividem o tempo
 
 *Mesmo canal: uma rede espera pela outra.*
 
@@ -1302,7 +1420,7 @@ sequenceDiagram
   n_ap2 ->> n_sta2: ACK
 ```
 
-*Figura 6.4.2 (Tipo B, sequência).* Mensagens do cenário "Mesmo canal: as redes dividem o tempo", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
+*Figura 7.4.2 (Tipo B, sequência).* Mensagens do cenário "Mesmo canal: as redes dividem o tempo", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1313,7 +1431,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra que dois APs no mesmo canal não dobram a capacidade, mesmo estando em salas diferentes. Planeje canais diferentes para vizinhos.
 
-#### 6.4.3 Canais 1 e 3: sobrepostos
+#### 7.4.3 Canais 1 e 3: sobrepostos
 
 *Meio-termo é pior que o mesmo canal.*
 
@@ -1349,7 +1467,7 @@ sequenceDiagram
   n_ap2 ->> n_sta2: ACK
 ```
 
-*Figura 6.4.3 (Tipo B, sequência).* Mensagens do cenário "Canais 1 e 3: sobrepostos", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 4 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
+*Figura 7.4.3 (Tipo B, sequência).* Mensagens do cenário "Canais 1 e 3: sobrepostos", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 4 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1360,7 +1478,7 @@ sequenceDiagram
 
 **Por que importa.** É o argumento para nunca escolher canais "no meio": use o mesmo canal que o vizinho (1, 6 ou 11) ou um canal sem sobreposição, nunca o 3 ou o 8.
 
-#### 6.4.4 Canais de 40 MHz em 2,4 GHz
+#### 7.4.4 Canais de 40 MHz em 2,4 GHz
 
 *Canal largo não cabe em 2,4 GHz.*
 
@@ -1396,7 +1514,7 @@ sequenceDiagram
   n_ap2 ->> n_sta2: ACK
 ```
 
-*Figura 6.4.4 (Tipo B, sequência).* Mensagens do cenário "Canais de 40 MHz em 2,4 GHz", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 4 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
+*Figura 7.4.4 (Tipo B, sequência).* Mensagens do cenário "Canais de 40 MHz em 2,4 GHz", na ordem do tempo, entre Cliente 1, AP-01, Cliente 2, AP-02: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 4 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Canais", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1407,13 +1525,13 @@ sequenceDiagram
 
 **Por que importa.** Muitos roteadores domésticos vêm com 40 MHz em 2,4 GHz por padrão e atrapalham os vizinhos e a si mesmos. Em 2,4 GHz, prefira 20 MHz.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 Para que serve
+### 8.1 Para que serve
 
 O **IEEE 802.11** define a camada de enlace (MAC) e a camada física das redes locais sem fio, conhecidas como Wi-Fi (marca da Wi-Fi Alliance). A base é o IEEE 802.11-2020, ampliado por emendas publicadas depois (por exemplo 802.11ax-2021 e 802.11be-2024). O texto é do IEEE e não é de acesso livre: confira a edição vigente no site do IEEE antes de citar uma cláusula. Este simulador trata da **operação da camada MAC**: descobrir e entrar numa rede, disputar o meio, trocar de AP, economizar energia e escolher canais. A segurança (WPA2 e WPA3) fica para o simulador Wi-Fi: segurança.
 
-### 7.2 Os atores
+### 8.2 Os atores
 
 | Termo | Significado |
 | --- | --- |
@@ -1423,7 +1541,7 @@ O **IEEE 802.11** define a camada de enlace (MAC) e a camada física das redes l
 | SSID | o nome da rede, até 32 bytes. Vários APs com o mesmo SSID formam um ESS, em que o cliente pode circular |
 | DS | sistema de distribuição: a rede (em geral cabeada) que liga os APs entre si |
 
-### 7.3 Os três tipos de frame
+### 8.3 Os três tipos de frame
 
 | Tipo | Exemplos no simulador | Função |
 | --- | --- | --- |
@@ -1433,7 +1551,7 @@ O **IEEE 802.11** define a camada de enlace (MAC) e a camada física das redes l
 
 O cabeçalho MAC traz o Frame Control (tipo, subtipo e flags como To DS, From DS, Retry, Power Management e More Data), o Duration/ID, os endereços (RA, TA e o terceiro, que é o BSSID ou o destino) e o Sequence Control. O frame termina com o FCS (CRC-32). A aba Mensagem mostra esses campos.
 
-### 7.4 Descoberta e os três estados do cliente
+### 8.4 Descoberta e os três estados do cliente
 
 - **Beacon:** o AP anuncia a rede a cada 100 TU (1 TU = 1024 µs, ou 102,4 ms), em broadcast, sem ACK. Traz SSID, taxas, canal, capacidades, TIM e, em redes protegidas, o elemento RSN.
 - **Varredura passiva e ativa:** o cliente escuta os beacons ou envia Probe Request e recebe Probe Response. Os tempos por canal do simulador (20 ms e 110 ms) são valores típicos de implementação, não exigências do padrão.
@@ -1441,7 +1559,7 @@ O cabeçalho MAC traz o Frame Control (tipo, subtipo e flags como To DS, From DS
 - **Autenticação de sistema aberto:** dois frames (algoritmo 0). Não verifica identidade nenhuma. A autenticação de verdade vem do WPA2 e WPA3, após a associação (RSN) ou no lugar da autenticação aberta (SAE, algoritmo 3 do WPA3).
 - **Associação:** o AP atribui um AID (Association ID). O Status Code da resposta informa o resultado: 0 é sucesso e 17 é "AP incapaz de tratar mais estações". Outros códigos existem.
 
-### 7.5 Acesso ao meio: DCF (CSMA/CA)
+### 8.5 Acesso ao meio: DCF (CSMA/CA)
 
 - **Por que evitar, e não detectar:** o rádio não ouve enquanto transmite, então a colisão não é detectável. O Wi-Fi a evita (CSMA/CA) e confirma cada frame unicast com um ACK.
 - **Escuta de portadora:** física (o receptor detecta sinal no canal) e virtual (o NAV, preenchido pelo campo Duration/ID dos frames ouvidos).
@@ -1451,7 +1569,7 @@ O cabeçalho MAC traz o Frame Control (tipo, subtipo e flags como To DS, From DS
 - **RTS/CTS:** reserva o meio antes dos dados, por meio do Duration/ID. Resolve em parte o nó oculto, ao custo de dois frames a mais. Costuma ser usado só acima de um limiar de tamanho (o simulador o liga ou desliga por cenário).
 - **Duplicatas:** o receptor descarta um frame com o mesmo número de sequência e o bit Retry ligado, mas o confirma de novo.
 
-### 7.6 Roaming e mobilidade
+### 8.6 Roaming e mobilidade
 
 - É o **cliente** que decide trocar de AP. O limiar de sinal é uma escolha do driver (o simulador usa -75 dBm como exemplo).
 - **Reassociation Request:** leva o endereço do AP anterior (Current AP Address). O AP novo avisa o antigo pelo DS; o mecanismo depende do fabricante, pois a prática recomendada IEEE 802.11F foi retirada.
@@ -1459,18 +1577,18 @@ O cabeçalho MAC traz o Frame Control (tipo, subtipo e flags como To DS, From DS
 - **IEEE 802.11k e 802.11v:** o 802.11k fornece ao cliente a lista de vizinhos (Neighbor Report); o 802.11v permite ao AP sugerir a troca (BSS Transition Management).
 - O AP novo anuncia o MAC do cliente à rede cabeada para o switch atualizar a tabela (veja o simulador de Switching).
 
-### 7.7 Economia de energia
+### 8.7 Economia de energia
 
 - O cliente avisa com o bit **Power Management** (PM=1) num frame Null e passa a dormir. O AP guarda os frames dele.
 - O **TIM** (Traffic Indication Map) do beacon indica por AID quem tem frames guardados. O **DTIM** é um TIM especial, a cada vários beacons, depois do qual o AP envia os frames multicast e broadcast guardados.
 - O cliente pede o frame com um **PS-Poll**, e o bit **More Data** indica se há mais. O **Listen Interval**, informado na associação, é de quantos em quantos beacons o cliente acorda.
 - Existem mecanismos mais modernos (U-APSD, e o Target Wake Time do 802.11ax) que o simulador não representa.
 
-### 7.8 Canais em 2,4 GHz
+### 8.8 Canais em 2,4 GHz
 
 Os canais 1 a 13 têm centros espaçados de 5 MHz a partir de 2412 MHz (centro = 2407 + 5 x n MHz). Com 20 MHz de largura, só canais a 25 MHz ou mais um do outro (1, 6 e 11) não se sobrepõem. A faixa de 5 GHz e a de 6 GHz têm muito mais canais independentes. Os canais e as potências permitidos dependem do país e da regulamentação local, e o simulador não os trata.
 
-### 7.9 Riscos e defesas (nível defensivo)
+### 8.9 Riscos e defesas (nível defensivo)
 
 | Risco | Efeito | Defesa |
 | --- | --- | --- |
@@ -1480,7 +1598,7 @@ Os canais 1 a 13 têm centros espaçados de 5 MHz a partir de 2412 MHz (centro =
 | AP falso com o mesmo SSID | o cliente pode se associar ao AP errado | autenticação mútua (802.1X com validação do servidor, WPA3) e monitoramento de APs não autorizados |
 | Probe Requests com os nomes das redes salvas | revelam onde o aparelho já esteve | sistemas modernos limitam isso e usam endereços MAC aleatórios; mantenha o recurso ativo |
 
-### 7.10 O que o simulador simplifica
+### 8.10 O que o simulador simplifica
 
 - Um BSS por vez (ou duas redes vizinhas, no modo Canais), um fluxo por cliente e taxas fixas: 54 Mb/s nos dados e 6 Mb/s nos frames de controle e de gerência. Sem agregação de frames, sem fragmentação, sem QoS (EDCA) e sem camada física detalhada.
 - Os tempos usam os valores do OFDM em 5 GHz (SIFS de 16 µs, slot de 9 µs) em todos os cenários, inclusive nos de 2,4 GHz, onde o SIFS é de 10 µs. O foco são as proporções.
@@ -1492,7 +1610,7 @@ Os canais 1 a 13 têm centros espaçados de 5 MHz a partir de 2412 MHz (centro =
 - Os endereços MAC seguem a faixa de documentação ([RFC 9542](https://www.rfc-editor.org/rfc/rfc9542)).
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

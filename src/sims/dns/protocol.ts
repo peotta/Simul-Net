@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -38,6 +39,7 @@ export const dnsProtocol: ProtocolDef = {
   build: (P, sub) => buildDns(P as unknown as DnsParams, sub),
   explain: (tr, P) => explain(tr, P as unknown as DnsParams),
   reference,
+  fundamentacao,
   setup,
 };
 

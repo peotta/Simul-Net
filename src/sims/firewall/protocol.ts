@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -37,6 +38,7 @@ export const firewallProtocol: ProtocolDef = {
   build: (P, sub) => buildFirewall(P as unknown as FwParams, sub),
   explain: (tr, P) => explain(tr, P as unknown as FwParams),
   reference,
+  fundamentacao,
   setup,
 };
 

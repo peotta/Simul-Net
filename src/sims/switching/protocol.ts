@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -31,6 +32,7 @@ export const switchingProtocol: ProtocolDef = {
   build: (P, sub) => (sub === 'inu' ? buildInu(P as unknown as InuParams) : sub === 'esp' ? buildEsp(P as unknown as EspParams) : buildApr(P as unknown as AprParams)),
   explain: (tr) => explain(tr, null),
   reference,
+  fundamentacao,
   setup,
   timeLabel: (ms) => (ms >= 1000 ? (Math.round(ms / 100) / 10).toString().replace('.', ',') + ' s' : (Math.round(ms * 10) / 10).toString().replace('.', ',') + ' ms'),
 };

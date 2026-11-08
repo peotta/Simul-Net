@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -37,6 +38,7 @@ export const bgpProtocol: ProtocolDef = {
   build: (P, sub) => buildBgp(P as unknown as BgpParams, sub),
   explain: (tr) => explain(tr),
   reference,
+  fundamentacao,
   setup,
 };
 

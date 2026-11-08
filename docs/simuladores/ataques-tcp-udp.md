@@ -12,10 +12,88 @@ Laboratório defensivo com 12 ataques (SYN flood, Slowloris, RST injection, varr
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Ataques TCP | TCP SYN flood | 6.1.1 a 6.1.6 |
-| Ataques UDP | UDP flood | 6.2.1 a 6.2.6 |
+| Ataques TCP | TCP SYN flood | 7.1.1 a 7.1.6 |
+| Ataques UDP | UDP flood | 7.2.1 a 7.2.6 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O propósito deste simulador
+
+Os protocolos de transporte foram desenhados em uma internet de **confiança**: o TCP mantém **estado** em cada ponta, e o UDP aceita datagramas sem verificar a origem. Essas propriedades, úteis para o desempenho, são o que os ataques de **negação de serviço** e de **abuso de estado** exploram. O simulador mostra, em um **ambiente didático isolado** (sem tráfego real), o **efeito** de cada ataque, **por que** ele funciona e **qual defesa** o neutraliza. Os cenários ficam no nível defensivo: aviso, efeito e defesa.
+
+### 2.2 O diagrama de um ataque e das camadas de defesa
+
+```mermaid
+flowchart LR
+  A["Tráfego de ataque"] --> U["Mitigação upstream<br/>na operadora"]
+  U --> B["Filtro na borda<br/>anti-spoofing e listas de acesso"]
+  B --> F["Firewall e limite de taxa"]
+  F --> S["Servidor:<br/>proteções do sistema e da aplicação"]
+  L["Tráfego legítimo"] --> U
+  S --> V["Serviço atendido"]
+```
+
+*Esquema 1 (defesa em profundidade).* Cada pacote atravessa os controles ativos **em camadas**, e é barrado se **algum** o neutraliza. A **eficácia** de um controle é a chance de ele neutralizar um pacote sozinho. Como as camadas são tratadas como independentes, a chance total de neutralização é **1 menos o produto de (1 menos a eficácia de cada controle)**, e **não** a soma das porcentagens. O **serviço legítimo** mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura, e também quando um controle gera **falsos positivos**.
+
+### 2.3 Ataques ao TCP: abuso de estado
+
+O TCP mantém **estado** para cada conexão ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293)), e isso tem um custo que o atacante pode explorar.
+
+```mermaid
+sequenceDiagram
+  participant A as Origem do ataque
+  participant S as Servidor
+  A->>S: SYN, com origens variadas ou forjadas
+  S->>A: SYN e ACK: o servidor reserva estado e espera
+  Note over S: a fila de conexões semiabertas enche
+  A->>S: nunca completa o handshake
+  Note over S: clientes legítimos não conseguem abrir conexão
+```
+
+*Esquema 2 (esgotamento da fila de conexões semiabertas, o "SYN flood").* O servidor reserva memória a cada SYN recebido, esperando o último ACK que nunca vem. Quando a fila **enche**, os clientes legítimos são recusados ([RFC 4987](https://www.rfc-editor.org/rfc/rfc4987), seção 2). As defesas estão na seção 3 da mesma RFC: **SYN cookies** (seção 3.6, que codificam o estado na própria resposta e não reservam memória até o ACK voltar), filtros (3.1), aumento da fila (3.2), redução do tempo de espera (3.3) e firewalls e *proxies* (3.8).
+
+| Ataque | Por que funciona | Defesa |
+| --- | --- | --- |
+| Esgotamento de conexões semiabertas | o estado é reservado antes de o cliente provar que existe | SYN cookies, limite de taxa, mitigação upstream |
+| Injeção de RST | um segmento forjado com número de sequência aceitável encerra a conexão ([RFC 5961](https://www.rfc-editor.org/rfc/rfc5961)) | números de sequência validados com rigor, autenticação (TCP-AO, [RFC 5925](https://www.rfc-editor.org/rfc/rfc5925)) ou cifragem acima do TCP (TLS, SSH) |
+| Conexões lentas (esgotamento de conexões por inatividade) | cada conexão aberta e quase parada ocupa um processo ou um espaço no servidor | limites de conexão por origem, tempos máximos e servidores baseados em eventos |
+
+### 2.4 Ataques ao UDP: sem conexão, sem prova de origem
+
+```mermaid
+flowchart TD
+  F["Datagrama UDP com origem falsificada"] --> R["Servidor aberto responde<br/>a quem aparece como origem"]
+  R --> V["A vítima recebe respostas<br/>que não pediu, muito maiores que a consulta"]
+  V --> D1["Defesa na origem: filtro de ingresso, BCP 38 (RFC 2827)"]
+  V --> D2["Defesa no serviço: não responder a toda a internet,<br/>limitar a taxa de respostas"]
+  V --> D3["Defesa na vítima: mitigação upstream, FlowSpec (RFC 8955),<br/>RTBH (RFC 7999)"]
+```
+
+*Esquema 3 (reflexão e amplificação).* Como o UDP **não tem handshake**, nada prova que a origem é real. Um serviço que responde com uma mensagem **muito maior** que a consulta (amplificação) pode ser usado para voltar o tráfego contra uma terceira vítima. A defesa **mais eficaz** está na **origem**: impedir que pacotes com endereço de origem falso saiam da rede ([BCP 38](https://www.rfc-editor.org/info/bcp38)). Para quem opera o serviço, a defesa é não deixá-lo aberto à internet inteira e limitar a taxa. Para a vítima, a mitigação **upstream** na operadora (por exemplo, FlowSpec e RTBH) descarta o tráfego antes do enlace saturar. Veja também o simulador de DNS, no cenário de amplificação.
+
+| Ataque | Por que funciona | Defesa |
+| --- | --- | --- |
+| Inundação de UDP | o servidor gasta recursos com cada datagrama, sem conexão para limitar | limite de taxa, filtros, mitigação upstream |
+| Reflexão e amplificação | origem falsificada e resposta maior que a consulta | [BCP 38](https://www.rfc-editor.org/info/bcp38), serviços não abertos, limite de taxa |
+| Botnet distribuído (DDoS) | muitas origens reais, sem um endereço que se possa bloquear | mitigação upstream e capacidade (e não bloqueio de endereços) |
+
+### 2.5 Como ler o diagrama do simulador
+
+- **Topologia:** onde cada controle atua e por onde passa cada pacote. A legenda distingue ataque, neutralizado, resposta, legítimo e legítimo descartado.
+- **Aba Efeito dos controles:** quanto cada controle neutralizou, no instante atual.
+- **Aba Configuração de referência:** trechos **ilustrativos** de configuração dos controles.
+- **Aba Avaliação:** o balanço do cenário: carga, serviço legítimo, falsos positivos e os custos das defesas.
+- **Telemetria:** vale sempre **ataque rumo à vítima = neutralizados + chegaram à vítima**. Na reflexão, as requisições enviadas aos refletores aparecem **à parte**, porque não vão para a vítima, e cada uma não barrada vira várias respostas que contam como ataque rumo à vítima. A **carga** é a fração da capacidade do servidor e para em 100%: quando a demanda passa disso, o excedente aparece como requisições legítimas descartadas.
+- **Modos:** *Ataques TCP* e *Ataques UDP*.
+
+### 2.6 Limites do modelo e do diagrama
+
+- As **eficácias** dos controles, os **limiares** (60% de carga para o primeiro alerta, 85% de proteção, 30% de carga para a recuperação) e as taxas de falso positivo são valores **didáticos e subjetivos**, escolhidos para comparar cenários. Não são medições nem constam de RFC: em ambiente real dependem do equipamento, da configuração e do tráfego.
+- O sorteio usa uma **semente fixa**: o mesmo cenário com as mesmas defesas produz sempre o mesmo resultado, o que permite comparar exercícios.
+- Os trechos de configuração (nftables, Suricata, BIND, nginx, sysctl, IOS) são **exemplos ilustrativos**: confira a sintaxe e os parâmetros na documentação oficial do produto e da versão em uso antes de aplicá-los.
+- Os endereços usam as faixas de documentação da [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737), e **não há tráfego de rede real**. Os cenários ficam no **nível defensivo**.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -24,7 +102,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -44,35 +122,35 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1](#31-ataques-tcp): topologia do modo "Ataques TCP"
-- [Figura 3.2a](#32-ataques-udp): topologia do modo "Ataques UDP", variante a
-- [Figura 3.2b](#32-ataques-udp): topologia do modo "Ataques UDP", variante b
-- [Figura 3.2c](#32-ataques-udp): topologia do modo "Ataques UDP", variante c
+- [Figura 4.1](#41-ataques-tcp): topologia do modo "Ataques TCP"
+- [Figura 4.2a](#42-ataques-udp): topologia do modo "Ataques UDP", variante a
+- [Figura 4.2b](#42-ataques-udp): topologia do modo "Ataques UDP", variante b
+- [Figura 4.2c](#42-ataques-udp): topologia do modo "Ataques UDP", variante c
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-tcp-syn-flood): sequência de "TCP SYN flood"
-- [Figura 6.1.2](#612-tcp-rst-injection): sequência de "TCP RST injection"
-- [Figura 6.1.3](#613-tcp-session-hijacking): sequência de "TCP session hijacking"
-- [Figura 6.1.4](#614-tcp-ack--port-scan): sequência de "TCP ACK / port scan"
-- [Figura 6.1.5](#615-tcp-slowloris-conexões-lentas): sequência de "TCP Slowloris (conexões lentas)"
-- [Figura 6.1.6](#616-tcp-varredura-lenta-low-and-slow): sequência de "TCP varredura lenta (low and slow)"
-- [Figura 6.2.1](#621-udp-flood): sequência de "UDP flood"
-- [Figura 6.2.2](#622-udp-ddos-distribuído-botnet): sequência de "UDP DDoS distribuído (botnet)"
-- [Figura 6.2.3](#623-udp-amplification): sequência de "UDP amplification"
-- [Figura 6.2.4](#624-udp-spoofing--reflection): sequência de "UDP spoofing / reflection"
-- [Figura 6.2.5](#625-udp-port-scan): sequência de "UDP port scan"
-- [Figura 6.2.6](#626-udp-dns-water-torture): sequência de "UDP DNS water torture"
+- [Figura 7.1.1](#711-tcp-syn-flood): sequência de "TCP SYN flood"
+- [Figura 7.1.2](#712-tcp-rst-injection): sequência de "TCP RST injection"
+- [Figura 7.1.3](#713-tcp-session-hijacking): sequência de "TCP session hijacking"
+- [Figura 7.1.4](#714-tcp-ack--port-scan): sequência de "TCP ACK / port scan"
+- [Figura 7.1.5](#715-tcp-slowloris-conexões-lentas): sequência de "TCP Slowloris (conexões lentas)"
+- [Figura 7.1.6](#716-tcp-varredura-lenta-low-and-slow): sequência de "TCP varredura lenta (low and slow)"
+- [Figura 7.2.1](#721-udp-flood): sequência de "UDP flood"
+- [Figura 7.2.2](#722-udp-ddos-distribuído-botnet): sequência de "UDP DDoS distribuído (botnet)"
+- [Figura 7.2.3](#723-udp-amplification): sequência de "UDP amplification"
+- [Figura 7.2.4](#724-udp-spoofing--reflection): sequência de "UDP spoofing / reflection"
+- [Figura 7.2.5](#725-udp-port-scan): sequência de "UDP port scan"
+- [Figura 7.2.6](#726-udp-dns-water-torture): sequência de "UDP DNS water torture"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 Ataques TCP
+### 4.1 Ataques TCP
 
 ```mermaid
 flowchart LR
@@ -89,9 +167,9 @@ flowchart LR
   class n_attacker atacante
 ```
 
-*Figura 3.1 (Tipo A, topologia).* Elementos do modo "Ataques TCP": Atacante (198.51.100.x); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10). Vale para todos os cenários do modo (6.1.1 a 6.1.6).
+*Figura 4.1 (Tipo A, topologia).* Elementos do modo "Ataques TCP": Atacante (198.51.100.x); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10). Vale para todos os cenários do modo (7.1.1 a 7.1.6).
 
-### 3.2 Ataques UDP
+### 4.2 Ataques UDP
 
 ```mermaid
 flowchart LR
@@ -112,7 +190,7 @@ flowchart LR
   class n_attacker atacante
 ```
 
-*Figura 3.2a (Tipo A, topologia).* Elementos do modo "Ataques UDP": Atacante (198.51.100.x); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10); ISP (borda da origem); Refletor (192.0.2.53). Vale para os cenários (6.2.3 e 6.2.4).
+*Figura 4.2a (Tipo A, topologia).* Elementos do modo "Ataques UDP": Atacante (198.51.100.x); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10); ISP (borda da origem); Refletor (192.0.2.53). Vale para os cenários (7.2.3 e 7.2.4).
 
 ```mermaid
 flowchart LR
@@ -129,7 +207,7 @@ flowchart LR
   class n_attacker atacante
 ```
 
-*Figura 3.2b (Tipo A, topologia).* Elementos do modo "Ataques UDP": Atacante (198.51.100.x); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10). Vale para os cenários (6.2.1; 6.2.5 e 6.2.6).
+*Figura 4.2b (Tipo A, topologia).* Elementos do modo "Ataques UDP": Atacante (198.51.100.x); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10). Vale para os cenários (7.2.1; 7.2.5 e 7.2.6).
 
 ```mermaid
 flowchart LR
@@ -146,15 +224,15 @@ flowchart LR
   class n_attacker atacante
 ```
 
-*Figura 3.2c (Tipo A, topologia).* Elementos do modo "Ataques UDP": Botnet (milhares de IPs); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10). Vale para os cenários (6.2.2).
+*Figura 4.2c (Tipo A, topologia).* Elementos do modo "Ataques UDP": Botnet (milhares de IPs); Cliente (198.51.100.77); Operadora (upstream (scrubbing, FlowSpec)); FW / IDS (borda da vítima); Vítima (203.0.113.10). Vale para os cenários (7.2.2).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Efeito dos controles, Configuração de referência, Avaliação, Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Ataque
+### 6.1 Ataque
 
 - **Ataque TCP**. Valores: TCP SYN flood; TCP RST injection; TCP session hijacking; TCP ACK / port scan; TCP Slowloris (conexões lentas); TCP varredura lenta (low and slow). Padrão: TCP SYN flood. Modos: Ataques TCP.
 - **Ataque UDP**. Valores: UDP flood; UDP DDoS distribuído (botnet); UDP amplification; UDP spoofing / reflection; UDP port scan; UDP DNS water torture. Padrão: UDP flood. Modos: Ataques UDP.
@@ -165,7 +243,7 @@ Cenário, Captura, Mensagem, Efeito dos controles, Configuração de referência
   - Suba a intensidade para testar se a mesma defesa continua segurando o ataque.
 - **Ciclos simulados**. Valores: 10; 20; 30; 40. Padrão: 20. Modos: todos.
 
-### 5.2 Controles defensivos
+### 6.2 Controles defensivos
 
 - **Rate limiting**. Valores: caixa de seleção. Padrão: não. Modos: todos.
   - Limita pacotes ou conexões por origem.
@@ -208,15 +286,15 @@ Cenário, Captura, Mensagem, Efeito dos controles, Configuração de referência
   - É o único controle que escala com ataques maiores que o seu enlace.
   - Escolha "ativa desde o início" para o contrato always-on, ou "acionada depois do ciclo N" para chamar a operadora com o ataque em andamento: a regra só entra em vigor 6 ciclos depois do chamado. O RTBH descarta todo o tráfego para a vítima, inclusive o legítimo.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: Ataques TCP
+### 7.1 Modo: Ataques TCP
 
 > **Grupo:** TCP
 
 Ataques que abusam do estado da conexão TCP (fila de conexões, números de sequência, sessões abertas) ou das respostas do TCP para mapear a rede.
 
-#### 6.1.1 TCP SYN flood
+#### 7.1.1 TCP SYN flood
 
 *Milhares de SYN sem o ACK final esgotam a fila de conexões do servidor.*
 
@@ -270,7 +348,7 @@ sequenceDiagram
   n_attacker ->> n_server: SYN ×3
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "TCP SYN flood", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "TCP SYN flood", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -282,7 +360,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: SYN cookies e ajuste do backlog; Rate limiting por origem e por destino; Filtragem upstream para ataques volumétricos. Risco residual: Floods acima da capacidade do enlace exigem mitigação upstream (operadora, RTBH ou scrubbing center).
 
-#### 6.1.2 TCP RST injection
+#### 7.1.2 TCP RST injection
 
 *Um RST forjado tenta derrubar uma sessão TCP ativa.*
 
@@ -336,7 +414,7 @@ sequenceDiagram
   n_attacker ->> n_server: RST ×3
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "TCP RST injection", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "TCP RST injection", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -348,7 +426,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Validação rigorosa de sequência ([RFC 5961](https://www.rfc-editor.org/rfc/rfc5961), challenge ACK); TCP-AO ou IPsec em sessões críticas; Monitoramento de RST anômalos. Risco residual: Sessões longas e de portas previsíveis (BGP, VPN) continuam alvos; prefira TCP-AO ([RFC 5925](https://www.rfc-editor.org/rfc/rfc5925)) ou IPsec.
 
-#### 6.1.3 TCP session hijacking
+#### 7.1.3 TCP session hijacking
 
 *Segmentos forjados tentam entrar em uma sessão já estabelecida.*
 
@@ -402,7 +480,7 @@ sequenceDiagram
   n_attacker ->> n_server: DATA? ×3
 ```
 
-*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "TCP session hijacking", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
+*Figura 7.1.3 (Tipo B, sequência).* Mensagens do cenário "TCP session hijacking", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -414,7 +492,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: TLS ou SSH para autenticação e integridade; Números de sequência imprevisíveis; Firewall stateful e segmentação. Risco residual: Um atacante no caminho (MITM) vê a sequência correta e vence controles de estado; só criptografia autenticada protege a integridade.
 
-#### 6.1.4 TCP ACK / port scan
+#### 7.1.4 TCP ACK / port scan
 
 *Sondas ACK mapeiam as regras do firewall pelas respostas RST.*
 
@@ -488,7 +566,7 @@ sequenceDiagram
   n_server ->> n_attacker: RST
 ```
 
-*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "TCP ACK / port scan", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
+*Figura 7.1.4 (Tipo B, sequência).* Mensagens do cenário "TCP ACK / port scan", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -500,7 +578,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Política padrão de bloqueio; Firewall stateful para descartar ACK órfão; Correlação de varredura no IDS/IPS. Risco residual: Varreduras lentas e distribuídas passam abaixo dos limiares; mantenha inventário e exponha o mínimo.
 
-#### 6.1.5 TCP Slowloris (conexões lentas)
+#### 7.1.5 TCP Slowloris (conexões lentas)
 
 *Conexões HTTP lentas ocupam todos os workers com pouquíssimo tráfego.*
 
@@ -554,7 +632,7 @@ sequenceDiagram
   n_attacker ->> n_server: HDR ×2
 ```
 
-*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "TCP Slowloris (conexões lentas)", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação (5 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
+*Figura 7.1.5 (Tipo B, sequência).* Mensagens do cenário "TCP Slowloris (conexões lentas)", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação (5 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -566,7 +644,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Timeouts curtos de cabeçalho e corpo; Limite de conexões simultâneas por IP; Proxy reverso orientado a eventos na frente do servidor. Risco residual: Variações (R.U.D.Y., slow read) atacam o corpo da requisição e a leitura da resposta; revise todos os timeouts da aplicação.
 
-#### 6.1.6 TCP varredura lenta (low and slow)
+#### 7.1.6 TCP varredura lenta (low and slow)
 
 *Sondas espaçadas por horas passam abaixo dos limiares do IDS.*
 
@@ -612,7 +690,7 @@ sequenceDiagram
   n_server ->> n_attacker: RST
 ```
 
-*Figura 6.1.6 (Tipo B, sequência).* Mensagens do cenário "TCP varredura lenta (low and slow)", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 18 mensagens, numeradas de 1 a 18 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
+*Figura 7.1.6 (Tipo B, sequência).* Mensagens do cenário "TCP varredura lenta (low and slow)", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 18 mensagens, numeradas de 1 a 18 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques TCP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -624,13 +702,13 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Expor somente as portas necessárias; Correlação de longo prazo no SIEM (horas ou dias); Portas-armadilha (honeypots) que alertam no primeiro toque. Risco residual: Com paciência, o atacante sempre descobre as portas realmente abertas; o objetivo é reduzir a exposição e detectar cedo.
 
-### 6.2 Modo: Ataques UDP
+### 7.2 Modo: Ataques UDP
 
 > **Grupo:** UDP
 
 Ataques que exploram a falta de conexão do UDP: volume, origem falsificada, reflexão, amplificação e varredura.
 
-#### 6.2.1 UDP flood
+#### 7.2.1 UDP flood
 
 *Datagramas em alta taxa saturam a banda e a CPU da vítima.*
 
@@ -684,7 +762,7 @@ sequenceDiagram
   n_attacker ->> n_server: UDP ×3
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "UDP flood", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "UDP flood", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -696,7 +774,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Rate limiting e QoS; ACLs para serviços desnecessários; Mitigação upstream e scrubbing. Risco residual: Se o volume excede o enlace, nenhum controle local resolve: é preciso mitigação upstream (RTBH, FlowSpec, scrubbing).
 
-#### 6.2.2 UDP DDoS distribuído (botnet)
+#### 7.2.2 UDP DDoS distribuído (botnet)
 
 *Milhares de origens reais somam um volume maior que o enlace da vítima.*
 
@@ -750,7 +828,7 @@ sequenceDiagram
   n_attacker ->> n_server: UDP ×5
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "UDP DDoS distribuído (botnet)", na ordem do tempo, entre Botnet, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação (5 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "UDP DDoS distribuído (botnet)", na ordem do tempo, entre Botnet, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação (5 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -762,7 +840,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Mitigação upstream: scrubbing ou FlowSpec; Plano de resposta com a operadora definido antes do incidente; CDN e anycast para diluir o volume. Risco residual: Botnets muito grandes podem exceder até a capacidade de scrubbing contratada; anycast e CDN diluem o impacto.
 
-#### 6.2.3 UDP amplification
+#### 7.2.3 UDP amplification
 
 *Uma requisição pequena com origem falsa vira uma resposta enorme contra a vítima.*
 
@@ -838,7 +916,7 @@ sequenceDiagram
   n_reflector ->> n_server: RESPONSE ×16
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "UDP amplification", na ordem do tempo, entre Atacante, ISP, Refletor, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação (6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "UDP amplification", na ordem do tempo, entre Atacante, ISP, Refletor, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação (6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -850,7 +928,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: [BCP 38](https://www.rfc-editor.org/info/bcp38) / 84 na rede de origem; Desativar amplificadores abertos; Response Rate Limiting e filtragem upstream. Risco residual: O tráfego amplificado pode exceder o enlace da vítima; filtragem por porta de origem e scrubbing na operadora continuam necessários.
 
-#### 6.2.4 UDP spoofing / reflection
+#### 7.2.4 UDP spoofing / reflection
 
 *Terceiros são induzidos a responder à vítima, que nunca pediu nada.*
 
@@ -926,7 +1004,7 @@ sequenceDiagram
   n_reflector ->> n_server: REPLY ×8
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "UDP spoofing / reflection", na ordem do tempo, entre Atacante, ISP, Refletor, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação (5 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "UDP spoofing / reflection", na ordem do tempo, entre Atacante, ISP, Refletor, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação (5 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -938,7 +1016,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Filtragem de ingresso e egresso ([BCP 38](https://www.rfc-editor.org/info/bcp38) / 84); Validação de origem na operadora; Rate limiting nos serviços UDP. Risco residual: Enquanto houver redes sem [BCP 38](https://www.rfc-editor.org/info/bcp38), a falsificação continua possível; a vítima depende de filtragem e mitigação upstream.
 
-#### 6.2.5 UDP port scan
+#### 7.2.5 UDP port scan
 
 *Sondas UDP descobrem portas abertas pelo ICMP Port Unreachable.*
 
@@ -1012,7 +1090,7 @@ sequenceDiagram
   n_server ->> n_attacker: ICMP
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "UDP port scan", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "UDP port scan", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 46 mensagens, numeradas de 1 a 46 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -1024,7 +1102,7 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Expor somente serviços necessários; ACLs e firewall com registro; Detecção por limiar e correlação temporal. Risco residual: Serviços realmente expostos continuarão respondendo; mantenha-os atualizados e monitorados.
 
-#### 6.2.6 UDP DNS water torture
+#### 7.2.6 UDP DNS water torture
 
 *Nomes aleatórios, via resolvedores legítimos, sobrecarregam o DNS autoritativo.*
 
@@ -1078,7 +1156,7 @@ sequenceDiagram
   n_attacker ->> n_server: QNAME? ×3
 ```
 
-*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "UDP DNS water torture", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
+*Figura 7.2.6 (Tipo B, sequência).* Mensagens do cenário "UDP DNS water torture", na ordem do tempo, entre Atacante, Operadora, FW / IDS, Vítima, Cliente: 26 mensagens, numeradas de 1 a 26 na ordem da comunicação. Corresponde ao diagrama de sequência e à aba Captura, no modo "Ataques UDP", com a configuração aplicada acima.
 
 **Evidências típicas no log**
 
@@ -1090,25 +1168,25 @@ sequenceDiagram
 
 **Por que importa.** Contramedidas recomendadas: Detecção pela proporção de NXDOMAIN e filtragem pelo padrão do nome; RRL com limite de NXDOMAIN no autoritativo; Aggressive NSEC ([RFC 8198](https://www.rfc-editor.org/rfc/rfc8198)) nos resolvedores e capacidade anycast. Risco residual: Bloquear por IP derruba os resolvedores que também atendem os usuários; a defesa precisa olhar o nome consultado, não a origem.
 
-## 7. Referência
+## 8. Referência
 
 Ambiente didático isolado: todos os hosts, pacotes e resultados existem apenas neste simulador e não há tráfego de rede real. Os endereços usam as faixas de documentação da [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737).
 
-### 7.1 Como ler a simulação
+### 8.1 Como ler a simulação
 
 Cada pacote de ataque atravessa os controles ativos em camadas. A **eficácia** de um controle é a chance de ele neutralizar um pacote sozinho; controles combinados formam a **defesa em profundidade**: o pacote passa por cada camada ativa e é barrado se alguma o neutralizar, o que equivale a tratar as camadas como independentes, com chance total de neutralização 1 − Π(1 − w), onde w é a eficácia de cada controle (sem somar percentuais). O **serviço legítimo** mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura e também quando um controle gera falsos positivos.
 
 Na telemetria, vale sempre: **ataque rumo à vítima = neutralizados + chegaram à vítima**. Na reflexão, as requisições enviadas aos refletores aparecem à parte, porque não vão para a vítima; cada uma que não é barrada vira várias respostas, e são essas que contam como ataque rumo à vítima. A **carga** é a fração da capacidade do servidor e por isso para em 100%; quando a demanda passa disso, o quadro mostra também a **demanda**, e o excedente aparece como requisições legítimas descartadas.
 
-### 7.2 TCP e abuso de estado
+### 8.2 TCP e abuso de estado
 
 O TCP mantém estado e usa flags, números de sequência e confirmações. Ataques exploram filas de conexão (SYN flood, [RFC 4987](https://www.rfc-editor.org/rfc/rfc4987)), validação insuficiente de sequência (RST injection, mitigado pela [RFC 5961](https://www.rfc-editor.org/rfc/rfc5961)) ou sessões sem autenticação (sequestro). SYN cookies, firewall stateful e criptografia autenticada (TLS, SSH, TCP-AO da [RFC 5925](https://www.rfc-editor.org/rfc/rfc5925)) reduzem a superfície de ataque.
 
-### 7.3 UDP e abuso sem conexão
+### 8.3 UDP e abuso sem conexão
 
 O UDP não estabelece sessão e não confirma a origem. Isso favorece falsificação, reflexão e amplificação quando serviços respondem com muito mais dados do que recebem. Anti-spoofing na rede de origem ([BCP 38](https://www.rfc-editor.org/info/bcp38), [RFC 2827](https://www.rfc-editor.org/rfc/rfc2827)), hardening dos serviços, rate limiting e mitigação upstream são os controles essenciais.
 
-### 7.4 Onde cada controle atua
+### 8.4 Onde cada controle atua
 
 - **Borda da rede de origem:** [BCP 38](https://www.rfc-editor.org/info/bcp38) / [BCP 84](https://www.rfc-editor.org/info/bcp84) impede que pacotes com origem falsificada saiam da rede do atacante.
 - **Firewall da vítima:** firewall stateful, ACLs, rate limiting e IPS.
@@ -1116,28 +1194,28 @@ O UDP não estabelece sessão e não confirma a origem. Isso favorece falsifica�
 - **Aplicação e serviço:** TLS, SSH e configuração segura (sem recursão aberta, RRL, UDP desabilitado quando desnecessário).
 - **Operadora:** RTBH, FlowSpec e scrubbing para volumes acima do enlace.
 
-### 7.5 Ataques de baixo volume e de aplicação
+### 8.5 Ataques de baixo volume e de aplicação
 
 **Slowloris** abre conexões completas e envia cabeçalhos HTTP devagar, esgotando os workers com quase nenhum tráfego. SYN cookies, TLS e filtros da operadora não ajudam: a defesa está nos **timeouts da aplicação**, no limite de conexões simultâneas por IP e em um proxy reverso orientado a eventos. A **varredura lenta** espaça as sondas por horas e fica abaixo de qualquer limiar de IDS; só a redução da exposição, a correlação de longo prazo (SIEM) e portas-armadilha a revelam.
 
-### 7.6 Ataques volumétricos e mitigação upstream
+### 8.6 Ataques volumétricos e mitigação upstream
 
 Em um **DDoS distribuído**, cada bot usa seu IP real e envia pouco, então rate limiting por origem e anti-spoofing quase não atuam, e o enlace satura antes do firewall: descartar no firewall não devolve a banda. A resposta é **upstream**: FlowSpec ([RFC 8955](https://www.rfc-editor.org/rfc/rfc8955)) descarta só o padrão do ataque na operadora, scrubbing centers limpam o tráfego e devolvem o legítimo por túnel, e **RTBH** ([RFC 7999](https://www.rfc-editor.org/rfc/rfc7999)) descarta todo o tráfego para o /32 da vítima, o que protege o resto da rede mas completa o DoS contra aquele host. Sem contrato always-on, o acionamento leva tempo; no simulador, a mitigação ativada durante o ataque só age após alguns ciclos.
 
 No **DNS water torture**, os bots consultam nomes aleatórios por meio de resolvedores legítimos. Bloquear por IP derruba os resolvedores que também atendem os usuários (falso positivo em massa); a defesa deve olhar o nome consultado: proporção de NXDOMAIN, RRL com `nxdomains-per-second` e Aggressive NSEC ([RFC 8198](https://www.rfc-editor.org/rfc/rfc8198)) nos resolvedores.
 
-### 7.7 Ciclo de resposta a incidente
+### 8.7 Ciclo de resposta a incidente
 
 A barra de fases acompanha as fases do NIST SP 800-61r2 (substituída pela Rev. 3 em abril de 2025, alinhada ao CSF 2.0; as fases abaixo seguem a r2 por serem didáticas): **preparação** (controles ativos antes do ataque), **detecção e análise** (primeiro alerta do IDS ou carga acima de 60%), **contenção** (controles essenciais ativos e proteção de pelo menos 85%), **erradicação e recuperação** (carga de volta abaixo de 30%) e **atividade pós-incidente** (lições aprendidas na avaliação). Os indicadores **MTTD** e **MTTC** medem, em ciclos, o tempo até detectar e até conter. Observe que, sem IDS, ataques de baixo volume podem nunca ser detectados.
 
-### 7.8 Limitações e valores didáticos
+### 8.8 Limitações e valores didáticos
 
 - As **eficácias** dos controles, os **limiares** (60% de carga para o primeiro alerta, 85% de proteção, 30% de carga para a recuperação) e as taxas de falso positivo são valores **didáticos e subjetivos**, escolhidos para comparar cenários. Não são medições nem constam de RFC: em ambiente real dependem do equipamento, da configuração e do tráfego.
 - O sorteio usa uma **semente fixa**: o mesmo cenário com as mesmas defesas produz sempre o mesmo resultado, o que permite comparar exercícios.
 - Os trechos de configuração (nftables, Suricata, BIND, nginx, sysctl, IOS) são **exemplos ilustrativos**. Confira a sintaxe e os parâmetros na documentação oficial do produto e da versão em uso antes de aplicá-los.
 - Os cenários ficam no nível defensivo: aviso, efeito e defesa, sem passo a passo ofensivo.
 
-### 7.9 Roteiro de exercícios
+### 8.9 Roteiro de exercícios
 
 1. SYN flood na intensidade 4 sem defesas: anote carga e serviço legítimo. Ative só rate limiting e depois só SYN cookies. Qual protege a fila e por quê?
 2. RST injection: ative TLS / SSH e observe que a proteção não muda. Explique o motivo e qual controle resolve.
@@ -1150,7 +1228,7 @@ A barra de fases acompanha as fases do NIST SP 800-61r2 (substituída pela Rev. 
 9. Para cada cenário, encontre o menor conjunto de controles que obtém "Postura adequada".
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

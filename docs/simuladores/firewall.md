@@ -12,12 +12,92 @@ Filtro sem estado e com estado: regras, ordem de avaliação e negação implíc
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Filtro sem estado (ACL) | Ida e volta permitidas | 6.1.1 a 6.1.7 |
-| Filtro com estado | Saída permitida, retorno pela tabela | 6.2.1 a 6.2.7 |
-| Perímetro com DMZ | Internet acessa o servidor web da DMZ | 6.3.1 a 6.3.7 |
-| Forja, varredura e limite de taxa | Origem interna vinda de fora, sem filtro | 6.4.1 a 6.4.9 |
+| Filtro sem estado (ACL) | Ida e volta permitidas | 7.1.1 a 7.1.7 |
+| Filtro com estado | Saída permitida, retorno pela tabela | 7.2.1 a 7.2.7 |
+| Perímetro com DMZ | Internet acessa o servidor web da DMZ | 7.3.1 a 7.3.7 |
+| Forja, varredura e limite de taxa | Origem interna vinda de fora, sem filtro | 7.4.1 a 7.4.9 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o firewall resolve
+
+Uma rede conectada a outra (por exemplo, a internet) fica exposta a tudo o que a outra rede enviar. Um **firewall** é um **ponto de controle** entre redes: ele decide, segundo uma **política**, quais pacotes passam. A [RFC 2979](https://www.rfc-editor.org/rfc/rfc2979) descreve o comportamento esperado de firewalls na internet, e o NIST SP 800-41 Rev. 1 traz orientações sobre os tipos de firewall e a escrita da política. O simulador trata do firewall de rede, que decide pelas **camadas 3 e 4**: endereços, protocolo, portas e estado.
+
+### 2.2 O diagrama das zonas
+
+```mermaid
+flowchart LR
+  INT["Internet<br/>zona não confiável"] --> FW{"Firewall<br/>política entre zonas"}
+  FW --> DMZ["DMZ<br/>servidores públicos: web, e-mail"]
+  FW --> LAN["Rede interna<br/>zona confiável"]
+  DMZ -. "bloqueado: a DMZ não inicia<br/>conexões para a rede interna" .-> LAN
+```
+
+*Esquema 1 (zonas e fluxos).* O firewall separa **zonas** de confiança diferentes e aplica uma política a cada fluxo entre elas. A **DMZ** abriga os servidores que precisam ser acessados de fora, e **se um deles for comprometido**, o atacante ainda precisa passar pelo firewall para alcançar a rede interna.
+
+### 2.3 Filtro sem estado: a lista de regras
+
+- Cada pacote é avaliado **isoladamente**, só pelo cabeçalho: origem, destino, protocolo, portas e, no TCP, os flags.
+- As regras são percorridas **de cima para baixo**, e a **primeira que casa decide**. Regras depois dela não são consultadas.
+- Se nenhuma regra casa, vale a **política padrão** do fim da lista. **Negar o que não foi permitido** (negação implícita) é a postura mais segura.
+
+```mermaid
+flowchart TD
+  P["Pacote chega"] --> R1{"Regra 1 casa?"}
+  R1 -- "sim" --> A1["Aplica: permitir ou negar"]
+  R1 -- "não" --> R2{"Regra 2 casa?"}
+  R2 -- "sim" --> A2["Aplica"]
+  R2 -- "não" --> RN{"... demais regras"}
+  RN -- "nenhuma casa" --> DEF["Política padrão:<br/>negar tudo"]
+```
+
+*Esquema 2 (avaliação da lista).* A **ordem** das regras decide o resultado: uma regra genérica antes de uma específica a "engole". Como o filtro **não lembra dos pacotes anteriores**, o **retorno** de uma conexão precisa de uma regra própria, escrita por porta de origem ou por flag ACK. As duas são **palpites sobre o cabeçalho** que um pacote vindo de fora pode imitar.
+
+### 2.4 Filtro com estado: a tabela de conexões
+
+```mermaid
+sequenceDiagram
+  participant C as Cliente interno
+  participant F as Firewall com estado
+  participant S as Servidor externo
+  C->>F: SYN
+  Note over F: avalia as regras, permite, cria a entrada na tabela
+  F->>S: SYN
+  S->>F: SYN e ACK
+  Note over F: pertence a uma entrada da tabela: aceita
+  F->>C: SYN e ACK
+  S->>F: pacote sem conexão associada
+  Note over F: sem entrada na tabela: descarta
+```
+
+*Esquema 3 (a tabela de conexões).* O firewall com estado registra cada conexão **permitida**. Só o **primeiro pacote** (o SYN, no TCP) passa pelas regras. Os seguintes são aceitos se pertencem a uma entrada da tabela, **nos dois sentidos**, e um pacote que não pertence a nenhuma conexão é descartado. Isso resolve o problema do retorno **sem** abrir regras amplas, e é a defesa mais forte contra pacotes de resposta forjados.
+
+A tabela é finita e as entradas **expiram** por inatividade. O comportamento do TCP segue a [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), e o SYN é retransmitido com intervalos crescentes ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298)).
+
+### 2.5 Defesas de borda (nível defensivo)
+
+| Situação | O que o firewall vê | Defesa |
+| --- | --- | --- |
+| Origem forjada (por exemplo, um endereço interno chegando de fora) | endereço de origem que não pode existir naquela interface | filtro de ingresso: descartar origens inválidas ([BCP 38](https://www.rfc-editor.org/info/bcp38), [RFC 2827](https://www.rfc-editor.org/rfc/rfc2827)) |
+| Varredura de portas | muitas tentativas de conexão a portas fechadas | registrar, negar e limitar a taxa |
+| Rajada de conexões | muitos SYNs por segundo | limite de taxa por origem e proteção da tabela de conexões |
+
+### 2.6 Como ler o diagrama do simulador
+
+- **Topologia:** o firewall e as suas **zonas**. A legenda de cores distingue o pacote que chega, o encaminhado, o conteúdo cifrado e o negado ou recusado.
+- **Aba Regras:** a lista de regras, com a que casou para o pacote atual em destaque.
+- **Aba Conexões:** a tabela de conexões do firewall com estado, no instante atual.
+- **Modos:** *Filtro sem estado (ACL)*, *Filtro com estado*, *Perímetro com DMZ* e *Forja, varredura e limite de taxa*.
+
+### 2.7 Limites do modelo e do diagrama
+
+- **Não há NAT** (os endereços não são traduzidos), fragmentação, IPv6 nem opções de IP. O NAT tem simulador próprio.
+- Não há inspeção de aplicação (IPS, WAF, *proxies* e inspeção de TLS), filtragem por URL ou por usuário, desempenho, alta disponibilidade nem sincronização de tabelas.
+- A notação das regras é **genérica**, e não a sintaxe de um fabricante. Estados, prazos e comportamentos diante de pacotes inválidos variam entre produtos.
+- O SYN é retransmitido **uma** vez, depois de 1 s ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), seção 2, regra 2.1). Os sistemas reais continuam tentando com intervalos crescentes.
+- Os cenários de forja, varredura e rajada mostram o ponto de vista do **defensor** (o que o firewall vê, decide e registra), sem ensinar a executá-los.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -26,7 +106,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -46,57 +126,57 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1a](#31-filtro-sem-estado-acl): topologia do modo "Filtro sem estado (ACL)", variante a
-- [Figura 3.1b](#31-filtro-sem-estado-acl): topologia do modo "Filtro sem estado (ACL)", variante b
-- [Figura 3.2a](#32-filtro-com-estado): topologia do modo "Filtro com estado", variante a
-- [Figura 3.2b](#32-filtro-com-estado): topologia do modo "Filtro com estado", variante b
-- [Figura 3.3a](#33-perímetro-com-dmz): topologia do modo "Perímetro com DMZ", variante a
-- [Figura 3.3b](#33-perímetro-com-dmz): topologia do modo "Perímetro com DMZ", variante b
-- [Figura 3.4a](#34-forja-varredura-e-limite-de-taxa): topologia do modo "Forja, varredura e limite de taxa", variante a
-- [Figura 3.4b](#34-forja-varredura-e-limite-de-taxa): topologia do modo "Forja, varredura e limite de taxa", variante b
+- [Figura 4.1a](#41-filtro-sem-estado-acl): topologia do modo "Filtro sem estado (ACL)", variante a
+- [Figura 4.1b](#41-filtro-sem-estado-acl): topologia do modo "Filtro sem estado (ACL)", variante b
+- [Figura 4.2a](#42-filtro-com-estado): topologia do modo "Filtro com estado", variante a
+- [Figura 4.2b](#42-filtro-com-estado): topologia do modo "Filtro com estado", variante b
+- [Figura 4.3a](#43-perímetro-com-dmz): topologia do modo "Perímetro com DMZ", variante a
+- [Figura 4.3b](#43-perímetro-com-dmz): topologia do modo "Perímetro com DMZ", variante b
+- [Figura 4.4a](#44-forja-varredura-e-limite-de-taxa): topologia do modo "Forja, varredura e limite de taxa", variante a
+- [Figura 4.4b](#44-forja-varredura-e-limite-de-taxa): topologia do modo "Forja, varredura e limite de taxa", variante b
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-ida-e-volta-permitidas): sequência de "Ida e volta permitidas"
-- [Figura 6.1.2](#612-falta-a-regra-de-retorno): sequência de "Falta a regra de retorno"
-- [Figura 6.1.3](#613-ordem-invertida-das-regras): sequência de "Ordem invertida das regras"
-- [Figura 6.1.4](#614-negação-implícita-consulta-dns): sequência de "Negação implícita (consulta DNS)"
-- [Figura 6.1.5](#615-política-padrão-permitir-consulta-dns): sequência de "Política padrão permitir (consulta DNS)"
-- [Figura 6.1.6](#616-retorno-por-porta-de-origem-pacote-de-fora-passa): sequência de "Retorno por porta de origem: pacote de fora passa"
-- [Figura 6.1.7](#617-retorno-por-flag-ack): sequência de "Retorno por flag ACK"
-- [Figura 6.2.1](#621-saída-permitida-retorno-pela-tabela): sequência de "Saída permitida, retorno pela tabela"
-- [Figura 6.2.2](#622-estados-até-o-encerramento): sequência de "Estados até o encerramento"
-- [Figura 6.2.3](#623-pacotes-de-fora-sem-conexão-registrada): sequência de "Pacotes de fora sem conexão registrada"
-- [Figura 6.2.4](#624-udp-resposta-dentro-da-validade): sequência de "UDP: resposta dentro da validade"
-- [Figura 6.2.5](#625-udp-resposta-depois-da-validade): sequência de "UDP: resposta depois da validade"
-- [Figura 6.2.6](#626-icmp-ping-e-resposta-repetida): sequência de "ICMP: ping e resposta repetida"
-- [Figura 6.2.7](#627-tabela-de-conexões-cheia): sequência de "Tabela de conexões cheia"
-- [Figura 6.3.1](#631-internet-acessa-o-servidor-web-da-dmz): sequência de "Internet acessa o servidor web da DMZ"
-- [Figura 6.3.2](#632-administrador-interno-acessa-a-dmz): sequência de "Administrador interno acessa a DMZ"
-- [Figura 6.3.3](#633-internet-tenta-chegar-à-rede-interna): sequência de "Internet tenta chegar à rede interna"
-- [Figura 6.3.4](#634-dmz-tenta-chegar-à-rede-interna-negado): sequência de "DMZ tenta chegar à rede interna (negado)"
-- [Figura 6.3.5](#635-dmz-tenta-sair-para-a-internet-negado): sequência de "DMZ tenta sair para a Internet (negado)"
-- [Figura 6.3.6](#636-regra-permissiva-de-dmz-para-a-rede-interna): sequência de "Regra permissiva de DMZ para a rede interna"
-- [Figura 6.3.7](#637-saída-da-dmz-liberada-para-tcp-80-e-443): sequência de "Saída da DMZ liberada para TCP 80 e 443"
-- [Figura 6.4.1](#641-origem-interna-vinda-de-fora-sem-filtro): sequência de "Origem interna vinda de fora, sem filtro"
-- [Figura 6.4.2](#642-origem-interna-vinda-de-fora-com-filtro): sequência de "Origem interna vinda de fora, com filtro"
-- [Figura 6.4.3](#643-saída-com-origem-alheia-sem-filtro): sequência de "Saída com origem alheia, sem filtro"
-- [Figura 6.4.4](#644-saída-com-origem-alheia-com-filtro): sequência de "Saída com origem alheia, com filtro"
-- [Figura 6.4.5](#645-varredura-com-descarte-silencioso): sequência de "Varredura com descarte silencioso"
-- [Figura 6.4.6](#646-varredura-com-rejeição-por-rst): sequência de "Varredura com rejeição por RST"
-- [Figura 6.4.7](#647-rajada-sem-limite-de-taxa): sequência de "Rajada sem limite de taxa"
-- [Figura 6.4.8](#648-rajada-com-limite-de-3-por-segundo): sequência de "Rajada com limite de 3 por segundo"
-- [Figura 6.4.9](#649-conexão-https-permitida-conteúdo-cifrado): sequência de "Conexão HTTPS permitida, conteúdo cifrado"
+- [Figura 7.1.1](#711-ida-e-volta-permitidas): sequência de "Ida e volta permitidas"
+- [Figura 7.1.2](#712-falta-a-regra-de-retorno): sequência de "Falta a regra de retorno"
+- [Figura 7.1.3](#713-ordem-invertida-das-regras): sequência de "Ordem invertida das regras"
+- [Figura 7.1.4](#714-negação-implícita-consulta-dns): sequência de "Negação implícita (consulta DNS)"
+- [Figura 7.1.5](#715-política-padrão-permitir-consulta-dns): sequência de "Política padrão permitir (consulta DNS)"
+- [Figura 7.1.6](#716-retorno-por-porta-de-origem-pacote-de-fora-passa): sequência de "Retorno por porta de origem: pacote de fora passa"
+- [Figura 7.1.7](#717-retorno-por-flag-ack): sequência de "Retorno por flag ACK"
+- [Figura 7.2.1](#721-saída-permitida-retorno-pela-tabela): sequência de "Saída permitida, retorno pela tabela"
+- [Figura 7.2.2](#722-estados-até-o-encerramento): sequência de "Estados até o encerramento"
+- [Figura 7.2.3](#723-pacotes-de-fora-sem-conexão-registrada): sequência de "Pacotes de fora sem conexão registrada"
+- [Figura 7.2.4](#724-udp-resposta-dentro-da-validade): sequência de "UDP: resposta dentro da validade"
+- [Figura 7.2.5](#725-udp-resposta-depois-da-validade): sequência de "UDP: resposta depois da validade"
+- [Figura 7.2.6](#726-icmp-ping-e-resposta-repetida): sequência de "ICMP: ping e resposta repetida"
+- [Figura 7.2.7](#727-tabela-de-conexões-cheia): sequência de "Tabela de conexões cheia"
+- [Figura 7.3.1](#731-internet-acessa-o-servidor-web-da-dmz): sequência de "Internet acessa o servidor web da DMZ"
+- [Figura 7.3.2](#732-administrador-interno-acessa-a-dmz): sequência de "Administrador interno acessa a DMZ"
+- [Figura 7.3.3](#733-internet-tenta-chegar-à-rede-interna): sequência de "Internet tenta chegar à rede interna"
+- [Figura 7.3.4](#734-dmz-tenta-chegar-à-rede-interna-negado): sequência de "DMZ tenta chegar à rede interna (negado)"
+- [Figura 7.3.5](#735-dmz-tenta-sair-para-a-internet-negado): sequência de "DMZ tenta sair para a Internet (negado)"
+- [Figura 7.3.6](#736-regra-permissiva-de-dmz-para-a-rede-interna): sequência de "Regra permissiva de DMZ para a rede interna"
+- [Figura 7.3.7](#737-saída-da-dmz-liberada-para-tcp-80-e-443): sequência de "Saída da DMZ liberada para TCP 80 e 443"
+- [Figura 7.4.1](#741-origem-interna-vinda-de-fora-sem-filtro): sequência de "Origem interna vinda de fora, sem filtro"
+- [Figura 7.4.2](#742-origem-interna-vinda-de-fora-com-filtro): sequência de "Origem interna vinda de fora, com filtro"
+- [Figura 7.4.3](#743-saída-com-origem-alheia-sem-filtro): sequência de "Saída com origem alheia, sem filtro"
+- [Figura 7.4.4](#744-saída-com-origem-alheia-com-filtro): sequência de "Saída com origem alheia, com filtro"
+- [Figura 7.4.5](#745-varredura-com-descarte-silencioso): sequência de "Varredura com descarte silencioso"
+- [Figura 7.4.6](#746-varredura-com-rejeição-por-rst): sequência de "Varredura com rejeição por RST"
+- [Figura 7.4.7](#747-rajada-sem-limite-de-taxa): sequência de "Rajada sem limite de taxa"
+- [Figura 7.4.8](#748-rajada-com-limite-de-3-por-segundo): sequência de "Rajada com limite de 3 por segundo"
+- [Figura 7.4.9](#749-conexão-https-permitida-conteúdo-cifrado): sequência de "Conexão HTTPS permitida, conteúdo cifrado"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 Filtro sem estado (ACL)
+### 4.1 Filtro sem estado (ACL)
 
 ```mermaid
 flowchart LR
@@ -107,7 +187,7 @@ flowchart LR
   n_int -- "interna 192.0.2.1" --- n_fw
 ```
 
-*Figura 3.1a (Tipo A, topologia).* Elementos do modo "Filtro sem estado (ACL)": Firewall (duas zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10). Vale para os cenários (6.1.1 a 6.1.5).
+*Figura 4.1a (Tipo A, topologia).* Elementos do modo "Filtro sem estado (ACL)": Firewall (duas zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10). Vale para os cenários (7.1.1 a 7.1.5).
 
 ```mermaid
 flowchart LR
@@ -118,9 +198,9 @@ flowchart LR
   n_int -- "interna 192.0.2.1" --- n_fw
 ```
 
-*Figura 3.1b (Tipo A, topologia).* Elementos do modo "Filtro sem estado (ACL)": Firewall (duas zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10). Vale para os cenários (6.1.6 e 6.1.7).
+*Figura 4.1b (Tipo A, topologia).* Elementos do modo "Filtro sem estado (ACL)": Firewall (duas zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10). Vale para os cenários (7.1.6 e 7.1.7).
 
-### 3.2 Filtro com estado
+### 4.2 Filtro com estado
 
 ```mermaid
 flowchart LR
@@ -131,7 +211,7 @@ flowchart LR
   n_int -- "interna 192.0.2.1" --- n_fw
 ```
 
-*Figura 3.2a (Tipo A, topologia).* Elementos do modo "Filtro com estado": Firewall (duas zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10). Vale para os cenários (6.2.1 e 6.2.2; 6.2.4 a 6.2.7).
+*Figura 4.2a (Tipo A, topologia).* Elementos do modo "Filtro com estado": Firewall (duas zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10). Vale para os cenários (7.2.1 e 7.2.2; 7.2.4 a 7.2.7).
 
 ```mermaid
 flowchart LR
@@ -142,9 +222,9 @@ flowchart LR
   n_int -- "interna 192.0.2.1" --- n_fw
 ```
 
-*Figura 3.2b (Tipo A, topologia).* Elementos do modo "Filtro com estado": Firewall (duas zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10). Vale para os cenários (6.2.3).
+*Figura 4.2b (Tipo A, topologia).* Elementos do modo "Filtro com estado": Firewall (duas zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10). Vale para os cenários (7.2.3).
 
-### 3.3 Perímetro com DMZ
+### 4.3 Perímetro com DMZ
 
 ```mermaid
 flowchart LR
@@ -159,7 +239,7 @@ flowchart LR
   n_web -- "DMZ 198.51.100.1" --- n_fw
 ```
 
-*Figura 3.3a (Tipo A, topologia).* Elementos do modo "Perímetro com DMZ": Firewall (três zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (6.3.1; 6.3.3).
+*Figura 4.3a (Tipo A, topologia).* Elementos do modo "Perímetro com DMZ": Firewall (três zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (7.3.1; 7.3.3).
 
 ```mermaid
 flowchart LR
@@ -174,9 +254,9 @@ flowchart LR
   n_web -- "DMZ 198.51.100.1" --- n_fw
 ```
 
-*Figura 3.3b (Tipo A, topologia).* Elementos do modo "Perímetro com DMZ": Firewall (três zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (6.3.2; 6.3.4 a 6.3.7).
+*Figura 4.3b (Tipo A, topologia).* Elementos do modo "Perímetro com DMZ": Firewall (três zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (7.3.2; 7.3.4 a 7.3.7).
 
-### 3.4 Forja, varredura e limite de taxa
+### 4.4 Forja, varredura e limite de taxa
 
 ```mermaid
 flowchart LR
@@ -191,7 +271,7 @@ flowchart LR
   n_web -- "DMZ 198.51.100.1" --- n_fw
 ```
 
-*Figura 3.4a (Tipo A, topologia).* Elementos do modo "Forja, varredura e limite de taxa": Firewall (três zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (6.4.1 e 6.4.2; 6.4.5 a 6.4.9).
+*Figura 4.4a (Tipo A, topologia).* Elementos do modo "Forja, varredura e limite de taxa": Firewall (três zonas); Cliente externo (203.0.113.10); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (7.4.1 e 7.4.2; 7.4.5 a 7.4.9).
 
 ```mermaid
 flowchart LR
@@ -206,21 +286,21 @@ flowchart LR
   n_web -- "DMZ 198.51.100.1" --- n_fw
 ```
 
-*Figura 3.4b (Tipo A, topologia).* Elementos do modo "Forja, varredura e limite de taxa": Firewall (três zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (6.4.3 e 6.4.4).
+*Figura 4.4b (Tipo A, topologia).* Elementos do modo "Forja, varredura e limite de taxa": Firewall (três zonas); Servidor externo (203.0.113.50); Host interno (192.0.2.10); Servidor interno (192.0.2.20); Servidor web (198.51.100.80). Vale para os cenários (7.4.3 e 7.4.4).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Regras, Conexões (modos: Filtro com estado; Perímetro com DMZ; Forja, varredura e limite de taxa), Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Rede
+### 6.1 Rede
 
 - **RTT (ms)**. Valores: 2; 10; 20; 50; 100. Padrão: 20. Modos: todos.
   - Tempo de ida e volta entre as pontas.
   - Não muda a decisão do firewall, só os tempos mostrados. Cada pacote leva meio RTT para ir de uma ponta a outra, passando pelo firewall.
 
-### 5.2 Tráfego
+### 6.2 Tráfego
 
 - **O que acontece**. Valores: Host interno abre uma conexão TCP para a porta 443; Host interno faz uma consulta DNS (UDP 53); Pacote de fora usa a porta de origem 443 e vai à porta 22 do host interno. Padrão: Host interno abre uma conexão TCP para a porta 443. Modos: Filtro sem estado (ACL).
   - Qual pacote ou conexão a lista de regras vai avaliar.
@@ -251,7 +331,7 @@ Cenário, Captura, Mensagem, Regras, Conexões (modos: Filtro com estado; Perím
   - **Rajada:** o limite de novas conexões por segundo.
   - **Conexão cifrada:** o que um firewall de camadas 3 e 4 não consegue ver.
 
-### 5.3 Lista de regras
+### 6.3 Lista de regras
 
 - **Regra de retorno (respostas de fora)**. Valores: Permitir TCP com porta de origem 443 para a rede interna; Permitir TCP com o flag ACK para a rede interna; Sem regra de retorno. Padrão: Permitir TCP com porta de origem 443 para a rede interna. Modos: Filtro sem estado (ACL).
   - Como um filtro sem estado aceita as respostas.
@@ -268,13 +348,13 @@ Cenário, Captura, Mensagem, Regras, Conexões (modos: Filtro com estado; Perím
   - **Negar:** só passa o que foi permitido de forma explícita. É a postura recomendada.
   - **Permitir:** só é bloqueado o que foi listado. Qualquer serviço esquecido na lista fica exposto.
 
-### 5.4 Tabela de conexões
+### 6.4 Tabela de conexões
 
 - **Tamanho da tabela (fluxo de tabela cheia)** (ajuste avançado). Valores: 3 entradas; 4 entradas; 6 entradas. Padrão: 4 entradas. Modos: Filtro com estado.
   - Só vale para o fluxo de tabela cheia.
   - Todo firewall com estado tem um limite de entradas. O simulador usa valores minúsculos para que o esgotamento apareça em poucos pacotes; nos equipamentos reais o limite é de milhares a milhões.
 
-### 5.5 Regras entre zonas
+### 6.5 Regras entre zonas
 
 - **Da DMZ para a rede interna**. Valores: Negar; Permitir qualquer protocolo (regra permissiva demais). Padrão: Negar. Modos: Perímetro com DMZ.
   - A regra que decide se um servidor comprometido alcança a rede interna.
@@ -285,7 +365,7 @@ Cenário, Captura, Mensagem, Regras, Conexões (modos: Filtro com estado; Perím
   - Um servidor público costuma só responder a pedidos, sem iniciar conexões. Negar a saída limita o que um servidor comprometido consegue baixar ou enviar para fora.
   - Permitir 80 e 443 é comum para atualizações, mas abre um caminho de saída.
 
-### 5.6 Defesas
+### 6.6 Defesas
 
 - **Filtro de origem (anti-spoofing)**. Valores: caixa de seleção. Padrão: não. Modos: Forja, varredura e limite de taxa.
   - Confere se o endereço de origem combina com a interface de entrada.
@@ -301,15 +381,15 @@ Cenário, Captura, Mensagem, Regras, Conexões (modos: Filtro com estado; Perím
   - Ligado, a regra aceita até 3 pedidos de conexão por segundo de cada origem. Os excedentes são negados até a janela seguinte.
   - Reduz o impacto de rajadas de pedidos, mas não substitui as defesas do próprio servidor.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: Filtro sem estado (ACL)
+### 7.1 Modo: Filtro sem estado (ACL)
 
 > **Grupo:** Regras de ida e de volta
 
 Um filtro sem estado avalia cada pacote isolado, só pelo que está no cabeçalho. Uma conexão tem dois sentidos, e cada sentido precisa de uma regra.
 
-#### 6.1.1 Ida e volta permitidas
+#### 7.1.1 Ida e volta permitidas
 
 *Uma regra para a ida e outra para o retorno.*
 
@@ -345,7 +425,7 @@ sequenceDiagram
   n_fw ->> n_int: [cifrado] Resposta (HTTPS)
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Ida e volta permitidas", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "Ida e volta permitidas", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -358,7 +438,7 @@ sequenceDiagram
 
 **Por que importa.** É o funcionamento esperado, e serve de referência para ver o que muda quando uma regra falta, está fora de ordem ou é permissiva demais.
 
-#### 6.1.2 Falta a regra de retorno
+#### 7.1.2 Falta a regra de retorno
 
 *Sem regra de retorno, a resposta é negada.*
 
@@ -389,7 +469,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN+ACK
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Falta a regra de retorno", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "Falta a regra de retorno", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -405,7 +485,7 @@ sequenceDiagram
 
 A lista é percorrida de cima para baixo, e a primeira regra que casa decide. Se nenhuma casa, vale a política padrão do fim da lista.
 
-#### 6.1.3 Ordem invertida das regras
+#### 7.1.3 Ordem invertida das regras
 
 *A regra específica fica depois da genérica e nunca é usada.*
 
@@ -432,7 +512,7 @@ sequenceDiagram
   n_int -x n_fw: SYN
 ```
 
-*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Ordem invertida das regras", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.3 (Tipo B, sequência).* Mensagens do cenário "Ordem invertida das regras", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -443,7 +523,7 @@ sequenceDiagram
 
 **Por que importa.** Ao revisar uma lista, vale perguntar de cada regra se algum pacote chega a ela. Regras nunca usadas indicam ordem errada ou regra desnecessária.
 
-#### 6.1.4 Negação implícita (consulta DNS)
+#### 7.1.4 Negação implícita (consulta DNS)
 
 *Sem regra para UDP 53, a política padrão nega.*
 
@@ -469,7 +549,7 @@ sequenceDiagram
   n_int -x n_fw: Consulta DNS
 ```
 
-*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "Negação implícita (consulta DNS)", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.4 (Tipo B, sequência).* Mensagens do cenário "Negação implícita (consulta DNS)", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -479,7 +559,7 @@ sequenceDiagram
 
 **Por que importa.** A negação implícita é a postura mais segura: esquecer uma regra deixa algo indisponível (um problema que aparece e é corrigido), em vez de deixar algo exposto sem que ninguém perceba.
 
-#### 6.1.5 Política padrão permitir (consulta DNS)
+#### 7.1.5 Política padrão permitir (consulta DNS)
 
 *Com política permitir, passa tudo que não foi listado.*
 
@@ -507,7 +587,7 @@ sequenceDiagram
   n_fw ->> n_int: Resposta DNS
 ```
 
-*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "Política padrão permitir (consulta DNS)", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.5 (Tipo B, sequência).* Mensagens do cenário "Política padrão permitir (consulta DNS)", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -522,7 +602,7 @@ sequenceDiagram
 
 Sem memória das conexões, o filtro precisa adivinhar, pelo cabeçalho, quais pacotes são respostas. Qualquer palpite escrito em regra pode ser imitado.
 
-#### 6.1.6 Retorno por porta de origem: pacote de fora passa
+#### 7.1.6 Retorno por porta de origem: pacote de fora passa
 
 *Uma regra por porta de origem não prova que o pacote é uma resposta.*
 
@@ -553,7 +633,7 @@ sequenceDiagram
   n_fw ->> n_int: ACK
 ```
 
-*Figura 6.1.6 (Tipo B, sequência).* Mensagens do cenário "Retorno por porta de origem: pacote de fora passa", na ordem do tempo, entre Cliente externo, Firewall, Host interno: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.6 (Tipo B, sequência).* Mensagens do cenário "Retorno por porta de origem: pacote de fora passa", na ordem do tempo, entre Cliente externo, Firewall, Host interno: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -565,7 +645,7 @@ sequenceDiagram
 
 **Por que importa.** O limite do filtro sem estado não está em uma regra mal escrita, e sim na falta de memória. A defesa é um filtro com estado, que só aceita retorno de conexão que ele viu começar.
 
-#### 6.1.7 Retorno por flag ACK
+#### 7.1.7 Retorno por flag ACK
 
 *Exigir ACK barra o pedido de conexão, mas não resolve tudo.*
 
@@ -590,7 +670,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN
 ```
 
-*Figura 6.1.7 (Tipo B, sequência).* Mensagens do cenário "Retorno por flag ACK", na ordem do tempo, entre Cliente externo, Firewall, Host interno: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
+*Figura 7.1.7 (Tipo B, sequência).* Mensagens do cenário "Retorno por flag ACK", na ordem do tempo, entre Cliente externo, Firewall, Host interno: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro sem estado (ACL)", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -600,13 +680,13 @@ sequenceDiagram
 
 **Por que importa.** O flag ACK é uma melhora real e barata, mas continua sendo um palpite sobre o cabeçalho. Só a tabela de conexões responde com certeza se o pacote pertence a uma conexão.
 
-### 6.2 Modo: Filtro com estado
+### 7.2 Modo: Filtro com estado
 
 > **Grupo:** Conexões TCP
 
 O firewall com estado registra a conexão quando vê o pedido e reconhece as respostas pela tabela. Só o início da conexão passa pelas regras.
 
-#### 6.2.1 Saída permitida, retorno pela tabela
+#### 7.2.1 Saída permitida, retorno pela tabela
 
 *O SYN cria a entrada; as respostas passam por ela.*
 
@@ -642,7 +722,7 @@ sequenceDiagram
   n_fw ->> n_int: [cifrado] Resposta (HTTPS)
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Saída permitida, retorno pela tabela", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Saída permitida, retorno pela tabela", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -655,7 +735,7 @@ sequenceDiagram
 
 **Por que importa.** A tabela elimina a regra de retorno e, com ela, o palpite por porta ou flag: só volta o que tem uma conexão aberta de dentro.
 
-#### 6.2.2 Estados até o encerramento
+#### 7.2.2 Estados até o encerramento
 
 *Da abertura à expiração: SYN_SENT até TIME_WAIT.*
 
@@ -698,7 +778,7 @@ sequenceDiagram
   n_fw ->> n_ext: ACK
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Estados até o encerramento", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 16 mensagens, numeradas de 1 a 16 na ordem da comunicação (em 4 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "Estados até o encerramento", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 16 mensagens, numeradas de 1 a 16 na ordem da comunicação (em 4 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -714,7 +794,7 @@ sequenceDiagram
 
 Um pacote que não pertence a nenhuma conexão registrada, e que não é um pedido novo, não tem motivo para entrar.
 
-#### 6.2.3 Pacotes de fora sem conexão registrada
+#### 7.2.3 Pacotes de fora sem conexão registrada
 
 *Resposta sem pedido é pacote fora de estado.*
 
@@ -742,7 +822,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Pacotes de fora sem conexão registrada", na ordem do tempo, entre Host interno, Firewall, Cliente externo: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "Pacotes de fora sem conexão registrada", na ordem do tempo, entre Host interno, Firewall, Cliente externo: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -758,7 +838,7 @@ sequenceDiagram
 
 UDP e ICMP não têm conexão, então o firewall associa a resposta ao pedido por endereços, portas ou identificador, durante um tempo limitado.
 
-#### 6.2.4 UDP: resposta dentro da validade
+#### 7.2.4 UDP: resposta dentro da validade
 
 *A resposta UDP é aceita por casar com a consulta.*
 
@@ -787,7 +867,7 @@ sequenceDiagram
   n_fw ->> n_int: Resposta DNS
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "UDP: resposta dentro da validade", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "UDP: resposta dentro da validade", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -798,7 +878,7 @@ sequenceDiagram
 
 **Por que importa.** O UDP não tem conexão, mas o firewall cria uma pseudoconexão. É o que permite o DNS funcionar sem abrir o UDP de fora para dentro.
 
-#### 6.2.5 UDP: resposta depois da validade
+#### 7.2.5 UDP: resposta depois da validade
 
 *Resposta depois da validade encontra a entrada expirada.*
 
@@ -827,7 +907,7 @@ sequenceDiagram
   n_ext -x n_fw: Resposta DNS
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "UDP: resposta depois da validade", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 2 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "UDP: resposta depois da validade", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 2 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -838,7 +918,7 @@ sequenceDiagram
 
 **Por que importa.** O prazo de UDP é um compromisso: curto demais derruba respostas lentas, longo demais ocupa a tabela. Servidores lentos ou distantes mostram o efeito.
 
-#### 6.2.6 ICMP: ping e resposta repetida
+#### 7.2.6 ICMP: ping e resposta repetida
 
 *O Echo Reply é associado ao pedido pelo identificador.*
 
@@ -869,7 +949,7 @@ sequenceDiagram
   n_ext -x n_fw: Echo Reply
 ```
 
-*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "ICMP: ping e resposta repetida", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 2 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.6 (Tipo B, sequência).* Mensagens do cenário "ICMP: ping e resposta repetida", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 2 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -885,7 +965,7 @@ sequenceDiagram
 
 A tabela de conexões é um recurso finito. Quem consegue enchê-la nega serviço a todos os outros.
 
-#### 6.2.7 Tabela de conexões cheia
+#### 7.2.7 Tabela de conexões cheia
 
 *Entradas semiabertas ocupam a tabela até o limite.*
 
@@ -920,7 +1000,7 @@ sequenceDiagram
   n_int -x n_fw: SYN
 ```
 
-*Figura 6.2.7 (Tipo B, sequência).* Mensagens do cenário "Tabela de conexões cheia", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
+*Figura 7.2.7 (Tipo B, sequência).* Mensagens do cenário "Tabela de conexões cheia", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Filtro com estado", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -931,13 +1011,13 @@ sequenceDiagram
 
 **Por que importa.** O esgotamento da tabela é uma forma de negação de serviço. As defesas são limites por origem, prazos curtos para entradas semiabertas e o dimensionamento da tabela.
 
-### 6.3 Modo: Perímetro com DMZ
+### 7.3 Modo: Perímetro com DMZ
 
 > **Grupo:** Acessos permitidos
 
 A política de um perímetro com DMZ lista poucos caminhos permitidos: o serviço público, de fora para a DMZ, e a administração, de dentro para a DMZ.
 
-#### 6.3.1 Internet acessa o servidor web da DMZ
+#### 7.3.1 Internet acessa o servidor web da DMZ
 
 *O serviço público é o único acesso de fora.*
 
@@ -973,7 +1053,7 @@ sequenceDiagram
   n_fw ->> n_ext: [cifrado] Resposta (HTTPS)
 ```
 
-*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "Internet acessa o servidor web da DMZ", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.1 (Tipo B, sequência).* Mensagens do cenário "Internet acessa o servidor web da DMZ", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -984,7 +1064,7 @@ sequenceDiagram
 
 **Por que importa.** A DMZ concentra o que precisa ser acessível de fora. Quanto menos caminhos permitidos, menos o que se precisa vigiar.
 
-#### 6.3.2 Administrador interno acessa a DMZ
+#### 7.3.2 Administrador interno acessa a DMZ
 
 *De dentro para a DMZ pode; o inverso, não.*
 
@@ -1019,7 +1099,7 @@ sequenceDiagram
   n_fw ->> n_int: [cifrado] Sessão (SSH)
 ```
 
-*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "Administrador interno acessa a DMZ", na ordem do tempo, entre Host interno, Firewall, Servidor web: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.2 (Tipo B, sequência).* Mensagens do cenário "Administrador interno acessa a DMZ", na ordem do tempo, entre Host interno, Firewall, Servidor web: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1034,7 +1114,7 @@ sequenceDiagram
 
 O que não está permitido é negado. A DMZ existe para que o comprometimento de um servidor exposto não alcance a rede interna.
 
-#### 6.3.3 Internet tenta chegar à rede interna
+#### 7.3.3 Internet tenta chegar à rede interna
 
 *Sem regra de fora para dentro, vale a negação.*
 
@@ -1060,7 +1140,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN
 ```
 
-*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "Internet tenta chegar à rede interna", na ordem do tempo, entre Cliente externo, Firewall, Host interno: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.3 (Tipo B, sequência).* Mensagens do cenário "Internet tenta chegar à rede interna", na ordem do tempo, entre Cliente externo, Firewall, Host interno: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1071,7 +1151,7 @@ sequenceDiagram
 
 **Por que importa.** A rede interna não precisa de nenhum serviço exposto à Internet. Qualquer porta interna alcançável de fora é uma decisão consciente, e não um efeito colateral.
 
-#### 6.3.4 DMZ tenta chegar à rede interna (negado)
+#### 7.3.4 DMZ tenta chegar à rede interna (negado)
 
 *A regra DMZ para interna nega: o dano fica contido.*
 
@@ -1098,7 +1178,7 @@ sequenceDiagram
   n_web -x n_fw: SYN
 ```
 
-*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "DMZ tenta chegar à rede interna (negado)", na ordem do tempo, entre Servidor web, Firewall, Servidor interno: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.4 (Tipo B, sequência).* Mensagens do cenário "DMZ tenta chegar à rede interna (negado)", na ordem do tempo, entre Servidor web, Firewall, Servidor interno: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1109,7 +1189,7 @@ sequenceDiagram
 
 **Por que importa.** O objetivo não é impedir o comprometimento do servidor, e sim impedir que ele se torne ponto de partida para a rede interna.
 
-#### 6.3.5 DMZ tenta sair para a Internet (negado)
+#### 7.3.5 DMZ tenta sair para a Internet (negado)
 
 *O filtro de saída limita o que o servidor comprometido faz.*
 
@@ -1135,7 +1215,7 @@ sequenceDiagram
   n_web -x n_fw: SYN
 ```
 
-*Figura 6.3.5 (Tipo B, sequência).* Mensagens do cenário "DMZ tenta sair para a Internet (negado)", na ordem do tempo, entre Servidor web, Firewall, Servidor externo: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.5 (Tipo B, sequência).* Mensagens do cenário "DMZ tenta sair para a Internet (negado)", na ordem do tempo, entre Servidor web, Firewall, Servidor externo: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase; 2 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1150,7 +1230,7 @@ sequenceDiagram
 
 Regras escritas por comodidade desfazem o isolamento que a estrutura de zonas oferece.
 
-#### 6.3.6 Regra permissiva de DMZ para a rede interna
+#### 7.3.6 Regra permissiva de DMZ para a rede interna
 
 *Uma regra permissiva desfaz o isolamento da DMZ.*
 
@@ -1186,7 +1266,7 @@ sequenceDiagram
   n_fw ->> n_web: Resultado
 ```
 
-*Figura 6.3.6 (Tipo B, sequência).* Mensagens do cenário "Regra permissiva de DMZ para a rede interna", na ordem do tempo, entre Servidor web, Firewall, Servidor interno: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.6 (Tipo B, sequência).* Mensagens do cenário "Regra permissiva de DMZ para a rede interna", na ordem do tempo, entre Servidor web, Firewall, Servidor interno: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1197,7 +1277,7 @@ sequenceDiagram
 
 **Por que importa.** Regras amplas feitas para resolver um problema pontual costumam ficar. O caminho necessário é restrito (um host, uma porta), e não "qualquer protocolo".
 
-#### 6.3.7 Saída da DMZ liberada para TCP 80 e 443
+#### 7.3.7 Saída da DMZ liberada para TCP 80 e 443
 
 *Saída liberada: o servidor comprometido também sai.*
 
@@ -1227,7 +1307,7 @@ sequenceDiagram
   n_fw ->> n_ext: ACK
 ```
 
-*Figura 6.3.7 (Tipo B, sequência).* Mensagens do cenário "Saída da DMZ liberada para TCP 80 e 443", na ordem do tempo, entre Servidor web, Firewall, Servidor externo: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
+*Figura 7.3.7 (Tipo B, sequência).* Mensagens do cenário "Saída da DMZ liberada para TCP 80 e 443", na ordem do tempo, entre Servidor web, Firewall, Servidor externo: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Perímetro com DMZ", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1237,13 +1317,13 @@ sequenceDiagram
 
 **Por que importa.** Liberar 80 e 443 para a saída é comum, mas é um caminho aberto. Restringir os destinos (por exemplo, o repositório de atualizações) reduz o risco.
 
-### 6.4 Modo: Forja, varredura e limite de taxa
+### 7.4 Modo: Forja, varredura e limite de taxa
 
 > **Grupo:** Origem forjada
 
 O endereço de origem de um pacote IP não é autenticado. O filtro de origem confere se ele é plausível para a interface por onde o pacote passa. Na saída, é a recomendação do [BCP 38](https://www.rfc-editor.org/info/bcp38).
 
-#### 6.4.1 Origem interna vinda de fora, sem filtro
+#### 7.4.1 Origem interna vinda de fora, sem filtro
 
 *Sem filtro de origem, uma origem interna vinda de fora é aceita.*
 
@@ -1276,7 +1356,7 @@ sequenceDiagram
   n_fw ->> n_web: RST
 ```
 
-*Figura 6.4.1 (Tipo B, sequência).* Mensagens do cenário "Origem interna vinda de fora, sem filtro", na ordem do tempo, entre Cliente externo, Firewall, Servidor web, Host interno: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.1 (Tipo B, sequência).* Mensagens do cenário "Origem interna vinda de fora, sem filtro", na ordem do tempo, entre Cliente externo, Firewall, Servidor web, Host interno: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1288,7 +1368,7 @@ sequenceDiagram
 
 **Por que importa.** Regras que olham só o endereço presumem que ele é verdadeiro. O filtro de origem conserta a premissa na entrada da rede.
 
-#### 6.4.2 Origem interna vinda de fora, com filtro
+#### 7.4.2 Origem interna vinda de fora, com filtro
 
 *O filtro de origem nega antes de qualquer regra.*
 
@@ -1314,7 +1394,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN
 ```
 
-*Figura 6.4.2 (Tipo B, sequência).* Mensagens do cenário "Origem interna vinda de fora, com filtro", na ordem do tempo, entre Cliente externo, Firewall, Servidor web, Host interno: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.2 (Tipo B, sequência).* Mensagens do cenário "Origem interna vinda de fora, com filtro", na ordem do tempo, entre Cliente externo, Firewall, Servidor web, Host interno: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1324,7 +1404,7 @@ sequenceDiagram
 
 **Por que importa.** É uma verificação simples e barata, que elimina uma classe inteira de pacotes antes de qualquer regra.
 
-#### 6.4.3 Saída com origem alheia, sem filtro
+#### 7.4.3 Saída com origem alheia, sem filtro
 
 *Sem filtro, a regra de saída deixa passar origem alheia.*
 
@@ -1350,7 +1430,7 @@ sequenceDiagram
   n_fw ->> n_ext: UDP 53 (origem forjada)
 ```
 
-*Figura 6.4.3 (Tipo B, sequência).* Mensagens do cenário "Saída com origem alheia, sem filtro", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.3 (Tipo B, sequência).* Mensagens do cenário "Saída com origem alheia, sem filtro", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1360,7 +1440,7 @@ sequenceDiagram
 
 **Por que importa.** Uma rede que deixa sair pacotes com origem forjada ajuda quem os usa contra terceiros. Cada rede é a melhor posição para impedir o que parte dela.
 
-#### 6.4.4 Saída com origem alheia, com filtro
+#### 7.4.4 Saída com origem alheia, com filtro
 
 *O filtro de saída é a medida central do [BCP 38](https://www.rfc-editor.org/info/bcp38).*
 
@@ -1385,7 +1465,7 @@ sequenceDiagram
   n_int -x n_fw: UDP 53 (origem forjada)
 ```
 
-*Figura 6.4.4 (Tipo B, sequência).* Mensagens do cenário "Saída com origem alheia, com filtro", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.4 (Tipo B, sequência).* Mensagens do cenário "Saída com origem alheia, com filtro", na ordem do tempo, entre Host interno, Firewall, Servidor externo: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1399,7 +1479,7 @@ sequenceDiagram
 
 Quem sonda portas aprende com as respostas, ou com o silêncio. O firewall escolhe quanto revelar.
 
-#### 6.4.5 Varredura com descarte silencioso
+#### 7.4.5 Varredura com descarte silencioso
 
 *O descarte silencioso não diz o que há na porta.*
 
@@ -1435,7 +1515,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN
 ```
 
-*Figura 6.4.5 (Tipo B, sequência).* Mensagens do cenário "Varredura com descarte silencioso", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 11 mensagens, numeradas de 1 a 11 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.5 (Tipo B, sequência).* Mensagens do cenário "Varredura com descarte silencioso", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 11 mensagens, numeradas de 1 a 11 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1446,7 +1526,7 @@ sequenceDiagram
 
 **Por que importa.** O descarte atrasa a sondagem e não confirma nada. Registrar as tentativas negadas dá visibilidade de quem está sondando.
 
-#### 6.4.6 Varredura com rejeição por RST
+#### 7.4.6 Varredura com rejeição por RST
 
 *A rejeição por RST responde rápido e informa mais.*
 
@@ -1484,7 +1564,7 @@ sequenceDiagram
   n_fw ->> n_ext: RST (recusado)
 ```
 
-*Figura 6.4.6 (Tipo B, sequência).* Mensagens do cenário "Varredura com rejeição por RST", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.6 (Tipo B, sequência).* Mensagens do cenário "Varredura com rejeição por RST", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 14 mensagens, numeradas de 1 a 14 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1500,7 +1580,7 @@ sequenceDiagram
 
 Um limite de taxa por origem reduz o efeito de uma rajada de pedidos, sem impedir o uso normal.
 
-#### 6.4.7 Rajada sem limite de taxa
+#### 7.4.7 Rajada sem limite de taxa
 
 *Sem limite, uma rajada de pedidos chega inteira ao servidor.*
 
@@ -1548,7 +1628,7 @@ sequenceDiagram
   n_fw ->> n_ext: SYN+ACK
 ```
 
-*Figura 6.4.7 (Tipo B, sequência).* Mensagens do cenário "Rajada sem limite de taxa", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.7 (Tipo B, sequência).* Mensagens do cenário "Rajada sem limite de taxa", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 24 mensagens, numeradas de 1 a 24 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1559,7 +1639,7 @@ sequenceDiagram
 
 **Por que importa.** Um servidor tem um limite de conexões semiabertas. Uma rajada sem controle consome esse limite e o do firewall.
 
-#### 6.4.8 Rajada com limite de 3 por segundo
+#### 7.4.8 Rajada com limite de 3 por segundo
 
 *O limite por origem corta o excedente da rajada.*
 
@@ -1598,7 +1678,7 @@ sequenceDiagram
   n_ext -x n_fw: SYN
 ```
 
-*Figura 6.4.8 (Tipo B, sequência).* Mensagens do cenário "Rajada com limite de 3 por segundo", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.8 (Tipo B, sequência).* Mensagens do cenário "Rajada com limite de 3 por segundo", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 15 mensagens, numeradas de 1 a 15 na ordem da comunicação (em 1 fase; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1614,7 +1694,7 @@ sequenceDiagram
 
 Um firewall de camadas 3 e 4 decide por cabeçalhos e estado. O conteúdo de uma sessão cifrada permitida passa sem exame.
 
-#### 6.4.9 Conexão HTTPS permitida, conteúdo cifrado
+#### 7.4.9 Conexão HTTPS permitida, conteúdo cifrado
 
 *O firewall decide por cabeçalho e estado, não por conteúdo.*
 
@@ -1650,7 +1730,7 @@ sequenceDiagram
   n_fw ->> n_ext: [cifrado] Resposta HTTPS (cifrada)
 ```
 
-*Figura 6.4.9 (Tipo B, sequência).* Mensagens do cenário "Conexão HTTPS permitida, conteúdo cifrado", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
+*Figura 7.4.9 (Tipo B, sequência).* Mensagens do cenário "Conexão HTTPS permitida, conteúdo cifrado", na ordem do tempo, entre Cliente externo, Firewall, Servidor web: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 2 fases; 4 cifradas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Forja, varredura e limite de taxa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1661,20 +1741,20 @@ sequenceDiagram
 
 **Por que importa.** Esta é a fronteira do firewall de camadas 3 e 4. Proteger a aplicação exige outros controles, como o WAF e a validação no próprio servidor.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 O que um firewall faz
+### 8.1 O que um firewall faz
 
 Um **firewall** é um ponto de controle entre redes que decide, segundo uma política, quais pacotes passam. A **[RFC 2979](https://www.rfc-editor.org/rfc/rfc2979)** descreve o comportamento esperado de firewalls na Internet, e o **NIST SP 800-41 Rev. 1** (2009) traz orientações sobre tipos de firewall e sobre a escrita da política. Este simulador trata do firewall de rede que decide por **camadas 3 e 4** (endereços, protocolo, portas e estado). O firewall que examina o conteúdo da aplicação é assunto de outro simulador.
 
-### 7.2 Filtro sem estado (lista de regras)
+### 8.2 Filtro sem estado (lista de regras)
 
 - Cada pacote é avaliado **isoladamente**, só pelo cabeçalho: origem, destino, protocolo, portas e, no TCP, os flags.
 - As regras são percorridas **de cima para baixo**, e a **primeira que casa decide**. Regras depois dela não são consultadas.
 - Se nenhuma regra casa, vale a **política padrão** do fim da lista. Negar o que não foi permitido (negação implícita) é a postura mais segura.
 - Como o filtro não lembra dos pacotes anteriores, o **retorno** de uma conexão precisa de regra própria, escrita por porta de origem ou por flag ACK. Ambas são palpites sobre o cabeçalho que um pacote de fora pode imitar.
 
-### 7.3 Filtro com estado e tabela de conexões
+### 8.3 Filtro com estado e tabela de conexões
 
 O firewall com estado registra cada conexão permitida numa **tabela**. Só o primeiro pacote (o SYN, no TCP) passa pelas regras. Os seguintes são aceitos se pertencem a uma entrada da tabela, nos dois sentidos, e um pacote que não pertence a nenhuma e não é um pedido novo é negado como **fora de estado**.
 
@@ -1691,28 +1771,28 @@ Os nomes se inspiram nos estados do TCP ([RFC 9293](https://www.rfc-editor.org/r
 
 UDP e ICMP não têm conexão. O firewall associa a resposta ao pedido por endereços e portas invertidos (UDP) ou pelo identificador (ICMP Echo), durante um tempo limitado.
 
-### 7.4 Zonas e DMZ
+### 8.4 Zonas e DMZ
 
 - Uma **zona** é um conjunto de redes tratado da mesma forma. O simulador usa três: **interna** (192.0.2.0/24), **DMZ** (198.51.100.0/24) e **externa** (a Internet). São faixas de documentação ([RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)).
 - A **DMZ** abriga o que precisa ser acessível de fora (por exemplo, um servidor web). Se ele for comprometido, a política entre zonas impede que seja ponto de partida para a rede interna.
 - A política típica: a Internet alcança só o serviço público da DMZ; a rede interna alcança a DMZ para administração; a DMZ **não inicia** conexões para a rede interna e, em geral, nem para a Internet.
 - O **filtro de saída** (egresso) é tão importante quanto o de entrada: limita o que um servidor comprometido consegue baixar ou enviar para fora.
 
-### 7.5 Filtro de origem (anti-spoofing)
+### 8.5 Filtro de origem (anti-spoofing)
 
 O endereço de origem de um pacote IP não é autenticado. O **[BCP 38](https://www.rfc-editor.org/info/bcp38) ([RFC 2827](https://www.rfc-editor.org/rfc/rfc2827))** recomenda o **filtro de ingresso**: o provedor aceita de cada cliente só pacotes com origem nos prefixos que o cliente de fato usa, e a RFC pede também que administradores de redes corporativas filtrem para que suas redes não sejam origem de tráfego forjado. Este simulador mostra as duas direções: **de dentro para fora**, negar origem que não pertence à rede interna (o caso do [BCP 38](https://www.rfc-editor.org/info/bcp38), que protege terceiros e por isso depende de cada operador); e **de fora para dentro**, negar origem que pertence à rede interna, que só pode ser forjada (prática comum de borda, que não é o foco do [BCP 38](https://www.rfc-editor.org/info/bcp38)). Firewalls que classificam o tráfego pela **interface**, e não pelo endereço, já evitam parte do problema.
 
-### 7.6 Descartar ou rejeitar
+### 8.6 Descartar ou rejeitar
 
 - **Descartar** (*drop*): não responde. Quem sonda espera o tempo esgotar e conclui que a porta está **filtrada**.
 - **Rejeitar**: responde com RST (TCP) ou com uma mensagem ICMP de destino inalcançável. A porta parece **fechada**, e a resposta é imediata.
 - Nenhuma das duas esconde que há um dispositivo no caminho. A escolha equilibra o que se revela a quem sonda e o comportamento para quem erra a porta.
 
-### 7.7 Limite de taxa
+### 8.7 Limite de taxa
 
 Uma regra pode aceitar um número máximo de novas conexões por segundo por origem. Reduz o efeito de rajadas de pedidos, mas pode atingir usuários legítimos atrás de um mesmo endereço (por exemplo, atrás de um NAT) e não substitui as defesas do servidor.
 
-### 7.8 O que o simulador não modela
+### 8.8 O que o simulador não modela
 
 - **NAT**: os endereços não são traduzidos. O NAT tem simulador próprio.
 - **Fragmentação, IPv6 e opções de IP**.
@@ -1722,7 +1802,7 @@ Uma regra pode aceitar um número máximo de novas conexões por segundo por ori
 - **Retransmissão do TCP**: o SYN é retransmitido uma vez, depois de 1 s ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), seção 2, regra 2.1). Os sistemas reais continuam tentando com intervalos crescentes.
 - **Segurança**: os cenários de forja, varredura e rajada mostram o ponto de vista do defensor (o que o firewall vê, decide e registra), sem ensinar a executá-los.
 
-### 7.9 Roteiro de exercícios
+### 8.9 Roteiro de exercícios
 
 1. Em **Ida e volta permitidas** e **Falta a regra de retorno**, compare as duas listas. Por que o SYN+ACK é negado no segundo caso, se o SYN foi aceito?
 2. Em **Ordem invertida das regras**, explique por que a primeira regra que casa decide. Reordene mentalmente a lista para obter o resultado desejado.
@@ -1735,7 +1815,7 @@ Uma regra pode aceitar um número máximo de novas conexões por segundo por ori
 9. Compare a **varredura com descarte silencioso** e com **rejeição por RST**: o que o atacante aprende em cada uma e o que o administrador ganha ou perde ao depurar?
 10. Em **Rajada com limite de 3 por segundo**, avalie o equilíbrio entre proteger o servidor e atingir usuários legítimos atrás de um mesmo NAT.
 
-### 7.10 Para ir além
+### 8.10 Para ir além
 
 - [RFC 2979](https://www.rfc-editor.org/rfc/rfc2979): comportamento e requisitos de firewalls na Internet.
 - NIST SP 800-41 Rev. 1: guia de firewalls e de política de firewall.
@@ -1745,7 +1825,7 @@ Uma regra pode aceitar um número máximo de novas conexões por segundo por ori
 - [RFC 6298](https://www.rfc-editor.org/rfc/rfc6298): temporizador de retransmissão do TCP.
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

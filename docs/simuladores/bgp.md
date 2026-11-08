@@ -12,11 +12,120 @@ BGP-4 entre seis sistemas autônomos: sessões, OPEN, UPDATE e KEEPALIVE, relaç
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Sessões | Estabelecimento da sessão | 6.1.1 e 6.1.2 |
-| Rotas e política | Propagação do anúncio | 6.2.1 a 6.2.8 |
-| Segurança e defesa | Sequestro de prefixo | 6.3.1 a 6.3.5 |
+| Sessões | Estabelecimento da sessão | 7.1.1 e 7.1.2 |
+| Rotas e política | Propagação do anúncio | 7.2.1 a 7.2.8 |
+| Segurança e defesa | Sequestro de prefixo | 7.3.1 a 7.3.5 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o BGP resolve
+
+A internet é um conjunto de milhares de redes administradas de forma independente: provedores, empresas, universidades e serviços de conteúdo. Cada uma é um **sistema autônomo** (AS), identificado por um número. Dentro de um AS, um IGP como o OSPF encontra o caminho mais curto. **Entre** AS, o critério não é só a distância: cada AS quer escolher, por **política** (custo, contrato, preferência), por onde o tráfego entra e sai.
+
+O BGP-4 (*Border Gateway Protocol*, [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271)) é o protocolo que troca alcançabilidade entre AS. Ele é de **vetor de caminho**: cada rota carrega a lista dos AS que atravessou (o atributo AS_PATH), e essa lista dá a cada roteador informação para decidir e para evitar laços.
+
+### 2.2 O diagrama da sessão
+
+```mermaid
+sequenceDiagram
+  participant A as Roteador do AS 65001
+  participant B as Roteador do AS 65002
+  A->>B: TCP, porta 179
+  A->>B: OPEN: versão, AS, hold time, BGP Identifier
+  B->>A: OPEN
+  A->>B: KEEPALIVE
+  B->>A: KEEPALIVE
+  Note over A,B: sessão Established
+  A->>B: UPDATE: prefixo e atributos
+  A->>B: KEEPALIVE periódico
+  A->>B: UPDATE: retirada do prefixo
+```
+
+*Esquema 1 (sessão e mensagens).* Os vizinhos BGP conversam por uma conexão TCP na porta 179, configurada de forma manual nos dois lados. A sessão passa pelos estados Idle, Connect, Active, OpenSent, OpenConfirm e Established ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), seção 8.2.2).
+
+| Mensagem | Tipo | Função ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271)) |
+| --- | --- | --- |
+| OPEN | 1 | abre a sessão: versão, AS, hold time proposto e BGP Identifier (seção 4.2) |
+| UPDATE | 2 | anuncia prefixos com atributos ou retira prefixos (seção 4.3) |
+| NOTIFICATION | 3 | informa um erro e encerra a sessão (seção 4.5) |
+| KEEPALIVE | 4 | só o cabeçalho de 19 bytes: mostra que o vizinho continua vivo (seção 4.4) |
+
+Se o **hold timer** vence sem ouvir nada do vizinho, a sessão cai e todas as rotas aprendidas dele são retiradas. A RFC sugere um hold time de 90 s e KEEPALIVE a cada um terço desse valor (seções 4.4 e 10); fabricantes usam outros padrões.
+
+### 2.3 Os atributos que a rota carrega
+
+| Atributo | Função | Seção |
+| --- | --- | --- |
+| AS_PATH | lista dos AS atravessados; evita laços e mede o tamanho do caminho | 5.1.2 |
+| NEXT_HOP | para onde enviar o tráfego | 5.1.3 |
+| ORIGIN | como a rota nasceu (IGP, EGP ou incompleta) | 5.1.1 |
+| MULTI_EXIT_DISC (MED) | sugere a um AS vizinho qual entrada preferir | 5.1.4 |
+| LOCAL_PREF | preferência dentro do próprio AS (só circula no iBGP) | 5.1.5 |
+
+### 2.4 O diagrama da escolha do melhor caminho
+
+```mermaid
+flowchart TD
+  R["Chegam vários caminhos para o mesmo prefixo"] --> L{"AS_PATH contém o meu AS?"}
+  L -- "sim" --> X["Descarta: laço"]
+  L -- "não" --> P["1. Maior LOCAL_PREF"]
+  P --> A["2. AS_PATH mais curto"]
+  A --> O["3. Menor ORIGIN"]
+  O --> M["4. Menor MED, entre rotas do mesmo AS vizinho"]
+  M --> E["5. eBGP antes de iBGP"]
+  E --> I["6. Menor custo IGP até o NEXT_HOP"]
+  I --> D["7. Menor BGP Identifier: desempate final"]
+```
+
+*Esquema 2 (processo de decisão).* O BGP escolhe **um** melhor caminho por prefixo, instala e repassa só esse. A ordem acima segue a [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), seção 9.1: o grau de preferência (LOCAL_PREF, seção 9.1.1) e depois os desempates da seção 9.1.2.2. Rotas com laço de AS_PATH são excluídas antes. Implementações acrescentam critérios próprios, como "rota originada localmente" nos fabricantes.
+
+Duas ferramentas de política seguem desse processo:
+
+- O **LOCAL_PREF** decide por onde o tráfego **sai** do AS.
+- O **AS-path prepend** (repetir o próprio número do AS no anúncio) torna um caminho menos atraente e influencia por onde o tráfego **entra**.
+
+### 2.5 Relações comerciais e regra de exportação
+
+```mermaid
+flowchart TD
+  C["Clientes<br/>pagam pelo trânsito"] --- M["Meu AS"]
+  PE["Peers<br/>trocam tráfego entre si"] --- M
+  PR["Provedores<br/>cobram pelo trânsito"] --- M
+  M -- "rotas de clientes e próprias" --> T["Anuncia a todos"]
+  M -- "rotas de peers e de provedores" --> O["Anuncia só aos clientes"]
+```
+
+*Esquema 3 (regra valley-free).* Entre AS, as relações são de **cliente e provedor** (o cliente paga) e de **peering** (troca de tráfego entre as redes e seus clientes, em geral sem pagamento). A regra de exportação conhecida como *valley-free* (modelo de Gao e Rexford) é: rotas de clientes e rotas próprias vão a todos; rotas de peers e de provedores vão **só aos clientes**. Assim, nenhum AS oferece trânsito gratuito entre dois provedores ou dois peers.
+
+### 2.6 Quando a política falha: segurança do roteamento
+
+O BGP foi desenhado na base da **confiança**: o protocolo aceita o que o vizinho anuncia. Três problemas decorrem disso, e o simulador os mostra no nível defensivo, com o efeito e a defesa.
+
+| Problema | O que acontece | Defesa |
+| --- | --- | --- |
+| Sequestro de prefixo | um AS anuncia um prefixo que não é dele, e o tráfego é desviado | filtro de prefixos de clientes, validação de origem com RPKI (ROV, [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811)) |
+| Vazamento de rota | um AS repassa rotas contra a regra de exportação ([RFC 7908](https://www.rfc-editor.org/rfc/rfc7908)) | filtros de saída e de entrada por relação comercial |
+| Instabilidade (*flapping*) | uma rota que cai e volta repetidas vezes sobrecarrega todo o roteamento | amortecimento (*flap damping*), com cuidado para não punir quem não tem culpa |
+
+A **RPKI** liga cada prefixo ao AS autorizado a originá-lo por meio de um ROA ([RFC 9582](https://www.rfc-editor.org/rfc/rfc9582)), e o ROV (*Route Origin Validation*, [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811)) usa isso para marcar anúncios como válidos, inválidos ou desconhecidos. A [RFC 9319](https://www.rfc-editor.org/rfc/rfc9319) trata do cuidado com o campo *maxLength* dos ROAs.
+
+### 2.7 Como ler o diagrama do simulador
+
+- **Topologia:** seis sistemas autônomos e as **relações comerciais** entre eles (cliente, provedor e peer).
+- **Diagrama de sequência e legenda de cores:** TCP (porta 179), OPEN e KEEPALIVE, UPDATE, retirada ou NOTIFICATION e tráfego de dados.
+- **Aba Sessões:** o estado de cada sessão BGP no instante atual.
+- **Aba Tabela BGP:** as rotas de cada AS, com os atributos e a marca do melhor caminho.
+- **Aba Comandos:** a saída dos comandos de consulta do roteador escolhido, no formato do Cisco IOS.
+- **Modos:** *Sessões* (abertura e hold timer), *Rotas e política* (propagação, LOCAL_PREF, prepend, falhas) e *Segurança e defesa* (sequestro, ROV, vazamento e *flapping*).
+
+### 2.8 Limites do modelo e do diagrama
+
+- Há **um roteador por AS**: não há iBGP nem custo IGP, então o critério 6 da escolha não é exercitado.
+- O simulador mostra o essencial de cada atributo e só uma parte das implementações reais. Não há comunidades, reflexores de rota nem confederações.
+- Os temporizadores e os tempos de convergência são **didáticos**: na internet real, a propagação de uma mudança leva de segundos a minutos.
+- As relações comerciais e o modelo *valley-free* são uma simplificação: contratos reais têm exceções.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -25,7 +134,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -45,39 +154,39 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1a](#31-sessões): topologia do modo "Sessões", variante a
-- [Figura 3.1b](#31-sessões): topologia do modo "Sessões", variante b
-- [Figura 3.2a](#32-rotas-e-política): topologia do modo "Rotas e política", variante a
-- [Figura 3.2b](#32-rotas-e-política): topologia do modo "Rotas e política", variante b
-- [Figura 3.3](#33-segurança-e-defesa): topologia do modo "Segurança e defesa"
+- [Figura 4.1a](#41-sessões): topologia do modo "Sessões", variante a
+- [Figura 4.1b](#41-sessões): topologia do modo "Sessões", variante b
+- [Figura 4.2a](#42-rotas-e-política): topologia do modo "Rotas e política", variante a
+- [Figura 4.2b](#42-rotas-e-política): topologia do modo "Rotas e política", variante b
+- [Figura 4.3](#43-segurança-e-defesa): topologia do modo "Segurança e defesa"
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-estabelecimento-da-sessão): sequência de "Estabelecimento da sessão"
-- [Figura 6.1.2](#612-hold-timer): sequência de "Hold timer"
-- [Figura 6.2.1](#621-propagação-do-anúncio): sequência de "Propagação do anúncio"
-- [Figura 6.2.2](#622-exportação-entre-provedores-e-peers): sequência de "Exportação entre provedores e peers"
-- [Figura 6.2.3](#623-as_path-mais-curto): sequência de "AS_PATH mais curto"
-- [Figura 6.2.4](#624-desempate-por-router-id): sequência de "Desempate por router ID"
-- [Figura 6.2.5](#625-local_pref-saída): sequência de "LOCAL_PREF (saída)"
-- [Figura 6.2.6](#626-as-path-prepend-entrada): sequência de "AS-path prepend (entrada)"
-- [Figura 6.2.7](#627-falha-de-enlace): sequência de "Falha de enlace"
-- [Figura 6.2.8](#628-retirada-do-prefixo): sequência de "Retirada do prefixo"
-- [Figura 6.3.1](#631-sequestro-de-prefixo): sequência de "Sequestro de prefixo"
-- [Figura 6.3.2](#632-defesa-filtro-de-prefixos): sequência de "Defesa: filtro de prefixos"
-- [Figura 6.3.3](#633-defesa-rpki--rov): sequência de "Defesa: RPKI / ROV"
-- [Figura 6.3.4](#634-vazamento-de-rota): sequência de "Vazamento de rota"
-- [Figura 6.3.5](#635-flapping-de-rota): sequência de "Flapping de rota"
+- [Figura 7.1.1](#711-estabelecimento-da-sessão): sequência de "Estabelecimento da sessão"
+- [Figura 7.1.2](#712-hold-timer): sequência de "Hold timer"
+- [Figura 7.2.1](#721-propagação-do-anúncio): sequência de "Propagação do anúncio"
+- [Figura 7.2.2](#722-exportação-entre-provedores-e-peers): sequência de "Exportação entre provedores e peers"
+- [Figura 7.2.3](#723-as_path-mais-curto): sequência de "AS_PATH mais curto"
+- [Figura 7.2.4](#724-desempate-por-router-id): sequência de "Desempate por router ID"
+- [Figura 7.2.5](#725-local_pref-saída): sequência de "LOCAL_PREF (saída)"
+- [Figura 7.2.6](#726-as-path-prepend-entrada): sequência de "AS-path prepend (entrada)"
+- [Figura 7.2.7](#727-falha-de-enlace): sequência de "Falha de enlace"
+- [Figura 7.2.8](#728-retirada-do-prefixo): sequência de "Retirada do prefixo"
+- [Figura 7.3.1](#731-sequestro-de-prefixo): sequência de "Sequestro de prefixo"
+- [Figura 7.3.2](#732-defesa-filtro-de-prefixos): sequência de "Defesa: filtro de prefixos"
+- [Figura 7.3.3](#733-defesa-rpki--rov): sequência de "Defesa: RPKI / ROV"
+- [Figura 7.3.4](#734-vazamento-de-rota): sequência de "Vazamento de rota"
+- [Figura 7.3.5](#735-flapping-de-rota): sequência de "Flapping de rota"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 Sessões
+### 4.1 Sessões
 
 ```mermaid
 flowchart LR
@@ -99,7 +208,7 @@ flowchart LR
   class n_M atacante
 ```
 
-*Figura 3.1a (Tipo A, topologia).* Elementos do modo "Sessões": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.1.1).
+*Figura 4.1a (Tipo A, topologia).* Elementos do modo "Sessões": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.1.1).
 
 ```mermaid
 flowchart LR
@@ -121,9 +230,9 @@ flowchart LR
   class n_M atacante
 ```
 
-*Figura 3.1b (Tipo A, topologia).* Elementos do modo "Sessões": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.1.2).
+*Figura 4.1b (Tipo A, topologia).* Elementos do modo "Sessões": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.1.2).
 
-### 3.2 Rotas e política
+### 4.2 Rotas e política
 
 ```mermaid
 flowchart LR
@@ -145,7 +254,7 @@ flowchart LR
   class n_M atacante
 ```
 
-*Figura 3.2a (Tipo A, topologia).* Elementos do modo "Rotas e política": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.2.1 a 6.2.6; 6.2.8).
+*Figura 4.2a (Tipo A, topologia).* Elementos do modo "Rotas e política": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.2.1 a 7.2.6; 7.2.8).
 
 ```mermaid
 flowchart LR
@@ -167,9 +276,9 @@ flowchart LR
   class n_M atacante
 ```
 
-*Figura 3.2b (Tipo A, topologia).* Elementos do modo "Rotas e política": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.2.7).
+*Figura 4.2b (Tipo A, topologia).* Elementos do modo "Rotas e política": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.2.7).
 
-### 3.3 Segurança e defesa
+### 4.3 Segurança e defesa
 
 ```mermaid
 flowchart LR
@@ -191,15 +300,15 @@ flowchart LR
   class n_M atacante
 ```
 
-*Figura 3.3 (Tipo A, topologia).* Elementos do modo "Segurança e defesa": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para todos os cenários do modo (6.3.1 a 6.3.5).
+*Figura 4.3 (Tipo A, topologia).* Elementos do modo "Segurança e defesa": Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510, 203.0.113.0/24); Conteúdo (AS64511, 198.51.100.0/24); Atacante (AS64666). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para todos os cenários do modo (7.3.1 a 7.3.5).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Sessões, Tabela BGP, Comandos, Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Teste
+### 6.1 Teste
 
 - **Sentido do tráfego**. Valores: Conteúdo → Cliente; Cliente → Conteúdo; ISP A → Conteúdo. Padrão: Conteúdo → Cliente. Modos: todos.
   - Quem envia o tráfego de teste no fim da simulação.
@@ -208,14 +317,14 @@ Cenário, Captura, Mensagem, Sessões, Tabela BGP, Comandos, Experimento, Refer�
   - **Cliente → Conteúdo:** o tráfego sai do AS do Cliente. O caminho depende da política de saída (LOCAL_PREF).
   - Cada AS decide sozinho o próximo salto, consultando o melhor caminho da própria tabela BGP.
 
-### 5.2 Foco
+### 6.2 Foco
 
 - **AS em foco**. Valores: Trânsito (AS64496); ISP A (AS64500); ISP B (AS64501); Cliente (AS64510); Conteúdo (AS64511); Atacante (AS64666). Padrão: Conteúdo (AS64511). Modos: todos.
   - AS cuja tabela aparece nas abas Tabela BGP e Comandos.
   - Define de qual roteador vêm a aba Tabela BGP e a saída dos comandos (`show ip bgp`, `summary` e `neighbors`).
   - As abas acompanham o relógio: mostram a tabela do AS escolhido no instante em que o diagrama está.
 
-### 5.3 Política do Cliente
+### 6.3 Política do Cliente
 
 - **LOCAL_PREF das rotas do ISP A**. Valores: 100 (padrão); 200 (preferir o ISP A). Padrão: 100 (padrão). Modos: Rotas e política.
   - Preferência do Cliente pelas rotas vindas do ISP A.
@@ -228,7 +337,7 @@ Cenário, Captura, Mensagem, Sessões, Tabela BGP, Comandos, Experimento, Refer�
   - Quem compara o AS_PATH passa a preferir o caminho pelo ISP A. Controla o tráfego que **entra**.
   - Funciona como sugestão: AS que decidem por LOCAL_PREF ignoram o prepend.
 
-### 5.4 Evento
+### 6.4 Evento
 
 - **Evento depois da convergência**. Valores: Nenhum; Queda de enlace; Vizinho silencioso (hold timer); Cliente retira o prefixo. Padrão: Nenhum. Modos: Sessões; Rotas e política.
   - O que acontece depois que a rede converge.
@@ -240,7 +349,7 @@ Cenário, Captura, Mensagem, Sessões, Tabela BGP, Comandos, Experimento, Refer�
   - No vizinho silencioso, o lado que trava é o primeiro AS do nome do enlace e quem detecta é o segundo. Em L5, o ISP B trava e o Cliente detecta.
   - Não vale para a retirada do prefixo, que não usa enlace.
 
-### 5.5 Ataque
+### 6.5 Ataque
 
 - **Problema de segurança**. Valores: Nenhum (só as defesas ligadas); Sequestro de prefixo; Vazamento de rota; Flapping de rota. Padrão: Sequestro de prefixo. Modos: Segurança e defesa.
   - O anúncio indevido ou a instabilidade que a simulação injeta.
@@ -248,7 +357,7 @@ Cenário, Captura, Mensagem, Sessões, Tabela BGP, Comandos, Experimento, Refer�
   - **Vazamento:** o ISP B repassa ao ISP A uma rota de 198.51.100.0/24 aprendida de um peer, o que a política valley-free proíbe.
   - **Flapping:** o Cliente retira e anuncia de novo o prefixo, em dois ciclos.
 
-### 5.6 Defesas
+### 6.6 Defesas
 
 - **LOCAL_PREF por relação comercial**. Valores: caixa de seleção. Padrão: não. Modos: Segurança e defesa.
   - Prefere rotas de clientes, depois de peers, depois de provedores.
@@ -272,15 +381,15 @@ Cenário, Captura, Mensagem, Sessões, Tabela BGP, Comandos, Experimento, Refer�
   - Depois de duas retiradas do mesmo prefixo pelo mesmo vizinho, o AS passa a rejeitar o prefixo desse vizinho ([RFC 2439](https://www.rfc-editor.org/rfc/rfc2439)).
   - Reduz a instabilidade que se espalha, mas também tira do ar um prefixo legítimo até a penalidade decair. Só afeta o cenário de flapping.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: Sessões
+### 7.1 Modo: Sessões
 
 > **Grupo:** Sessões
 
 Como dois roteadores de AS diferentes abrem e mantêm uma sessão BGP, e como uma sessão morta é detectada.
 
-#### 6.1.1 Estabelecimento da sessão
+#### 7.1.1 Estabelecimento da sessão
 
 *TCP 179, OPEN e KEEPALIVE até Established.*
 
@@ -389,7 +498,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Estabelecimento da sessão", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessões", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "Estabelecimento da sessão", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessões", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -401,7 +510,7 @@ sequenceDiagram
 
 **Por que importa.** O BGP não descobre vizinhos sozinho: toda sessão é configurada à mão, dos dois lados. Se os parâmetros do OPEN não batem (por exemplo, o AS esperado), a sessão termina com NOTIFICATION.
 
-#### 6.1.2 Hold timer
+#### 7.1.2 Hold timer
 
 *Sem KEEPALIVE por 180 s, a sessão cai com NOTIFICATION.*
 
@@ -517,7 +626,7 @@ sequenceDiagram
   n_A ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Hold timer", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 81 mensagens, numeradas de 1 a 81 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessões", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "Hold timer", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 81 mensagens, numeradas de 1 a 81 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Sessões", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -529,13 +638,13 @@ sequenceDiagram
 
 **Por que importa.** O hold time define quanto tempo o tráfego pode ir para um vizinho morto. Valores menores detectam falhas mais rápido; em produção, o BFD faz isso em milissegundos.
 
-### 6.2 Modo: Rotas e política
+### 7.2 Modo: Rotas e política
 
 > **Grupo:** Propagação
 
 Como um prefixo se espalha de AS em AS e quem repassa o quê, conforme as relações comerciais.
 
-#### 6.2.1 Propagação do anúncio
+#### 7.2.1 Propagação do anúncio
 
 *A cada AS, o AS_PATH cresce e o NEXT_HOP muda.*
 
@@ -644,7 +753,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Propagação do anúncio", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Propagação do anúncio", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -656,7 +765,7 @@ sequenceDiagram
 
 **Por que importa.** O AS_PATH é a memória do caminho: evita laços e serve de critério de escolha. Por isso o BGP é chamado de protocolo de vetor de caminho.
 
-#### 6.2.2 Exportação entre provedores e peers
+#### 7.2.2 Exportação entre provedores e peers
 
 *Rota de peer ou de provedor só vai para clientes.*
 
@@ -765,7 +874,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Exportação entre provedores e peers", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "Exportação entre provedores e peers", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -781,7 +890,7 @@ sequenceDiagram
 
 Como cada AS escolhe um único caminho entre vários, e como a política influencia o tráfego que sai e o que entra.
 
-#### 6.2.3 AS_PATH mais curto
+#### 7.2.3 AS_PATH mais curto
 
 *Com LOCAL_PREF igual, vence o caminho com menos AS.*
 
@@ -890,7 +999,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "AS_PATH mais curto", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "AS_PATH mais curto", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -901,7 +1010,7 @@ sequenceDiagram
 
 **Por que importa.** O AS_PATH é uma aproximação grosseira de distância: um caminho com menos AS pode ser mais lento. Por isso os operadores combinam o AS_PATH com políticas de LOCAL_PREF.
 
-#### 6.2.4 Desempate por router ID
+#### 7.2.4 Desempate por router ID
 
 *Empate em tudo: vence o vizinho de menor router ID.*
 
@@ -1010,7 +1119,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Desempate por router ID", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "Desempate por router ID", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 75 mensagens, numeradas de 1 a 75 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1021,7 +1130,7 @@ sequenceDiagram
 
 **Por que importa.** Desempates arbitrários tornam o caminho imprevisível para quem está fora. Operadores costumam definir políticas explícitas para não depender deles.
 
-#### 6.2.5 LOCAL_PREF (saída)
+#### 7.2.5 LOCAL_PREF (saída)
 
 *O LOCAL_PREF controla por onde o tráfego sai do AS.*
 
@@ -1131,7 +1240,7 @@ sequenceDiagram
   n_T ->> n_D: IP 198.51.100.10
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "LOCAL_PREF (saída)", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "LOCAL_PREF (saída)", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1142,7 +1251,7 @@ sequenceDiagram
 
 **Por que importa.** É a principal ferramenta de engenharia de tráfego de saída: preferir o provedor mais barato, o de melhor desempenho ou um enlace de backup.
 
-#### 6.2.6 AS-path prepend (entrada)
+#### 7.2.6 AS-path prepend (entrada)
 
 *Repetir o próprio AS desvia o tráfego que entra.*
 
@@ -1257,7 +1366,7 @@ sequenceDiagram
   n_A ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "AS-path prepend (entrada)", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 81 mensagens, numeradas de 1 a 81 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.6 (Tipo B, sequência).* Mensagens do cenário "AS-path prepend (entrada)", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 81 mensagens, numeradas de 1 a 81 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1272,7 +1381,7 @@ sequenceDiagram
 
 O que acontece quando um caminho deixa de existir: retiradas, reconvergência e caminhos alternativos.
 
-#### 6.2.7 Falha de enlace
+#### 7.2.7 Falha de enlace
 
 *O enlace cai, as rotas são retiradas e o tráfego muda de caminho.*
 
@@ -1387,7 +1496,7 @@ sequenceDiagram
   n_A ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.2.7 (Tipo B, sequência).* Mensagens do cenário "Falha de enlace", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 80 mensagens, numeradas de 1 a 80 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.7 (Tipo B, sequência).* Mensagens do cenário "Falha de enlace", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 80 mensagens, numeradas de 1 a 80 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1398,7 +1507,7 @@ sequenceDiagram
 
 **Por que importa.** O dual-homing só protege se o outro caminho também for anunciado e aceito. A convergência do BGP leva de segundos a minutos, e durante esse tempo parte do tráfego pode se perder.
 
-#### 6.2.8 Retirada do prefixo
+#### 7.2.8 Retirada do prefixo
 
 *O prefixo deixa de existir: retiradas por toda a rede.*
 
@@ -1522,7 +1631,7 @@ sequenceDiagram
   n_B ->> n_M: WITHDRAW
 ```
 
-*Figura 6.2.8 (Tipo B, sequência).* Mensagens do cenário "Retirada do prefixo", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 90 mensagens, numeradas de 1 a 90 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
+*Figura 7.2.8 (Tipo B, sequência).* Mensagens do cenário "Retirada do prefixo", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 90 mensagens, numeradas de 1 a 90 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Rotas e política", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1532,13 +1641,13 @@ sequenceDiagram
 
 **Por que importa.** É assim que uma rede sai do ar para o resto da Internet, de propósito (manutenção, migração) ou por erro de configuração.
 
-### 6.3 Modo: Segurança e defesa
+### 7.3 Modo: Segurança e defesa
 
 > **Grupo:** Segurança e defesa
 
 Como anúncios indevidos, violações de política e instabilidade desviam ou interrompem o tráfego, e como as defesas de importação (filtros, RPKI, damping) barram cada problema.
 
-#### 6.3.1 Sequestro de prefixo
+#### 7.3.1 Sequestro de prefixo
 
 *Um cliente anuncia um prefixo que não é dele e desvia o tráfego.*
 
@@ -1649,7 +1758,7 @@ sequenceDiagram
   n_B ->> n_M: IP 203.0.113.10
 ```
 
-*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "Sequestro de prefixo", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
+*Figura 7.3.1 (Tipo B, sequência).* Mensagens do cenário "Sequestro de prefixo", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1661,7 +1770,7 @@ sequenceDiagram
 
 **Por que importa.** O alcance do sequestro depende de quem aceita a rota falsa, e não de quem a originou. As defesas atuam na importação: filtro de prefixos no provedor do atacante e validação de origem (RPKI) em qualquer AS. Incidentes reais costumam ser erros de configuração, não ataques, e causam indisponibilidade em larga escala.
 
-#### 6.3.2 Defesa: filtro de prefixos
+#### 7.3.2 Defesa: filtro de prefixos
 
 *O provedor aceita de cada cliente só os prefixos dele.*
 
@@ -1771,7 +1880,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "Defesa: filtro de prefixos", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
+*Figura 7.3.2 (Tipo B, sequência).* Mensagens do cenário "Defesa: filtro de prefixos", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1783,7 +1892,7 @@ sequenceDiagram
 
 **Por que importa.** O filtro só funciona na borda: precisa estar no provedor direto de quem anuncia. Depende de listas atualizadas e não escala para a Internet inteira, por isso é complementado pelo RPKI.
 
-#### 6.3.3 Defesa: RPKI / ROV
+#### 7.3.3 Defesa: RPKI / ROV
 
 *O ROA diz quem pode originar o prefixo; o roteador confere.*
 
@@ -1893,7 +2002,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "Defesa: RPKI / ROV", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
+*Figura 7.3.3 (Tipo B, sequência).* Mensagens do cenário "Defesa: RPKI / ROV", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1904,7 +2013,7 @@ sequenceDiagram
 
 **Por que importa.** O ROV só protege quem o aplica, e o benefício cresce com a adoção. Ele valida a origem, não o caminho: não detecta uma rota vazada nem um AS_PATH forjado (para isso existem ASPA e BGPsec).
 
-#### 6.3.4 Vazamento de rota
+#### 7.3.4 Vazamento de rota
 
 *O ISP B repassa a um peer uma rota que aprendeu de outro peer.*
 
@@ -2015,7 +2124,7 @@ sequenceDiagram
   n_B ->> n_D: IP 198.51.100.10
 ```
 
-*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "Vazamento de rota", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
+*Figura 7.3.4 (Tipo B, sequência).* Mensagens do cenário "Vazamento de rota", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 76 mensagens, numeradas de 1 a 76 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -2026,7 +2135,7 @@ sequenceDiagram
 
 **Por que importa.** O ISP B passa a carregar tráfego de que não foi contratado, e o ISP A usa um caminho que não pagou nem negociou. Defesa: o ISP A filtra o que aceita do peer ao cone de clientes dele (barra a rota vazada); no protocolo, os papéis BGP com atributo OTC ([RFC 9234](https://www.rfc-editor.org/rfc/rfc9234)) detectam o vazamento, mas dependem de os dois lados implementarem.
 
-#### 6.3.5 Flapping de rota
+#### 7.3.5 Flapping de rota
 
 *O prefixo oscila e força reconvergências repetidas.*
 
@@ -2191,7 +2300,7 @@ sequenceDiagram
   n_B ->> n_C: IP 203.0.113.10
 ```
 
-*Figura 6.3.5 (Tipo B, sequência).* Mensagens do cenário "Flapping de rota", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 129 mensagens, numeradas de 1 a 129 na ordem da comunicação (em 7 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
+*Figura 7.3.5 (Tipo B, sequência).* Mensagens do cenário "Flapping de rota", na ordem do tempo, entre Cliente, ISP A, Trânsito, ISP B, Conteúdo, Atacante: 129 mensagens, numeradas de 1 a 129 na ordem da comunicação (em 7 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segurança e defesa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -2202,9 +2311,9 @@ sequenceDiagram
 
 **Por que importa.** O damping contém a instabilidade, mas pune também o prefixo legítimo: ele fica fora do ar até a penalidade decair. Por isso o RIPE-580 e a [RFC 7196](https://www.rfc-editor.org/rfc/rfc7196) recomendam usá-lo, se for o caso, só com parâmetros conservadores.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 O que é o BGP
+### 8.1 O que é o BGP
 
 
 
@@ -2216,7 +2325,7 @@ O BGP é um protocolo de **vetor de caminho**: cada rota carrega a lista dos AS 
 
 
 
-### 7.2 Sessões e mensagens ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271))
+### 8.2 Sessões e mensagens ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271))
 
 
 
@@ -2235,7 +2344,7 @@ Depois que a sessão sobe, os vizinhos trocam a tabela completa uma vez; dali em
 
 
 
-### 7.3 Atributos e processo de decisão
+### 8.3 Atributos e processo de decisão
 
 
 
@@ -2261,7 +2370,7 @@ O **NEXT_HOP** indica para onde mandar o tráfego; em eBGP, cada AS troca o NEXT
 
 
 
-### 7.4 Relações comerciais e exportação
+### 8.4 Relações comerciais e exportação
 
 
 
@@ -2278,7 +2387,7 @@ Assim, nenhum AS oferece trânsito gratuito entre dois provedores ou dois peers.
 
 
 
-### 7.5 Convergência e falhas
+### 8.5 Convergência e falhas
 
 
 
@@ -2290,7 +2399,7 @@ Quando um enlace cai, a sessão termina e cada lado descarta as rotas aprendidas
 
 
 
-### 7.6 BGP e segurança
+### 8.6 BGP e segurança
 
 
 
@@ -2317,7 +2426,7 @@ As defesas simuladas aqui atuam na **importação** de rotas:
 
 
 
-### 7.7 Roteiro de exercícios
+### 8.7 Roteiro de exercícios
 
 
 
@@ -2333,7 +2442,7 @@ As defesas simuladas aqui atuam na **importação** de rotas:
 10. **Vazamento:** no cenário Vazamento de rota, desligue o LOCAL_PREF por relação comercial e compare o tráfego ISP A → Conteúdo. Depois ligue o filtro de rotas de peers no ISP A.
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 
@@ -2358,6 +2467,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **NLRI** | Network Layer Reachability Information, informação de alcançabilidade da camada de rede | lista de prefixos que uma mensagem UPDATE anuncia |
 | **OSPF** | Open Shortest Path First | protocolo de roteamento interno que calcula o menor caminho a partir do mapa completo da rede |
 | **OTC** | Only to Customer | atributo BGP ([RFC 9234](https://www.rfc-editor.org/rfc/rfc9234)) que marca rotas recebidas de um provedor ou par para não serem repassadas a outros, evitando vazamentos |
+| **RFC** | Request for Comments, pedido de comentários | documento numerado do IETF que define ou descreve um protocolo da Internet; cada documento do projeto cita as RFCs com link para o RFC Editor |
 | **RIPE** | Réseaux IP Européens Network Coordination Centre | registro regional de endereços da Europa, do Oriente Médio e de parte da Ásia Central, que publica boas práticas de roteamento |
 | **ROA** | Route Origin Authorization, autorização de origem de rota | objeto assinado na RPKI que autoriza um AS a originar um prefixo, com o tamanho máximo permitido |
 | **ROV** | Route Origin Validation, validação da origem da rota | confere se o AS que originou um prefixo está autorizado por um ROA e descarta os anúncios inválidos |

@@ -12,13 +12,105 @@ Segmentação da rede local: marcação 802.1Q, portas de acesso e de tronco, VL
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Marcação 802.1Q | O frame ganha a tag no tronco | 6.1.1 a 6.1.3 |
-| Segmentação | Mesma VLAN em dois switches | 6.2.1 a 6.2.3 |
-| Roteamento entre VLANs | A para B pelo roteador | 6.3.1 a 6.3.4 |
-| VLAN nativa | Mesma nativa nas duas pontas | 6.4.1 a 6.4.3 |
-| VLAN hopping | Porta dinâmica aceita virar tronco | 6.5.1 a 6.5.4 |
+| Marcação 802.1Q | O frame ganha a tag no tronco | 7.1.1 a 7.1.3 |
+| Segmentação | Mesma VLAN em dois switches | 7.2.1 a 7.2.3 |
+| Roteamento entre VLANs | A para B pelo roteador | 7.3.1 a 7.3.4 |
+| VLAN nativa | Mesma nativa nas duas pontas | 7.4.1 a 7.4.3 |
+| VLAN hopping | Porta dinâmica aceita virar tronco | 7.5.1 a 7.5.4 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que a VLAN resolve
+
+Em uma rede local sem divisão, todos os dispositivos formam **um só domínio de broadcast**: um broadcast de qualquer host chega a todos. Separar departamentos exigiria switches e cabos separados. Uma **VLAN** (*Virtual LAN*) divide uma rede física em **redes lógicas independentes**: cada VLAN é um domínio de broadcast próprio, com a sua sub-rede IP, e pode se espalhar por vários switches. O padrão é o IEEE 802.1Q, que define a tag de VLAN e o comportamento das portas.
+
+Dispositivos de VLANs diferentes só se comunicam **por um roteador** (ou por um switch de camada 3), o que permite aplicar regras de segurança entre eles.
+
+### 2.2 O diagrama da tag 802.1Q
+
+```mermaid
+flowchart LR
+  subgraph SEM["Quadro sem tag"]
+    S1["Destino"] --> S2["Origem"] --> S3["Tipo"] --> S4["Dados"]
+  end
+  subgraph COM["Quadro com tag 802.1Q"]
+    C1["Destino"] --> C2["Origem"] --> C3["TPID 0x8100<br/>PCP, DEI, VID"] --> C4["Tipo"] --> C5["Dados"]
+  end
+```
+
+*Esquema 1 (a tag entre a origem e o tipo).* A tag soma **4 bytes** e ocupa o lugar logo depois do MAC de origem. O quadro com tag pode chegar a 1522 bytes.
+
+| Campo da tag | Tamanho | Função |
+| --- | --- | --- |
+| TPID | 16 bits | vale 0x8100 e identifica o quadro como marcado |
+| PCP | 3 bits | prioridade do quadro (classe de serviço) |
+| DEI | 1 bit | elegibilidade para descarte em caso de congestionamento |
+| VID | 12 bits | identificador da VLAN: 1 a 4094 em uso; 0 indica só prioridade, e 4095 é reservado |
+
+### 2.3 Portas de acesso e portas de tronco
+
+```mermaid
+flowchart LR
+  H1["Host da VLAN 10"] -- "sem tag" --> SW1["Switch 1<br/>porta de acesso, VLAN 10"]
+  SW1 == "tronco: quadros com tag" ==> SW2["Switch 2"]
+  SW2 -- "sem tag" --> H2["Host da VLAN 10"]
+  SW2 == "tronco: quadros com tag" ==> R["Roteador"]
+```
+
+*Esquema 2 (acesso e tronco).* Uma **porta de acesso** pertence a uma só VLAN: o quadro chega e sai **sem tag**, e o switch "carimba" a VLAN da porta internamente. Uma **porta de tronco** (*trunk*) leva **várias VLANs** no mesmo cabo, e cada quadro viaja **com a tag** que diz a que VLAN pertence.
+
+| Porta | Quadro que chega | Quadro que sai |
+| --- | --- | --- |
+| Acesso | sem tag, entra na VLAN da porta | sempre sem tag, e só da VLAN da porta |
+| Tronco | com tag, aceito se a VLAN for permitida no tronco | com tag, só das VLANs permitidas |
+
+### 2.4 A VLAN nativa
+
+No tronco, a **VLAN nativa** é a única cujos quadros viajam **sem tag**. Ela existe para compatibilidade com dispositivos que não entendem a tag. Os dois lados do tronco precisam concordar sobre qual é a VLAN nativa: se discordam, os quadros caem na VLAN errada, e o problema aparece como vazamento entre VLANs ou falta de comunicação.
+
+### 2.5 Roteamento entre VLANs
+
+```mermaid
+sequenceDiagram
+  participant A as Host da VLAN 10
+  participant SW as Switch
+  participant R as Roteador, tronco
+  participant B as Host da VLAN 20
+  A->>SW: quadro para o gateway da VLAN 10
+  SW->>R: quadro com tag 10, pelo tronco
+  Note over R: remove a tag 10, consulta a tabela IP, decide a saída pela VLAN 20
+  R->>SW: quadro com tag 20, pelo mesmo tronco
+  SW->>B: quadro sem tag, porta da VLAN 20
+```
+
+*Esquema 3 (um roteador em um único cabo).* Com uma interface de tronco dividida em subinterfaces, uma por VLAN, o roteador faz o encaminhamento IP entre as VLANs. Cada VLAN tem **um gateway** próprio, que é o endereço da subinterface correspondente. É aqui que se aplicam as listas de controle de acesso entre departamentos.
+
+### 2.6 VLAN hopping: o risco de uma configuração fraca
+
+A VLAN é uma separação **lógica**, e a segurança dela depende da configuração dos switches. O *VLAN hopping* é o termo para um dispositivo conseguir enviar tráfego a uma VLAN que não é a dele. Há duas causas conhecidas, e o simulador as mostra no nível defensivo, com o efeito e a defesa:
+
+| Causa | Como acontece | Defesa |
+| --- | --- | --- |
+| Negociação automática de tronco | uma porta de acesso aceita negociar e vira tronco, e recebe todas as VLANs | desativar a negociação e fixar o modo da porta como acesso |
+| Tag dupla e VLAN nativa | o quadro leva duas tags, e a externa coincide com a VLAN nativa do tronco, então é removida e a interna vale na saída | usar uma VLAN nativa que **não tenha hosts**, e que não seja a das portas de usuário |
+
+Outras boas práticas: limitar as VLANs permitidas em cada tronco, desativar as portas não usadas e não usar a VLAN 1 para dados.
+
+### 2.7 Como ler o diagrama do simulador
+
+- **Topologia:** dois switches ligados por um **tronco**, hosts nas VLANs 10 e 20 e um roteador. A legenda de cores mostra quadro sem tag, quadro com tag 802.1Q e quadro descartado ou ação indevida.
+- **Aba Portas:** o modo de cada porta (acesso ou tronco), a VLAN e as VLANs permitidas.
+- **Aba Roteador:** a tabela do roteador, com uma rede por VLAN.
+- **Modos:** *Marcação 802.1Q*, *Segmentação*, *Roteamento entre VLANs*, *VLAN nativa* e *VLAN hopping*.
+
+### 2.8 Limites do modelo e do diagrama
+
+- A topologia é uma **árvore**: não há laços, e o comportamento com o spanning tree está no simulador de STP.
+- Não há tabela MAC dinâmica nem envelhecimento, GVRP ou MVRP, VLANs privadas, QinQ completo (TPID 0x88A8) nem VTP e DTP (protocolos proprietários).
+- Há um só roteador, com o tronco no switch 1. As sub-redes são 192.168.10.0/24 e 192.168.20.0/24 ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)), e os MACs são de documentação ([RFC 9542](https://www.rfc-editor.org/rfc/rfc9542)).
+- Não são citadas cláusulas do IEEE 802.1Q, por falta de um texto aberto para conferência: confira o texto oficial do IEEE antes de citar uma.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -27,7 +119,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -47,48 +139,48 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1a](#31-marcação-8021q): topologia do modo "Marcação 802.1Q", variante a
-- [Figura 3.1b](#31-marcação-8021q): topologia do modo "Marcação 802.1Q", variante b
-- [Figura 3.1c](#31-marcação-8021q): topologia do modo "Marcação 802.1Q", variante c
-- [Figura 3.2](#32-segmentação): topologia do modo "Segmentação"
-- [Figura 3.3a](#33-roteamento-entre-vlans): topologia do modo "Roteamento entre VLANs", variante a
-- [Figura 3.3b](#33-roteamento-entre-vlans): topologia do modo "Roteamento entre VLANs", variante b
-- [Figura 3.4a](#34-vlan-nativa): topologia do modo "VLAN nativa", variante a
-- [Figura 3.4b](#34-vlan-nativa): topologia do modo "VLAN nativa", variante b
-- [Figura 3.5a](#35-vlan-hopping): topologia do modo "VLAN hopping", variante a
-- [Figura 3.5b](#35-vlan-hopping): topologia do modo "VLAN hopping", variante b
-- [Figura 3.5c](#35-vlan-hopping): topologia do modo "VLAN hopping", variante c
-- [Figura 3.5d](#35-vlan-hopping): topologia do modo "VLAN hopping", variante d
+- [Figura 4.1a](#41-marcação-8021q): topologia do modo "Marcação 802.1Q", variante a
+- [Figura 4.1b](#41-marcação-8021q): topologia do modo "Marcação 802.1Q", variante b
+- [Figura 4.1c](#41-marcação-8021q): topologia do modo "Marcação 802.1Q", variante c
+- [Figura 4.2](#42-segmentação): topologia do modo "Segmentação"
+- [Figura 4.3a](#43-roteamento-entre-vlans): topologia do modo "Roteamento entre VLANs", variante a
+- [Figura 4.3b](#43-roteamento-entre-vlans): topologia do modo "Roteamento entre VLANs", variante b
+- [Figura 4.4a](#44-vlan-nativa): topologia do modo "VLAN nativa", variante a
+- [Figura 4.4b](#44-vlan-nativa): topologia do modo "VLAN nativa", variante b
+- [Figura 4.5a](#45-vlan-hopping): topologia do modo "VLAN hopping", variante a
+- [Figura 4.5b](#45-vlan-hopping): topologia do modo "VLAN hopping", variante b
+- [Figura 4.5c](#45-vlan-hopping): topologia do modo "VLAN hopping", variante c
+- [Figura 4.5d](#45-vlan-hopping): topologia do modo "VLAN hopping", variante d
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-o-frame-ganha-a-tag-no-tronco): sequência de "O frame ganha a tag no tronco"
-- [Figura 6.1.2](#612-a-vlan-nativa-não-leva-tag): sequência de "A VLAN nativa não leva tag"
-- [Figura 6.1.3](#613-vlan-fora-da-lista-do-tronco): sequência de "VLAN fora da lista do tronco"
-- [Figura 6.2.1](#621-mesma-vlan-em-dois-switches): sequência de "Mesma VLAN em dois switches"
-- [Figura 6.2.2](#622-o-broadcast-fica-na-vlan): sequência de "O broadcast fica na VLAN"
-- [Figura 6.2.3](#623-entre-vlans-não-há-caminho): sequência de "Entre VLANs não há caminho"
-- [Figura 6.3.1](#631-a-para-b-pelo-roteador): sequência de "A para B pelo roteador"
-- [Figura 6.3.2](#632-a-para-d-cruzando-o-tronco): sequência de "A para D, cruzando o tronco"
-- [Figura 6.3.3](#633-falta-a-subinterface-da-vlan-20): sequência de "Falta a subinterface da VLAN 20"
-- [Figura 6.3.4](#634-tronco-do-r1-sem-a-vlan-20): sequência de "Tronco do R1 sem a VLAN 20"
-- [Figura 6.4.1](#641-mesma-nativa-nas-duas-pontas): sequência de "Mesma nativa nas duas pontas"
-- [Figura 6.4.2](#642-divergência-o-frame-muda-de-vlan): sequência de "Divergência: o frame muda de VLAN"
-- [Figura 6.4.3](#643-o-tráfego-com-tag-não-é-afetado): sequência de "O tráfego com tag não é afetado"
-- [Figura 6.5.1](#651-porta-dinâmica-aceita-virar-tronco): sequência de "Porta dinâmica aceita virar tronco"
-- [Figura 6.5.2](#652-defesa-porta-fixa-em-acesso): sequência de "Defesa: porta fixa em acesso"
-- [Figura 6.5.3](#653-nativa-igual-à-vlan-do-invasor): sequência de "Nativa igual à VLAN do invasor"
-- [Figura 6.5.4](#654-defesa-nativa-em-vlan-sem-uso): sequência de "Defesa: nativa em VLAN sem uso"
+- [Figura 7.1.1](#711-o-frame-ganha-a-tag-no-tronco): sequência de "O frame ganha a tag no tronco"
+- [Figura 7.1.2](#712-a-vlan-nativa-não-leva-tag): sequência de "A VLAN nativa não leva tag"
+- [Figura 7.1.3](#713-vlan-fora-da-lista-do-tronco): sequência de "VLAN fora da lista do tronco"
+- [Figura 7.2.1](#721-mesma-vlan-em-dois-switches): sequência de "Mesma VLAN em dois switches"
+- [Figura 7.2.2](#722-o-broadcast-fica-na-vlan): sequência de "O broadcast fica na VLAN"
+- [Figura 7.2.3](#723-entre-vlans-não-há-caminho): sequência de "Entre VLANs não há caminho"
+- [Figura 7.3.1](#731-a-para-b-pelo-roteador): sequência de "A para B pelo roteador"
+- [Figura 7.3.2](#732-a-para-d-cruzando-o-tronco): sequência de "A para D, cruzando o tronco"
+- [Figura 7.3.3](#733-falta-a-subinterface-da-vlan-20): sequência de "Falta a subinterface da VLAN 20"
+- [Figura 7.3.4](#734-tronco-do-r1-sem-a-vlan-20): sequência de "Tronco do R1 sem a VLAN 20"
+- [Figura 7.4.1](#741-mesma-nativa-nas-duas-pontas): sequência de "Mesma nativa nas duas pontas"
+- [Figura 7.4.2](#742-divergência-o-frame-muda-de-vlan): sequência de "Divergência: o frame muda de VLAN"
+- [Figura 7.4.3](#743-o-tráfego-com-tag-não-é-afetado): sequência de "O tráfego com tag não é afetado"
+- [Figura 7.5.1](#751-porta-dinâmica-aceita-virar-tronco): sequência de "Porta dinâmica aceita virar tronco"
+- [Figura 7.5.2](#752-defesa-porta-fixa-em-acesso): sequência de "Defesa: porta fixa em acesso"
+- [Figura 7.5.3](#753-nativa-igual-à-vlan-do-invasor): sequência de "Nativa igual à VLAN do invasor"
+- [Figura 7.5.4](#754-defesa-nativa-em-vlan-sem-uso): sequência de "Defesa: nativa em VLAN sem uso"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 Marcação 802.1Q
+### 4.1 Marcação 802.1Q
 
 ```mermaid
 flowchart LR
@@ -105,7 +197,7 @@ flowchart LR
   n_d -- "VLAN 20" --- n_sw2
 ```
 
-*Figura 3.1a (Tipo A, topologia).* Elementos do modo "Marcação 802.1Q": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (6.1.1).
+*Figura 4.1a (Tipo A, topologia).* Elementos do modo "Marcação 802.1Q": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (7.1.1).
 
 ```mermaid
 flowchart LR
@@ -122,7 +214,7 @@ flowchart LR
   n_d -- "VLAN 20" --- n_sw2
 ```
 
-*Figura 3.1b (Tipo A, topologia).* Elementos do modo "Marcação 802.1Q": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (6.1.2).
+*Figura 4.1b (Tipo A, topologia).* Elementos do modo "Marcação 802.1Q": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (7.1.2).
 
 ```mermaid
 flowchart LR
@@ -139,9 +231,9 @@ flowchart LR
   n_d -- "VLAN 20" --- n_sw2
 ```
 
-*Figura 3.1c (Tipo A, topologia).* Elementos do modo "Marcação 802.1Q": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (6.1.3).
+*Figura 4.1c (Tipo A, topologia).* Elementos do modo "Marcação 802.1Q": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (7.1.3).
 
-### 3.2 Segmentação
+### 4.2 Segmentação
 
 ```mermaid
 flowchart LR
@@ -158,9 +250,9 @@ flowchart LR
   n_d -- "VLAN 20" --- n_sw2
 ```
 
-*Figura 3.2 (Tipo A, topologia).* Elementos do modo "Segmentação": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para todos os cenários do modo (6.2.1 a 6.2.3).
+*Figura 4.2 (Tipo A, topologia).* Elementos do modo "Segmentação": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para todos os cenários do modo (7.2.1 a 7.2.3).
 
-### 3.3 Roteamento entre VLANs
+### 4.3 Roteamento entre VLANs
 
 ```mermaid
 flowchart LR
@@ -179,7 +271,7 @@ flowchart LR
   n_r1 -- "tronco, VLANs 10,20" --- n_sw1
 ```
 
-*Figura 3.3a (Tipo A, topologia).* Elementos do modo "Roteamento entre VLANs": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Roteador R1 (192.168.10.1 e 192.168.20.1). Vale para os cenários (6.3.1 a 6.3.3).
+*Figura 4.3a (Tipo A, topologia).* Elementos do modo "Roteamento entre VLANs": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Roteador R1 (192.168.10.1 e 192.168.20.1). Vale para os cenários (7.3.1 a 7.3.3).
 
 ```mermaid
 flowchart LR
@@ -198,9 +290,9 @@ flowchart LR
   n_r1 -- "tronco, VLANs 10" --- n_sw1
 ```
 
-*Figura 3.3b (Tipo A, topologia).* Elementos do modo "Roteamento entre VLANs": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Roteador R1 (192.168.10.1 e 192.168.20.1). Vale para os cenários (6.3.4).
+*Figura 4.3b (Tipo A, topologia).* Elementos do modo "Roteamento entre VLANs": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Roteador R1 (192.168.10.1 e 192.168.20.1). Vale para os cenários (7.3.4).
 
-### 3.4 VLAN nativa
+### 4.4 VLAN nativa
 
 ```mermaid
 flowchart LR
@@ -217,7 +309,7 @@ flowchart LR
   n_d -- "VLAN 20" --- n_sw2
 ```
 
-*Figura 3.4a (Tipo A, topologia).* Elementos do modo "VLAN nativa": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (6.4.1).
+*Figura 4.4a (Tipo A, topologia).* Elementos do modo "VLAN nativa": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (7.4.1).
 
 ```mermaid
 flowchart LR
@@ -234,9 +326,9 @@ flowchart LR
   n_d -- "VLAN 20" --- n_sw2
 ```
 
-*Figura 3.4b (Tipo A, topologia).* Elementos do modo "VLAN nativa": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (6.4.2 e 6.4.3).
+*Figura 4.4b (Tipo A, topologia).* Elementos do modo "VLAN nativa": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12). Vale para os cenários (7.4.2 e 7.4.3).
 
-### 3.5 VLAN hopping
+### 4.5 VLAN hopping
 
 ```mermaid
 flowchart LR
@@ -257,7 +349,7 @@ flowchart LR
   class n_m atacante
 ```
 
-*Figura 3.5a (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (6.5.1).
+*Figura 4.5a (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (7.5.1).
 
 ```mermaid
 flowchart LR
@@ -278,7 +370,7 @@ flowchart LR
   class n_m atacante
 ```
 
-*Figura 3.5b (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (6.5.2).
+*Figura 4.5b (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (7.5.2).
 
 ```mermaid
 flowchart LR
@@ -299,7 +391,7 @@ flowchart LR
   class n_m atacante
 ```
 
-*Figura 3.5c (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (6.5.3).
+*Figura 4.5c (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (7.5.3).
 
 ```mermaid
 flowchart LR
@@ -320,22 +412,22 @@ flowchart LR
   class n_m atacante
 ```
 
-*Figura 3.5d (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (6.5.4).
+*Figura 4.5d (Tipo A, topologia).* Elementos do modo "VLAN hopping": SW1 (switch); SW2 (switch); Host A (192.168.10.11); Host B (192.168.20.11); Host C (192.168.10.12); Host D (192.168.20.12); Invasor (192.168.10.99). Vale para os cenários (7.5.4).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Portas, Roteador (modos: Roteamento entre VLANs), Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Rede
+### 6.1 Rede
 
 - **RTT (ms)**. Valores: 1; 2; 5; 20; 100. Padrão: 2. Modos: todos.
   - Tempo de ida e volta entre dois equipamentos vizinhos.
   - Num enlace Ethernet o atraso é de microssegundos a poucos milissegundos. Valores altos servem para ver o diagrama mais espaçado.
   - Não muda o que as VLANs fazem: a decisão do switch depende só da configuração das portas.
 
-### 5.2 Tronco
+### 6.2 Tronco
 
 - **VLAN nativa do tronco**. Valores: VLAN 1 (padrão); VLAN 10 (a do Host A). Padrão: VLAN 1 (padrão). Modos: Marcação 802.1Q.
   - A VLAN cujos frames trafegam sem tag no tronco.
@@ -352,7 +444,7 @@ Cenário, Captura, Mensagem, Portas, Roteador (modos: Roteamento entre VLANs), E
   - O mesmo ajuste, na outra ponta.
   - Se as duas pontas discordam, um frame sem tag muda de VLAN ao atravessar o tronco. Os frames que saem marcados não sofrem isso.
 
-### 5.3 Tráfego
+### 6.3 Tráfego
 
 - **O que o Host A envia**. Valores: Ping para o Host C (mesma VLAN, outro switch); Broadcast (ARP) na VLAN 10; Frame para o Host B (outra VLAN, sem roteador). Padrão: Ping para o Host C (mesma VLAN, outro switch). Modos: Segmentação.
   - Três formas de testar o isolamento das VLANs.
@@ -366,7 +458,7 @@ Cenário, Captura, Mensagem, Portas, Roteador (modos: Roteamento entre VLANs), E
   - A VLAN do remetente decide se o frame sai com ou sem tag.
   - O frame da VLAN igual à nativa do SW1 sai **sem tag**, e é ele que sofre com a divergência. O de outra VLAN sai com tag e chega certo.
 
-### 5.4 Roteador
+### 6.4 Roteador
 
 - **Configuração do R1**. Valores: Correta (subinterfaces .10 e .20); Falta a subinterface da VLAN 20; Tronco do R1 sem a VLAN 20. Padrão: Correta (subinterfaces .10 e .20). Modos: Roteamento entre VLANs.
   - Os dois defeitos mais comuns no router-on-a-stick.
@@ -374,29 +466,29 @@ Cenário, Captura, Mensagem, Portas, Roteador (modos: Roteamento entre VLANs), E
   - **Falta a subinterface:** o R1 não tem rota para a sub-rede 192.168.20.0/24 e responde com ICMP Destination Unreachable.
   - **Tronco sem a VLAN 20:** o R1 tem as duas subinterfaces, mas a porta do SW1 só permite a VLAN 10. O R1 roteia, e o SW1 descarta o frame de volta.
 
-### 5.5 Ataque
+### 6.5 Ataque
 
 - **Técnica do invasor**. Valores: Fingir ser um switch (negociar um tronco); Duas tags no mesmo frame. Padrão: Fingir ser um switch (negociar um tronco). Modos: VLAN hopping.
   - Duas formas conhecidas de sair da própria VLAN.
   - **Fingir ser um switch:** se a porta aceita negociar tronco, o invasor passa a enviar frames marcados com qualquer VLAN.
   - **Duas tags:** funciona quando a VLAN nativa do tronco é a da porta do invasor: o primeiro switch remove a tag externa e o segundo obedece à interna. Só vale em um sentido e só chega a outro switch.
 
-### 5.6 Defesa
+### 6.6 Defesa
 
 - **Defesa aplicada**. Valores: Nenhuma (configuração padrão); Defesa para esta técnica. Padrão: Nenhuma (configuração padrão). Modos: VLAN hopping.
   - A defesa depende da técnica escolhida.
   - **Contra o fingimento de switch:** fixar a porta em modo acesso e desligar a negociação de tronco.
   - **Contra as duas tags:** usar como nativa do tronco uma VLAN sem hosts (aqui, a 999), e nunca a VLAN de portas de acesso.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: Marcação 802.1Q
+### 7.1 Modo: Marcação 802.1Q
 
 > **Grupo:** Marcação
 
 O host não sabe que existem VLANs. A porta de acesso põe o frame numa VLAN, e a porta de tronco carrega várias VLANs ao mesmo tempo, distinguindo-as por uma tag de 4 bytes (IEEE 802.1Q).
 
-#### 6.1.1 O frame ganha a tag no tronco
+#### 7.1.1 O frame ganha a tag no tronco
 
 *A tag nasce e morre no tronco.*
 
@@ -427,7 +519,7 @@ sequenceDiagram
   n_sw2 ->> n_c: Echo Request (sem tag)
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "O frame ganha a tag no tronco", na ordem do tempo, entre Host A, SW1, SW2, Host C: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Marcação 802.1Q", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "O frame ganha a tag no tronco", na ordem do tempo, entre Host A, SW1, SW2, Host C: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Marcação 802.1Q", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -439,7 +531,7 @@ sequenceDiagram
 
 **Por que importa.** É assim que uma só ligação física carrega várias redes lógicas sem que os hosts precisem saber.
 
-#### 6.1.2 A VLAN nativa não leva tag
+#### 7.1.2 A VLAN nativa não leva tag
 
 *Na VLAN nativa, o frame vai sem tag.*
 
@@ -469,7 +561,7 @@ sequenceDiagram
   n_sw2 ->> n_c: Echo Request (sem tag)
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "A VLAN nativa não leva tag", na ordem do tempo, entre Host A, SW1, SW2, Host C: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Marcação 802.1Q", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "A VLAN nativa não leva tag", na ordem do tempo, entre Host A, SW1, SW2, Host C: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Marcação 802.1Q", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -479,7 +571,7 @@ sequenceDiagram
 
 **Por que importa.** A nativa existe por compatibilidade com equipamentos que não entendem a tag. Ela só funciona bem se as duas pontas concordam.
 
-#### 6.1.3 VLAN fora da lista do tronco
+#### 7.1.3 VLAN fora da lista do tronco
 
 *O tronco só carrega o que foi permitido.*
 
@@ -505,7 +597,7 @@ sequenceDiagram
   n_a ->> n_sw1: Echo Request (sem tag)
 ```
 
-*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "VLAN fora da lista do tronco", na ordem do tempo, entre Host A, SW1, SW2, Host C: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Marcação 802.1Q", com a configuração aplicada acima.
+*Figura 7.1.3 (Tipo B, sequência).* Mensagens do cenário "VLAN fora da lista do tronco", na ordem do tempo, entre Host A, SW1, SW2, Host C: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Marcação 802.1Q", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -515,13 +607,13 @@ sequenceDiagram
 
 **Por que importa.** Limitar as VLANs do tronco ao necessário é também uma defesa: reduz até onde um problema de uma VLAN pode se espalhar.
 
-### 6.2 Modo: Segmentação
+### 7.2 Modo: Segmentação
 
 > **Grupo:** Isolamento
 
 Cada VLAN é um domínio de broadcast separado, mesmo espalhada por vários switches. Um frame só é encaminhado dentro da VLAN em que entrou.
 
-#### 6.2.1 Mesma VLAN em dois switches
+#### 7.2.1 Mesma VLAN em dois switches
 
 *Unicast só até o destino.*
 
@@ -553,7 +645,7 @@ sequenceDiagram
   n_sw2 ->> n_c: Echo Request (sem tag)
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Mesma VLAN em dois switches", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segmentação", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Mesma VLAN em dois switches", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segmentação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -563,7 +655,7 @@ sequenceDiagram
 
 **Por que importa.** A mesma VLAN em dois switches se comporta como um único segmento de rede local.
 
-#### 6.2.2 O broadcast fica na VLAN
+#### 7.2.2 O broadcast fica na VLAN
 
 *Cada VLAN é um domínio de broadcast.*
 
@@ -595,7 +687,7 @@ sequenceDiagram
   n_sw2 ->> n_c: ARP Request (sem tag)
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "O broadcast fica na VLAN", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segmentação", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "O broadcast fica na VLAN", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segmentação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -605,7 +697,7 @@ sequenceDiagram
 
 **Por que importa.** Separar em VLANs reduz o domínio de broadcast, melhora o desempenho e limita o alcance de varreduras e ataques de camada 2.
 
-#### 6.2.3 Entre VLANs não há caminho
+#### 7.2.3 Entre VLANs não há caminho
 
 *Sem roteador, VLANs não se falam.*
 
@@ -638,7 +730,7 @@ sequenceDiagram
   n_sw2 ->> n_c: Echo Request (sem tag)
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Entre VLANs não há caminho", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segmentação", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "Entre VLANs não há caminho", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Segmentação", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -648,13 +740,13 @@ sequenceDiagram
 
 **Por que importa.** O isolamento é da camada 2: para falar com outra VLAN é preciso passar por um dispositivo de camada 3.
 
-### 6.3 Modo: Roteamento entre VLANs
+### 7.3 Modo: Roteamento entre VLANs
 
 > **Grupo:** Router-on-a-stick
 
 Hosts de VLANs diferentes estão em sub-redes IP diferentes e só se falam por um dispositivo de camada 3. No router-on-a-stick, um roteador usa um único cabo de tronco e uma subinterface por VLAN.
 
-#### 6.3.1 A para B pelo roteador
+#### 7.3.1 A para B pelo roteador
 
 *O frame sobe com a tag 10 e volta com a 20.*
 
@@ -689,7 +781,7 @@ sequenceDiagram
   n_sw1 ->> n_b: Echo Request (sem tag)
 ```
 
-*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "A para B pelo roteador", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
+*Figura 7.3.1 (Tipo B, sequência).* Mensagens do cenário "A para B pelo roteador", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -700,7 +792,7 @@ sequenceDiagram
 
 **Por que importa.** O roteador atravessa o mesmo cabo duas vezes, que é o gargalo da solução. Um switch de camada 3 faz o mesmo internamente.
 
-#### 6.3.2 A para D, cruzando o tronco
+#### 7.3.2 A para D, cruzando o tronco
 
 *Depois do roteador, ainda há o tronco.*
 
@@ -736,7 +828,7 @@ sequenceDiagram
   n_sw2 ->> n_d: Echo Request (sem tag)
 ```
 
-*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "A para D, cruzando o tronco", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
+*Figura 7.3.2 (Tipo B, sequência).* Mensagens do cenário "A para D, cruzando o tronco", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -750,7 +842,7 @@ sequenceDiagram
 
 Os dois defeitos mais comuns: faltar a subinterface de uma VLAN, ou o tronco do roteador não permitir uma VLAN que ele precisa usar.
 
-#### 6.3.3 Falta a subinterface da VLAN 20
+#### 7.3.3 Falta a subinterface da VLAN 20
 
 *Sem a subinterface, não há rota.*
 
@@ -784,7 +876,7 @@ sequenceDiagram
   n_sw1 ->> n_a: Net Unreachable (sem tag)
 ```
 
-*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "Falta a subinterface da VLAN 20", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
+*Figura 7.3.3 (Tipo B, sequência).* Mensagens do cenário "Falta a subinterface da VLAN 20", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -794,7 +886,7 @@ sequenceDiagram
 
 **Por que importa.** É o primeiro defeito a conferir quando uma VLAN alcança o gateway mas não alcança as demais.
 
-#### 6.3.4 Tronco do R1 sem a VLAN 20
+#### 7.3.4 Tronco do R1 sem a VLAN 20
 
 *O roteador respondeu, o switch barrou.*
 
@@ -826,7 +918,7 @@ sequenceDiagram
   n_r1 -x n_sw1: Echo Request (tag 20)
 ```
 
-*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "Tronco do R1 sem a VLAN 20", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
+*Figura 7.3.4 (Tipo B, sequência).* Mensagens do cenário "Tronco do R1 sem a VLAN 20", na ordem do tempo, entre Host A, Host B, SW1, R1, SW2, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Roteamento entre VLANs", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -836,13 +928,13 @@ sequenceDiagram
 
 **Por que importa.** A lista de VLANs permitidas vale nos dois sentidos, inclusive para o roteador.
 
-### 6.4 Modo: VLAN nativa
+### 7.4 Modo: VLAN nativa
 
 > **Grupo:** Nativa igual
 
 A VLAN nativa é a única cujos frames trafegam sem tag no tronco. Quando as duas pontas concordam, a distinção é transparente.
 
-#### 6.4.1 Mesma nativa nas duas pontas
+#### 7.4.1 Mesma nativa nas duas pontas
 
 *Pontas iguais: funciona.*
 
@@ -874,7 +966,7 @@ sequenceDiagram
   n_sw2 ->> n_c: Echo Request (sem tag)
 ```
 
-*Figura 6.4.1 (Tipo B, sequência).* Mensagens do cenário "Mesma nativa nas duas pontas", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN nativa", com a configuração aplicada acima.
+*Figura 7.4.1 (Tipo B, sequência).* Mensagens do cenário "Mesma nativa nas duas pontas", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN nativa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -888,7 +980,7 @@ sequenceDiagram
 
 Se as pontas do tronco discordam sobre a VLAN nativa, um frame sem tag muda de VLAN ao atravessar o enlace. Os frames com tag não são afetados.
 
-#### 6.4.2 Divergência: o frame muda de VLAN
+#### 7.4.2 Divergência: o frame muda de VLAN
 
 *Divergência: o frame muda de VLAN.*
 
@@ -921,7 +1013,7 @@ sequenceDiagram
   n_sw2 ->> n_d: Echo Request (sem tag)
 ```
 
-*Figura 6.4.2 (Tipo B, sequência).* Mensagens do cenário "Divergência: o frame muda de VLAN", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN nativa", com a configuração aplicada acima.
+*Figura 7.4.2 (Tipo B, sequência).* Mensagens do cenário "Divergência: o frame muda de VLAN", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN nativa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -932,7 +1024,7 @@ sequenceDiagram
 
 **Por que importa.** Quebra o isolamento entre VLANs e derruba a comunicação. Equipamentos costumam avisar da divergência, e ela deve ser tratada como erro de configuração.
 
-#### 6.4.3 O tráfego com tag não é afetado
+#### 7.4.3 O tráfego com tag não é afetado
 
 *Com tag, a divergência não importa.*
 
@@ -964,7 +1056,7 @@ sequenceDiagram
   n_sw2 ->> n_d: Echo Request (sem tag)
 ```
 
-*Figura 6.4.3 (Tipo B, sequência).* Mensagens do cenário "O tráfego com tag não é afetado", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN nativa", com a configuração aplicada acima.
+*Figura 7.4.3 (Tipo B, sequência).* Mensagens do cenário "O tráfego com tag não é afetado", na ordem do tempo, entre Host A, Host B, SW1, SW2, Host C, Host D: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN nativa", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -974,13 +1066,13 @@ sequenceDiagram
 
 **Por que importa.** O defeito só aparece para a VLAN nativa, o que dificulta o diagnóstico.
 
-### 6.5 Modo: VLAN hopping
+### 7.5 Modo: VLAN hopping
 
 > **Grupo:** Fingir ser um switch
 
 Uma porta que aceita negociar o modo tronco pode ser convertida por um host. Nível defensivo: aviso, efeito e defesa.
 
-#### 6.5.1 Porta dinâmica aceita virar tronco
+#### 7.5.1 Porta dinâmica aceita virar tronco
 
 *A porta aceita virar tronco.*
 
@@ -1015,7 +1107,7 @@ sequenceDiagram
   n_sw2 ->> n_d: Echo Request (sem tag)
 ```
 
-*Figura 6.5.1 (Tipo B, sequência).* Mensagens do cenário "Porta dinâmica aceita virar tronco", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
+*Figura 7.5.1 (Tipo B, sequência).* Mensagens do cenário "Porta dinâmica aceita virar tronco", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 5 mensagens, numeradas de 1 a 5 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1027,7 +1119,7 @@ sequenceDiagram
 
 **Por que importa.** A negociação automática é uma comodidade que vira risco numa porta de usuário. A negociação é recurso de fabricantes e não faz parte do 802.1Q.
 
-#### 6.5.2 Defesa: porta fixa em acesso
+#### 7.5.2 Defesa: porta fixa em acesso
 
 *Porta de acesso fixa.*
 
@@ -1057,7 +1149,7 @@ sequenceDiagram
   n_m -x n_sw1: Echo Request (tag 20)
 ```
 
-*Figura 6.5.2 (Tipo B, sequência).* Mensagens do cenário "Defesa: porta fixa em acesso", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 3 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
+*Figura 7.5.2 (Tipo B, sequência).* Mensagens do cenário "Defesa: porta fixa em acesso", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 3 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1072,7 +1164,7 @@ sequenceDiagram
 
 Um frame com duas tags explora a remoção da tag externa na VLAN nativa. Nível defensivo: aviso, efeito e defesa.
 
-#### 6.5.3 Nativa igual à VLAN do invasor
+#### 7.5.3 Nativa igual à VLAN do invasor
 
 *A tag externa some no tronco.*
 
@@ -1107,7 +1199,7 @@ sequenceDiagram
   n_sw2 ->> n_d: Echo Request (sem tag)
 ```
 
-*Figura 6.5.3 (Tipo B, sequência).* Mensagens do cenário "Nativa igual à VLAN do invasor", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
+*Figura 7.5.3 (Tipo B, sequência).* Mensagens do cenário "Nativa igual à VLAN do invasor", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1118,7 +1210,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra por que a VLAN nativa não deve ser a de portas de acesso.
 
-#### 6.5.4 Defesa: nativa em VLAN sem uso
+#### 7.5.4 Defesa: nativa em VLAN sem uso
 
 *A nativa em VLAN sem uso.*
 
@@ -1153,7 +1245,7 @@ sequenceDiagram
   n_sw2 ->> n_c: Echo Request (tag 20)
 ```
 
-*Figura 6.5.4 (Tipo B, sequência).* Mensagens do cenário "Defesa: nativa em VLAN sem uso", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
+*Figura 7.5.4 (Tipo B, sequência).* Mensagens do cenário "Defesa: nativa em VLAN sem uso", na ordem do tempo, entre Invasor, Host A, SW1, SW2, Host C, Host D: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "VLAN hopping", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1163,13 +1255,13 @@ sequenceDiagram
 
 **Por que importa.** Uma VLAN nativa dedicada e sem uso elimina o caso em que uma tag é removida de graça.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 Para que serve
+### 8.1 Para que serve
 
 Uma **VLAN** divide uma rede local física em redes lógicas separadas. Cada VLAN é um domínio de broadcast próprio, com a sua sub-rede IP, e pode se espalhar por vários switches. O padrão é o **IEEE 802.1Q**, que define a tag de VLAN e o comportamento das portas. A edição vigente é o IEEE 802.1Q-2022, que incorpora as anteriores, inclusive o IEEE 802.1ad (empilhamento de tags, ou QinQ), o 802.1s (MSTP) e o 802.1w (RSTP). Confira o texto oficial do IEEE antes de citar uma cláusula.
 
-### 7.2 A tag 802.1Q
+### 8.2 A tag 802.1Q
 
 | Campo | Tamanho | Função |
 | --- | --- | --- |
@@ -1180,7 +1272,7 @@ Uma **VLAN** divide uma rede local física em redes lógicas separadas. Cada VLA
 
 A tag soma **4 bytes**, e o frame marcado pode chegar a 1522 bytes (IEEE 802.3ac, hoje parte do IEEE 802.3). Depois da tag vem o campo Tipo real (0x0800 para IPv4, 0x0806 para ARP). Os tamanhos mostrados no simulador não incluem o FCS nem o preenchimento mínimo.
 
-### 7.3 Portas de acesso e de tronco
+### 8.3 Portas de acesso e de tronco
 
 | Porta | Frame que chega | Frame que sai |
 | --- | --- | --- |
@@ -1191,11 +1283,11 @@ A tag soma **4 bytes**, e o frame marcado pode chegar a 1522 bytes (IEEE 802.3ac
 - Um **broadcast** vai a todas as portas da VLAN, em todos os switches ligados por troncos que a carreguem.
 - A **lista de VLANs permitidas** do tronco limita o que o enlace carrega. A boa prática é permitir só as VLANs necessárias.
 
-### 7.4 VLAN nativa
+### 8.4 VLAN nativa
 
 No 802.1Q, a VLAN nativa é a do identificador de VLAN da porta (PVID) quando o frame chega sem tag. No tronco, o frame dela costuma ir sem tag por compatibilidade com equipamentos que não entendem a tag. Dois cuidados: **(1)** as duas pontas do tronco devem concordar sobre a nativa; se discordam, um frame sem tag muda de VLAN ao atravessar o enlace; **(2)** a nativa não deve ser a VLAN de portas de acesso, pelo motivo do VLAN hopping abaixo. Alguns fabricantes avisam da divergência; isso não é parte do 802.1Q.
 
-### 7.5 Roteamento entre VLANs
+### 8.5 Roteamento entre VLANs
 
 Hosts de VLANs diferentes estão em sub-redes diferentes e só se falam por um dispositivo de camada 3. Cada host envia ao **gateway** os pacotes de outras sub-redes: o MAC de destino é o do gateway, e o IP de destino continua o do destino final ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.3.1).
 
@@ -1204,7 +1296,7 @@ Hosts de VLANs diferentes estão em sub-redes diferentes e só se falam por um d
 
 Ao rotear, o roteador reescreve os MACs, reduz o TTL em 1 ([RFC 791](https://www.rfc-editor.org/rfc/rfc791), seção 3.1; [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.3.1) e, se não há rota, descarta o pacote e responde com ICMP Destination Unreachable ([RFC 792](https://www.rfc-editor.org/rfc/rfc792), "Destination Unreachable Message").
 
-### 7.6 VLAN hopping e defesas (nível defensivo)
+### 8.6 VLAN hopping e defesas (nível defensivo)
 
 VLAN hopping é a obtenção de acesso a uma VLAN que não é a da porta. O simulador mostra duas técnicas, só para explicar o risco e a defesa.
 
@@ -1215,7 +1307,7 @@ VLAN hopping é a obtenção de acesso a uma VLAN que não é a da porta. O simu
 
 Nenhuma das duas técnicas funciona dentro do mesmo switch ou contra uma porta configurada como acima. O simulador não reproduz o formato de nenhuma mensagem proprietária de negociação.
 
-### 7.7 O que o simulador simplifica
+### 8.7 O que o simulador simplifica
 
 - Sem spanning tree: a topologia é uma árvore (não há laços). O comportamento com o STP está no simulador de STP, RSTP e MSTP.
 - Sem tabela MAC dinâmica nem envelhecimento: o MAC de um destino é considerado conhecido na VLAN dele, e fora dela o frame é inundado.
@@ -1224,7 +1316,7 @@ Nenhuma das duas técnicas funciona dentro do mesmo switch ou contra uma porta c
 - Os endereços MAC seguem a faixa de documentação ([RFC 9542](https://www.rfc-editor.org/rfc/rfc9542), que substitui a [RFC 7042](https://www.rfc-editor.org/rfc/rfc7042)) e as sub-redes são as privadas 192.168.10.0/24 e 192.168.20.0/24 ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)).
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 
@@ -1239,6 +1331,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
 | **IEEE** | Institute of Electrical and Electronics Engineers | entidade que publica padrões de redes locais, como o 802.3 (Ethernet), o 802.1 (comutação) e o 802.11 (Wi-Fi) |
 | **IP** | Internet Protocol, protocolo de internet | endereça e encaminha pacotes entre redes, de origem a destino |
+| **LAN** | Local Area Network, rede local | rede de alcance restrito, como a de um prédio ou laboratório, ligada por switches ou por Wi-Fi |
 | **MAC** | Media Access Control | camada de enlace que controla o acesso ao meio; também nomeia o endereço físico de 48 bits de uma interface |
 | **MSTP** | Multiple Spanning Tree Protocol | versão do STP com várias árvores, cada uma para um grupo de VLANs |
 | **PCP** | Priority Code Point, ponto de código de prioridade | três bits da etiqueta 802.1Q que dão a prioridade do frame (classe de serviço) |

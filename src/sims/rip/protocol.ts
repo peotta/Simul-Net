@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -33,6 +34,7 @@ export const ripProtocol: ProtocolDef = {
   build: (P, sub) => (sub === 'falha' ? buildFalha(P as unknown as FalhaParams) : buildConv(P as unknown as ConvParams)),
   explain: (tr) => explain(tr),
   reference,
+  fundamentacao,
   setup,
 };
 

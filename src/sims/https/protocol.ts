@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -27,6 +28,7 @@ export const httpsProtocol: ProtocolDef = {
   build: (P, sub) => buildHttps(P as unknown as TlsParams, sub),
   explain: (tr, P) => explain(tr, P as unknown as TlsParams),
   reference,
+  fundamentacao,
   setup,
 };
 

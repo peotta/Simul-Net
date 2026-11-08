@@ -12,12 +12,125 @@ Núcleo MPLS com seis LSRs: sessões LDP, LIB e LFIB, push, swap e pop, PHP, mod
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| LDP e LSP | Montagem do LSP | 6.1.1 e 6.1.2 |
-| Plano de dados | Push, swap e pop | 6.2.1 a 6.2.6 |
-| TTL e traceroute | TTL Uniform | 6.3.1 e 6.3.2 |
-| Falha de enlace | Falha de enlace | 6.4.1 |
+| LDP e LSP | Montagem do LSP | 7.1.1 e 7.1.2 |
+| Plano de dados | Push, swap e pop | 7.2.1 a 7.2.6 |
+| TTL e traceroute | TTL Uniform | 7.3.1 e 7.3.2 |
+| Falha de enlace | Falha de enlace | 7.4.1 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o MPLS resolve
+
+No encaminhamento IP comum, **cada roteador** examina o endereço de destino e procura o prefixo mais específico na tabela de rotas, a cada salto. O MPLS (*Multiprotocol Label Switching*, [RFC 3031](https://www.rfc-editor.org/rfc/rfc3031)) muda a divisão do trabalho: o roteador de **entrada** classifica o pacote **uma só vez** e cola nele um **rótulo** curto. No núcleo, cada roteador encaminha olhando **só o rótulo**, em uma tabela simples de troca, sem examinar o cabeçalho IP.
+
+Hoje o ganho não é a velocidade da consulta, e sim a **flexibilidade**: o MPLS permite engenharia de tráfego, recuperação rápida de falhas e, principalmente, **VPNs de camada 3** sobre uma infraestrutura compartilhada, porque o núcleo não precisa conhecer as rotas dos clientes.
+
+### 2.2 O diagrama do caminho rotulado
+
+```mermaid
+flowchart LR
+  H1["Host 1"] -- "pacote IP" --> PE1["PE1<br/>push do rótulo 100"]
+  PE1 -- "rótulo 100" --> P1["P1<br/>swap 100 para 200"]
+  P1 -- "rótulo 200" --> P2["P2<br/>pop (PHP)"]
+  P2 -- "pacote IP" --> PE2["PE2<br/>consulta IP"]
+  PE2 -- "pacote IP" --> H2["Host 2"]
+```
+
+*Esquema 1 (um LSP de PE1 a PE2).* O caminho percorrido por uma classe de pacotes é o **LSP** (*Label Switched Path*), que é **unidirecional**: a ida e a volta usam LSPs e rótulos diferentes. O roteador de borda é o **PE** (*Provider Edge*, também chamado LER), e o de núcleo é o **P** (*Provider*, também chamado LSR). Os rótulos têm **significado local**: cada roteador escolhe os seus, e o mesmo número pode significar coisas diferentes em roteadores diferentes.
+
+As operações são três: **push** (impor um rótulo, na entrada), **swap** (trocar o rótulo do topo, no núcleo) e **pop** (remover o rótulo do topo, na saída). A [RFC 3032](https://www.rfc-editor.org/rfc/rfc3032) (seção 2.1) as descreve como ações sobre o rótulo do topo da pilha.
+
+### 2.3 O cabeçalho de rótulo
+
+O rótulo fica **entre** o cabeçalho de enlace e o cabeçalho IP ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032), seção 2.1). Cada entrada da pilha tem 32 bits.
+
+| Campo | Tamanho | Função |
+| --- | --- | --- |
+| Rótulo | 20 bits | identifica a classe de encaminhamento (FEC) |
+| TC | 3 bits | classe de tráfego, usada para QoS (era chamado EXP na [RFC 3032](https://www.rfc-editor.org/rfc/rfc3032)) |
+| S | 1 bit | vale 1 na última entrada da pilha |
+| TTL | 8 bits | decrementado a cada roteador, como no IP |
+
+Alguns valores são reservados ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032)): 0 é o *IPv4 Explicit NULL*, 1 é o *Router Alert*, 2 é o *IPv6 Explicit NULL* e 3 é o *Implicit NULL*, que é anunciado mas nunca aparece no pacote. Os rótulos livres começam em 16.
+
+### 2.4 O plano de controle: como os rótulos são distribuídos
+
+```mermaid
+sequenceDiagram
+  participant A as LSR vizinho A
+  participant B as LSR vizinho B
+  A->>B: Hello (UDP 646, multicast do enlace)
+  B->>A: Hello
+  A->>B: sessão TCP 646
+  A->>B: Initialization
+  B->>A: Initialization e KeepAlive
+  A->>B: KeepAlive
+  Note over A,B: sessão LDP operacional
+  B->>A: Label Mapping: FEC 10.0.0.0/24, rótulo 200
+```
+
+*Esquema 2 (descoberta, sessão e mapeamento de rótulos).* O LDP (*Label Distribution Protocol*, [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036)) começa com **Hello** por UDP (descoberta básica, seção 2.4.1), abre uma **sessão TCP** (seção 2.5) e então os vizinhos trocam **Label Mapping**: cada mensagem associa uma FEC a um rótulo (seção 3.5.7).
+
+- A **FEC** (*Forwarding Equivalence Class*) é o conjunto de pacotes tratados do mesmo modo, por exemplo todos os destinos de um prefixo.
+- O modo típico é o **Downstream Unsolicited** (o vizinho anuncia sem esperar pedido) com **controle independente** e **retenção liberal** ([RFC 5036](https://www.rfc-editor.org/rfc/rfc5036), seção 2.6).
+- Com a retenção liberal, a **LIB** guarda os rótulos de **todos** os vizinhos, e a **LFIB** usa só o do próximo salto escolhido pelo IGP. Se o IGP mudar de caminho, o rótulo novo já está na LIB, e a convergência é rápida.
+
+### 2.5 O plano de dados: push, swap e pop
+
+```mermaid
+flowchart TD
+  I["Pacote chega com rótulo"] --> L["Consulta a LFIB pelo rótulo de entrada"]
+  L --> Q{"Ação da entrada"}
+  Q -- "swap" --> S["Troca o rótulo do topo<br/>e envia ao próximo salto"]
+  Q -- "pop" --> PO["Remove o rótulo do topo<br/>e envia ao próximo salto"]
+  Q -- "sem entrada" --> D["Descarta"]
+```
+
+*Esquema 3 (decisão de um LSR).* A consulta é só pelo rótulo de entrada, e o resultado diz a ação e o próximo salto. Na entrada da rede, o PE faz o oposto: consulta o **IP** e faz o **push**.
+
+### 2.6 PHP: quem remove o último rótulo
+
+Com o **PHP** (*Penultimate Hop Popping*, [RFC 3031](https://www.rfc-editor.org/rfc/rfc3031), seção 3.16), o roteador de saída anuncia o rótulo **3** (*Implicit NULL*) e o **penúltimo** LSR remove o rótulo. Assim, o roteador de saída faz uma única consulta (IP), em vez de duas (rótulo e IP). Com o **Explicit NULL** (rótulo 0), o rótulo chega ao egresso, o que preserva o campo TC para QoS.
+
+### 2.7 O TTL e o traceroute
+
+| Modelo | O que acontece | O que o traceroute mostra |
+| --- | --- | --- |
+| Uniform | o TTL do IP é copiado para o rótulo na entrada e de volta na saída ([RFC 3443](https://www.rfc-editor.org/rfc/rfc3443)) | todos os roteadores do núcleo |
+| Pipe | o rótulo começa com um TTL fixo, e o núcleo fica invisível | só os roteadores de borda |
+
+A cada roteador, o TTL do rótulo é decrementado ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032), seção 2.4). Quando o TTL expira dentro do LSP, o LSR gera o ICMP *Time Exceeded* e o envia adiante **pelo próprio LSP**, até o egresso, que o devolve à origem. Por isso todos os saltos do núcleo costumam mostrar um RTT parecido.
+
+### 2.8 L3VPN: dois rótulos
+
+```mermaid
+flowchart LR
+  CE1["CE do cliente A<br/>site 1"] --> PE1["PE1<br/>VRF do cliente A"]
+  PE1 -- "pilha: rótulo de transporte<br/>(topo) e rótulo de VPN" --> P["P<br/>só olha o rótulo de transporte"]
+  P --> PE2["PE2<br/>VRF do cliente A"]
+  PE2 --> CE2["CE do cliente A<br/>site 2"]
+  PE1 -. "MP-BGP: rotas VPNv4 com RD, RT e rótulo de VPN" .-> PE2
+```
+
+*Esquema 4 (VPN de camada 3, [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364)).* Cada PE mantém uma tabela de roteamento por cliente, a **VRF** (seção 3). O **RD** (*Route Distinguisher*, seção 4.1) torna únicos prefixos iguais de clientes diferentes, e o **RT** (*Route Target*, seção 4.3.1) decide em quais VRFs a rota entra. Os PEs trocam as rotas dos clientes por **MP-BGP**. O pacote leva **dois rótulos**: o de **transporte** (externo), que leva o pacote de um PE ao outro, e o de **VPN** (interno), que o egresso usa para escolher a VRF e o destino do cliente (seções 4.3.2 e 5).
+
+Como os roteadores P olham só o rótulo de transporte, eles **não precisam conhecer as rotas dos clientes**: é essa a propriedade que torna a VPN escalável.
+
+### 2.9 Como ler o diagrama do simulador
+
+- **Topologia:** um núcleo MPLS com **2 PE e 4 P** e um host atrás de cada PE. A legenda de cores distingue pacote de dados ou Hello, sessão LDP ou Echo Reply, Label Mapping, MP-BGP e ICMP de erro ou falha.
+- **Aba LIB / LFIB:** as tabelas do roteador escolhido, no instante atual: rótulo de entrada, ação e rótulo de saída.
+- **Aba Terminal:** a saída dos comandos de consulta ao MPLS, como o usuário a veria.
+- **Modos:** *LDP e LSP* (Hello, sessão, mapeamento e tabelas), *Plano de dados* (ping com push, swap e pop, e L3VPN), *TTL e traceroute* (modelos Uniform e Pipe) e *Falha de enlace* (a recuperação pelo rótulo já guardado na LIB).
+
+### 2.10 Limites do modelo e do diagrama
+
+- O simulador cobre o **LDP** e a **L3VPN**. Não há RSVP-TE, segment routing, multicast, pseudowires nem MPLS-TP.
+- Cada LSR usa uma **faixa própria de rótulos** (por exemplo, 100 em diante no PE1 e 200 em diante no P1) só para facilitar a leitura. Nos equipamentos reais, os valores são livres.
+- No plano de controle, as mensagens aparecem uma por vizinho e sentido, com atraso uniforme, para o diagrama ficar legível.
+- O atraso de cada enlace é fixo, e só a falha de enlace é simulável.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -26,7 +139,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -46,34 +159,34 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1](#31-ldp-e-lsp): topologia do modo "LDP e LSP"
-- [Figura 3.2](#32-plano-de-dados): topologia do modo "Plano de dados"
-- [Figura 3.3](#33-ttl-e-traceroute): topologia do modo "TTL e traceroute"
-- [Figura 3.4](#34-falha-de-enlace): topologia do modo "Falha de enlace"
+- [Figura 4.1](#41-ldp-e-lsp): topologia do modo "LDP e LSP"
+- [Figura 4.2](#42-plano-de-dados): topologia do modo "Plano de dados"
+- [Figura 4.3](#43-ttl-e-traceroute): topologia do modo "TTL e traceroute"
+- [Figura 4.4](#44-falha-de-enlace): topologia do modo "Falha de enlace"
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-montagem-do-lsp): sequência de "Montagem do LSP"
-- [Figura 6.1.2](#612-l3vpn-mp-bgp-e-rótulos-vpn): sequência de "L3VPN: MP-BGP e rótulos VPN"
-- [Figura 6.2.1](#621-push-swap-e-pop): sequência de "Push, swap e pop"
-- [Figura 6.2.2](#622-ping-antes-do-ldp): sequência de "Ping antes do LDP"
-- [Figura 6.2.3](#623-explicit-null): sequência de "explicit-null"
-- [Figura 6.2.4](#624-sem-php): sequência de "Sem PHP"
-- [Figura 6.2.5](#625-l3vpn-pilha-de-dois-rótulos): sequência de "L3VPN: pilha de dois rótulos"
-- [Figura 6.2.6](#626-l3vpn-sem-ldp-o-pe-descarta): sequência de "L3VPN sem LDP: o PE descarta"
-- [Figura 6.3.1](#631-ttl-uniform): sequência de "TTL Uniform"
-- [Figura 6.3.2](#632-ttl-pipe): sequência de "TTL Pipe"
-- [Figura 6.4.1](#641-falha-de-enlace): sequência de "Falha de enlace"
+- [Figura 7.1.1](#711-montagem-do-lsp): sequência de "Montagem do LSP"
+- [Figura 7.1.2](#712-l3vpn-mp-bgp-e-rótulos-vpn): sequência de "L3VPN: MP-BGP e rótulos VPN"
+- [Figura 7.2.1](#721-push-swap-e-pop): sequência de "Push, swap e pop"
+- [Figura 7.2.2](#722-ping-antes-do-ldp): sequência de "Ping antes do LDP"
+- [Figura 7.2.3](#723-explicit-null): sequência de "explicit-null"
+- [Figura 7.2.4](#724-sem-php): sequência de "Sem PHP"
+- [Figura 7.2.5](#725-l3vpn-pilha-de-dois-rótulos): sequência de "L3VPN: pilha de dois rótulos"
+- [Figura 7.2.6](#726-l3vpn-sem-ldp-o-pe-descarta): sequência de "L3VPN sem LDP: o PE descarta"
+- [Figura 7.3.1](#731-ttl-uniform): sequência de "TTL Uniform"
+- [Figura 7.3.2](#732-ttl-pipe): sequência de "TTL Pipe"
+- [Figura 7.4.1](#741-falha-de-enlace): sequência de "Falha de enlace"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 LDP e LSP
+### 4.1 LDP e LSP
 
 ```mermaid
 flowchart LR
@@ -97,35 +210,9 @@ flowchart LR
   n_H_B --- n_PE2
 ```
 
-*Figura 3.1 (Tipo A, topologia).* Elementos do modo "LDP e LSP": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Vale para todos os cenários do modo (6.1.1 e 6.1.2).
+*Figura 4.1 (Tipo A, topologia).* Elementos do modo "LDP e LSP": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Vale para todos os cenários do modo (7.1.1 e 7.1.2).
 
-### 3.2 Plano de dados
-
-```mermaid
-flowchart LR
-  n_PE1("PE1<br/>PE, lo 255.1")
-  n_P1("P1<br/>P, lo 255.2")
-  n_P2("P2<br/>P, lo 255.3")
-  n_P3("P3<br/>P, lo 255.4")
-  n_P4("P4<br/>P, lo 255.5")
-  n_PE2("PE2<br/>PE, lo 255.6")
-  n_H_A["H-A<br/>192.168.1.10"]
-  n_H_B["H-B<br/>192.168.2.10"]
-  n_PE1 -- "L1, custo 10" --- n_P1
-  n_PE1 -- "L2, custo 10" --- n_P2
-  n_P1 -- "L3, custo 10" --- n_P2
-  n_P1 -- "L4, custo 10" --- n_P3
-  n_P2 -- "L5, custo 15" --- n_P4
-  n_P3 -- "L6, custo 10" --- n_P4
-  n_P3 -- "L7, custo 10" --- n_PE2
-  n_P4 -- "L8, custo 10" --- n_PE2
-  n_H_A --- n_PE1
-  n_H_B --- n_PE2
-```
-
-*Figura 3.2 (Tipo A, topologia).* Elementos do modo "Plano de dados": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Vale para todos os cenários do modo (6.2.1 a 6.2.6).
-
-### 3.3 TTL e traceroute
+### 4.2 Plano de dados
 
 ```mermaid
 flowchart LR
@@ -149,9 +236,35 @@ flowchart LR
   n_H_B --- n_PE2
 ```
 
-*Figura 3.3 (Tipo A, topologia).* Elementos do modo "TTL e traceroute": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Vale para todos os cenários do modo (6.3.1 e 6.3.2).
+*Figura 4.2 (Tipo A, topologia).* Elementos do modo "Plano de dados": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Vale para todos os cenários do modo (7.2.1 a 7.2.6).
 
-### 3.4 Falha de enlace
+### 4.3 TTL e traceroute
+
+```mermaid
+flowchart LR
+  n_PE1("PE1<br/>PE, lo 255.1")
+  n_P1("P1<br/>P, lo 255.2")
+  n_P2("P2<br/>P, lo 255.3")
+  n_P3("P3<br/>P, lo 255.4")
+  n_P4("P4<br/>P, lo 255.5")
+  n_PE2("PE2<br/>PE, lo 255.6")
+  n_H_A["H-A<br/>192.168.1.10"]
+  n_H_B["H-B<br/>192.168.2.10"]
+  n_PE1 -- "L1, custo 10" --- n_P1
+  n_PE1 -- "L2, custo 10" --- n_P2
+  n_P1 -- "L3, custo 10" --- n_P2
+  n_P1 -- "L4, custo 10" --- n_P3
+  n_P2 -- "L5, custo 15" --- n_P4
+  n_P3 -- "L6, custo 10" --- n_P4
+  n_P3 -- "L7, custo 10" --- n_PE2
+  n_P4 -- "L8, custo 10" --- n_PE2
+  n_H_A --- n_PE1
+  n_H_B --- n_PE2
+```
+
+*Figura 4.3 (Tipo A, topologia).* Elementos do modo "TTL e traceroute": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Vale para todos os cenários do modo (7.3.1 e 7.3.2).
+
+### 4.4 Falha de enlace
 
 ```mermaid
 flowchart LR
@@ -175,22 +288,22 @@ flowchart LR
   n_H_B --- n_PE2
 ```
 
-*Figura 3.4 (Tipo A, topologia).* Elementos do modo "Falha de enlace": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para todos os cenários do modo (6.4.1).
+*Figura 4.4 (Tipo A, topologia).* Elementos do modo "Falha de enlace": PE1 (PE, lo 255.1); P1 (P, lo 255.2); P2 (P, lo 255.3); P3 (P, lo 255.4); P4 (P, lo 255.5); PE2 (PE, lo 255.6); H-A (192.168.1.10); H-B (192.168.2.10). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para todos os cenários do modo (7.4.1).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, LIB / LFIB, Terminal (modos: Plano de dados; TTL e traceroute; Falha de enlace), Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Serviço
+### 6.1 Serviço
 
 - **Serviço**. Valores: IP sobre MPLS (1 rótulo); L3VPN (pilha de 2 rótulos). Padrão: IP sobre MPLS (1 rótulo). Modos: todos.
   - Como o núcleo MPLS é usado.
   - **IP sobre MPLS:** todos os LSRs conhecem as redes dos clientes e o pacote leva 1 rótulo.
   - **L3VPN:** as redes dos clientes ficam só na VRF dos PEs, trocadas por MP-BGP; o pacote leva 2 rótulos (transporte e VPN).
 
-### 5.2 Egresso e TTL
+### 6.2 Egresso e TTL
 
 - **Rótulo do egresso (PHP)**. Valores: implicit-null (3): PHP; explicit-null (0); sem PHP (rótulo próprio). Padrão: implicit-null (3): PHP. Modos: todos.
   - O que o PE de saída anuncia para as próprias FECs.
@@ -203,7 +316,7 @@ Cenário, Captura, Mensagem, LIB / LFIB, Terminal (modos: Plano de dados; TTL e 
   - **Desmarcado (Pipe):** o rótulo começa com TTL 255 e o núcleo fica invisível para o cliente.
   - Equivale ao comando `mpls ip propagate-ttl` do Cisco IOS.
 
-### 5.3 Teste
+### 6.3 Teste
 
 - **Sentido do tráfego**. Valores: H-A (192.168.1.10) → H-B; H-B (192.168.2.10) → H-A. Padrão: H-A (192.168.1.10) → H-B. Modos: Plano de dados; TTL e traceroute; Falha de enlace.
   - Quem envia o ping e o traceroute.
@@ -214,29 +327,29 @@ Cenário, Captura, Mensagem, LIB / LFIB, Terminal (modos: Plano de dados; TTL e 
   - **LSPs instalados:** o LDP descobriu vizinhos, abriu sessões, distribuiu rótulos e instalou a LFIB.
   - **Só o IGP:** ainda não há rótulos. No IP sobre MPLS o pacote segue por roteamento IP comum; na L3VPN o PE o descarta, porque não há rota VPN sem LDP e MP-BGP.
 
-### 5.4 Falha
+### 6.4 Falha
 
 - **Enlace que cai**. Valores: L1: PE1 / P1; L2: PE1 / P2; L3: P1 / P2; L4: P1 / P3; L5: P2 / P4; L6: P3 / P4; L7: P3 / PE2; L8: P4 / PE2. Padrão: L4: P1 / P3. Modos: Falha de enlace.
   - O enlace do núcleo que falha entre o primeiro e o segundo ping.
   - Qualquer falha isolada mantém o núcleo conectado: PE1 e PE2 têm dois caminhos.
   - Se o enlace não fazia parte do LSP, o caminho não muda. Para ver a troca de rótulos, escolha um enlace do caminho (por padrão, PE1, P1, P3 e PE2).
 
-### 5.5 Tabelas
+### 6.5 Tabelas
 
 - **Ver LIB / LFIB do LSR**. Valores: PE1 (PE); P1 (P); P2 (P); P3 (P); P4 (P); PE2 (PE). Padrão: PE1 (PE). Modos: todos.
   - Escolhe o LSR cujas tabelas aparecem na aba LIB / LFIB.
   - A **LIB** guarda os rótulos anunciados por todos os vizinhos (retenção liberal).
   - A **LFIB** guarda só o rótulo do próximo salto do IGP, que é o usado de fato no encaminhamento. Não muda o resultado da simulação.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: LDP e LSP
+### 7.1 Modo: LDP e LSP
 
 > **Grupo:** LDP e LSP
 
 Como o plano de controle (LDP sobre o IGP) monta os caminhos rotulados e como o plano de dados os percorre.
 
-#### 6.1.1 Montagem do LSP
+#### 7.1.1 Montagem do LSP
 
 *O LDP descobre vizinhos, abre sessões e distribui rótulos.*
 
@@ -342,7 +455,7 @@ sequenceDiagram
   n_PE2 ->> n_P4: Label Mapping
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Montagem do LSP", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 72 mensagens, numeradas de 1 a 72 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "LDP e LSP", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "Montagem do LSP", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 72 mensagens, numeradas de 1 a 72 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "LDP e LSP", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -358,7 +471,7 @@ sequenceDiagram
 
 O MPLS usado para separar clientes sobre o mesmo núcleo: a VPN de camada 3.
 
-#### 6.1.2 L3VPN: MP-BGP e rótulos VPN
+#### 7.1.2 L3VPN: MP-BGP e rótulos VPN
 
 *Os PEs trocam rotas VPNv4 e rótulos VPN por MP-BGP.*
 
@@ -466,7 +579,7 @@ sequenceDiagram
   n_PE1 ->> n_PE2: MP-BGP UPDATE (VPNv4)
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "L3VPN: MP-BGP e rótulos VPN", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 74 mensagens, numeradas de 1 a 74 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "LDP e LSP", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "L3VPN: MP-BGP e rótulos VPN", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 74 mensagens, numeradas de 1 a 74 na ordem da comunicação (em 5 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "LDP e LSP", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -477,13 +590,13 @@ sequenceDiagram
 
 **Por que importa.** Os P não participam do BGP dos clientes: a tabela de rotas de cada cliente fica só nos PEs, o que permite redes de clientes com endereços repetidos.
 
-### 6.2 Modo: Plano de dados
+### 7.2 Modo: Plano de dados
 
 > **Grupo:** LDP e LSP
 
 Como o plano de controle (LDP sobre o IGP) monta os caminhos rotulados e como o plano de dados os percorre.
 
-#### 6.2.1 Push, swap e pop
+#### 7.2.1 Push, swap e pop
 
 *O pacote atravessa o núcleo trocando de rótulo a cada salto.*
 
@@ -526,7 +639,7 @@ sequenceDiagram
   n_PE1 ->> n_H_A: IP ttl 60
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Push, swap e pop", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Push, swap e pop", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -538,7 +651,7 @@ sequenceDiagram
 
 **Por que importa.** Comutar por rótulo permite engenharia de tráfego, VPNs e caminhos independentes do destino IP; o núcleo nem precisa conhecer as redes dos clientes.
 
-#### 6.2.2 Ping antes do LDP
+#### 7.2.2 Ping antes do LDP
 
 *Sem rótulos, o pacote segue por roteamento IP comum.*
 
@@ -581,7 +694,7 @@ sequenceDiagram
   n_PE1 ->> n_H_A: IP ttl 60
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Ping antes do LDP", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "Ping antes do LDP", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -596,7 +709,7 @@ sequenceDiagram
 
 O rótulo que o PE de saída anuncia para as próprias FECs define onde o último rótulo é removido.
 
-#### 6.2.3 explicit-null
+#### 7.2.3 explicit-null
 
 *O rótulo 0 chega ao egresso e preserva a marcação de QoS.*
 
@@ -637,7 +750,7 @@ sequenceDiagram
   n_PE1 ->> n_H_A: IP ttl 60
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "explicit-null", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "explicit-null", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -648,7 +761,7 @@ sequenceDiagram
 
 **Por que importa.** Provedores usam explicit-null quando a marcação de QoS do núcleo precisa valer até a borda.
 
-#### 6.2.4 Sem PHP
+#### 7.2.4 Sem PHP
 
 *O egresso recebe o próprio rótulo e faz duas consultas.*
 
@@ -691,7 +804,7 @@ sequenceDiagram
   n_PE1 ->> n_H_A: IP ttl 60
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Sem PHP", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "Sem PHP", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -706,7 +819,7 @@ sequenceDiagram
 
 O MPLS usado para separar clientes sobre o mesmo núcleo: a VPN de camada 3.
 
-#### 6.2.5 L3VPN: pilha de dois rótulos
+#### 7.2.5 L3VPN: pilha de dois rótulos
 
 *Dois rótulos: transporte até o PE de saída e VPN até a VRF.*
 
@@ -749,7 +862,7 @@ sequenceDiagram
   n_PE1 ->> n_H_A: IP ttl 60
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "L3VPN: pilha de dois rótulos", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "L3VPN: pilha de dois rótulos", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -761,7 +874,7 @@ sequenceDiagram
 
 **Por que importa.** Permite atender vários clientes, até com endereços repetidos, sobre o mesmo núcleo. A separação é lógica, não criptográfica: o PE nunca deve aceitar pacotes rotulados vindos do cliente.
 
-#### 6.2.6 L3VPN sem LDP: o PE descarta
+#### 7.2.6 L3VPN sem LDP: o PE descarta
 
 *Sem rota VPN e sem LSP, o PE descarta o pacote.*
 
@@ -792,7 +905,7 @@ sequenceDiagram
   n_H_A ->> n_PE1: IP ttl 64
 ```
 
-*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "L3VPN sem LDP: o PE descarta", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
+*Figura 7.2.6 (Tipo B, sequência).* Mensagens do cenário "L3VPN sem LDP: o PE descarta", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Plano de dados", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -803,13 +916,13 @@ sequenceDiagram
 
 **Por que importa.** Na L3VPN, uma falha do LDP ou do MP-BGP interrompe o serviço do cliente, ao contrário do IP sobre MPLS, que cai de volta para o IP.
 
-### 6.3 Modo: TTL e traceroute
+### 7.3 Modo: TTL e traceroute
 
 > **Grupo:** TTL
 
 Se o TTL do IP é copiado para o rótulo, o núcleo aparece ou some no traceroute do cliente.
 
-#### 6.3.1 TTL Uniform
+#### 7.3.1 TTL Uniform
 
 *O TTL do IP vai para o rótulo e os P aparecem no traceroute.*
 
@@ -865,7 +978,7 @@ sequenceDiagram
   n_H_B ->> n_H_A: ICMP Port Unreachable
 ```
 
-*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "TTL Uniform", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TTL e traceroute", com a configuração aplicada acima.
+*Figura 7.3.1 (Tipo B, sequência).* Mensagens do cenário "TTL Uniform", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 22 mensagens, numeradas de 1 a 22 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TTL e traceroute", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -876,7 +989,7 @@ sequenceDiagram
 
 **Por que importa.** Facilita o diagnóstico do núcleo, mas revela a topologia interna do provedor a qualquer cliente.
 
-#### 6.3.2 TTL Pipe
+#### 7.3.2 TTL Pipe
 
 *O rótulo começa com TTL 255 e o núcleo some.*
 
@@ -923,7 +1036,7 @@ sequenceDiagram
   n_H_B ->> n_H_A: ICMP Port Unreachable
 ```
 
-*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "TTL Pipe", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 13 mensagens, numeradas de 1 a 13 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TTL e traceroute", com a configuração aplicada acima.
+*Figura 7.3.2 (Tipo B, sequência).* Mensagens do cenário "TTL Pipe", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 13 mensagens, numeradas de 1 a 13 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TTL e traceroute", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -934,13 +1047,13 @@ sequenceDiagram
 
 **Por que importa.** Esconde a topologia do provedor dos clientes. É uma escolha comum em redes de operadoras.
 
-### 6.4 Modo: Falha de enlace
+### 7.4 Modo: Falha de enlace
 
 > **Grupo:** Falhas
 
 Como os LSPs reagem a mudanças de topologia.
 
-#### 6.4.1 Falha de enlace
+#### 7.4.1 Falha de enlace
 
 *O IGP reconverge e a LFIB troca de rótulo na hora.*
 
@@ -995,7 +1108,7 @@ sequenceDiagram
   n_PE1 ->> n_H_A: IP ttl 60
 ```
 
-*Figura 6.4.1 (Tipo B, sequência).* Mensagens do cenário "Falha de enlace", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 21 mensagens, numeradas de 1 a 21 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Falha de enlace", com a configuração aplicada acima.
+*Figura 7.4.1 (Tipo B, sequência).* Mensagens do cenário "Falha de enlace", na ordem do tempo, entre H-A, PE1, P1, P2, P3, P4, PE2, H-B: 21 mensagens, numeradas de 1 a 21 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "Falha de enlace", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1006,9 +1119,9 @@ sequenceDiagram
 
 **Por que importa.** A convergência do MPLS depende do IGP. Em produção, mecanismos como a sincronização LDP-IGP e o Fast Reroute reduzem a perda durante a troca.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 O que é o MPLS
+### 8.1 O que é o MPLS
 
 No **Multiprotocol Label Switching** ([RFC 3031](https://www.rfc-editor.org/rfc/rfc3031)), o roteador de entrada classifica o pacote uma única vez em uma **FEC** (Forwarding Equivalence Class, por exemplo um prefixo de destino) e cola nele um **rótulo** curto. No núcleo, cada LSR encaminha consultando só o rótulo, sem olhar o cabeçalho IP. O caminho percorrido por uma FEC é o **LSP** (Label Switched Path), que é **unidirecional**: ida e volta usam LSPs e rótulos diferentes.
 
@@ -1016,7 +1129,7 @@ No **Multiprotocol Label Switching** ([RFC 3031](https://www.rfc-editor.org/rfc/
 - **LSR / P (Provider):** núcleo. Faz **swap** (troca o rótulo do topo) ou **pop** (remove).
 - **Rótulo de significado local:** cada LSR escolhe os próprios rótulos. O mesmo número pode significar FECs diferentes em LSRs diferentes. Neste simulador, cada LSR usa uma faixa própria (PE1 100+, P1 200+...) só para facilitar a leitura.
 
-### 7.2 Cabeçalho de rótulo ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032))
+### 8.2 Cabeçalho de rótulo ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032))
 
 O rótulo fica entre o cabeçalho de enlace e o IP (EtherType **0x8847**). Cada entrada da pilha tem 32 bits:
 
@@ -1035,7 +1148,7 @@ TTL: decrementado a cada LSR, como no IP
 | 13 | GAL | Canal de OAM do MPLS-TP ([RFC 5586](https://www.rfc-editor.org/rfc/rfc5586)) |
 | 16 em diante | Rótulos livres | Alocados pelos protocolos de distribuição |
 
-### 7.3 LDP ([RFC 5036](https://www.rfc-editor.org/rfc/rfc5036))
+### 8.3 LDP ([RFC 5036](https://www.rfc-editor.org/rfc/rfc5036))
 
 - **Discovery:** Hello em UDP 646 para 224.0.0.2 em cada interface. O LDP ID tem a forma roteador:espaço (ex.: 10.255.255.2:0).
 - **Sessão:** TCP 646. O LSR com o maior endereço de transporte assume o papel ativo e abre a conexão. Seguem Initialization e KeepAlive até o estado OPERATIONAL.
@@ -1043,7 +1156,7 @@ TTL: decrementado a cada LSR, como no IP
 - **LIB e LFIB:** com **retenção liberal**, a LIB guarda os rótulos de todos os vizinhos. A LFIB usa só o do próximo salto escolhido pelo IGP. Se o IGP mudar de caminho, o rótulo novo já está na LIB e a convergência é rápida.
 - Outras mensagens: Address, Label Withdraw, Label Release e Notification.
 
-### 7.4 PHP e modelos de TTL
+### 8.4 PHP e modelos de TTL
 
 Com **PHP** (Penultimate Hop Popping), o egresso anuncia implicit-null (3) e o penúltimo LSR remove o rótulo. Assim, o egresso faz uma única consulta (IP) em vez de duas (rótulo e IP). Com **explicit-null** (0), o rótulo chega ao egresso, o que preserva o campo TC para QoS. A [RFC 3032](https://www.rfc-editor.org/rfc/rfc3032) só permitia o explicit-null no fundo da pilha; a [RFC 4182](https://www.rfc-editor.org/rfc/rfc4182) removeu essa restrição, o que permite usá-lo também sobre o rótulo VPN.
 
@@ -1051,13 +1164,13 @@ No modelo **Uniform** ([RFC 3443](https://www.rfc-editor.org/rfc/rfc3443)), o TT
 
 Quando o TTL expira dentro do LSP, o LSR gera o ICMP Time Exceeded, copia a pilha de rótulos e o encaminha **adiante pelo LSP** até o egresso, que o devolve à origem ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032), seção 2.3.2). Por isso todos os saltos do núcleo mostram quase o mesmo RTT. A extensão ICMP da [RFC 4950](https://www.rfc-editor.org/rfc/rfc4950) informa a pilha recebida, que o traceroute do Linux exibe com `-e`.
 
-### 7.5 L3VPN ([RFC 4364](https://www.rfc-editor.org/rfc/rfc4364))
+### 8.5 L3VPN ([RFC 4364](https://www.rfc-editor.org/rfc/rfc4364))
 
 Os PEs mantêm uma tabela de roteamento por cliente (**VRF**) e trocam as rotas dos clientes por **MP-BGP** (VPNv4, com Route Distinguisher). Junto com cada rota vai um **rótulo VPN**. O PE de entrada empilha dois rótulos: o **rótulo de transporte** (LDP, leva até o PE de saída) e, embaixo, o **rótulo VPN** (diz ao PE de saída em qual VRF procurar). Os roteadores P só olham o rótulo de transporte e não conhecem as rotas dos clientes, por isso endereços privados repetidos entre clientes não conflitam.
 
 Dois conceitos distintos aparecem nas rotas VPNv4. O **Route Distinguisher (RD)** é um prefixo de 64 bits acrescentado ao endereço IPv4 só para torná-lo único no MP-BGP: dois clientes podem usar 10.0.0.0/24 sem colisão. Ele não decide quem recebe a rota. Quem decide é o **Route Target (RT)**, uma extended community: cada VRF exporta suas rotas com um ou mais RT e importa apenas as rotas cujo RT está na sua lista de importação. Assim se montam topologias como full-mesh, hub-and-spoke e extranet. O RD é definido na seção 4.2 da [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364) e o RT, na seção 4.3.1. O simulador mostra o RD (65000:1) nas rotas trocadas, mas não configura nem usa o RT.
 
-### 7.6 MPLS e segurança
+### 8.6 MPLS e segurança
 
 - **Modelo de ameaças:** a [RFC 4381](https://www.rfc-editor.org/rfc/rfc4381) analisa a segurança das VPNs MPLS/BGP e as compara às VPNs de camada 2.
 - **MPLS não é criptografia:** a separação de uma L3VPN é lógica. Quem tem acesso ao núcleo lê o tráfego. Dados sensíveis exigem IPsec ou MACsec.
@@ -1065,7 +1178,7 @@ Dois conceitos distintos aparecem nas rotas VPNv4. O **Route Distinguisher (RD)*
 - **Proteção do LDP e do BGP:** autenticação TCP-MD5 ou TCP-AO ([RFC 5925](https://www.rfc-editor.org/rfc/rfc5925)) e filtros que aceitem LDP e BGP só de vizinhos conhecidos.
 - **Ocultação da topologia:** desativar a propagação de TTL esconde o núcleo no traceroute. As extensões da [RFC 4950](https://www.rfc-editor.org/rfc/rfc4950), por outro lado, revelam os rótulos em uso.
 
-### 7.7 O que o simulador simplifica
+### 8.7 O que o simulador simplifica
 
 - Seis LSRs e um único IGP (OSPF simplificado, com Dijkstra e custo igual nos dois sentidos): sem iBGP completo, sem Route Reflector e sem Inter-AS.
 - O LDP mostra Hello, sessão e Label Mapping; não simula temporizadores de Hello e KeepAlive, Label Withdraw, Label Release nem a sincronização LDP-IGP.
@@ -1074,7 +1187,7 @@ Dois conceitos distintos aparecem nas rotas VPNv4. O **Route Distinguisher (RD)*
 - Os atrasos dos enlaces e os tempos do ping e do traceroute são ilustrativos e fixos, sem a variação de uma rede real. O custo OSPF de cada enlace é fixo; só a falha de enlace é simulável.
 - O plano de controle mostra mensagens por enlace (uma por vizinho e sentido) com atraso uniforme, para o diagrama ficar legível; a ordem entre enlaces diferentes numa mesma fase é a mesma.
 
-### 7.8 Roteiro de exercícios
+### 8.8 Roteiro de exercícios
 
 1. No modo **LDP**, acompanhe as quatro fases e a aba **LIB / LFIB** se preenchendo. Onde aparecem push, swap e pop no modo Plano de dados?
 2. Na aba **LIB / LFIB**, escolha P1 e explique por que a LIB tem mais rótulos que a LFIB para a mesma FEC (retenção liberal).
@@ -1084,7 +1197,7 @@ Dois conceitos distintos aparecem nas rotas VPNv4. O **Route Distinguisher (RD)*
 6. No modo **Falha de enlace**, derrube o enlace **L4** e depois outros: o caminho e os rótulos mudam? Por que não é preciso esperar nova sinalização LDP?
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 
