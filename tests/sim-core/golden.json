@@ -478,7 +478,7 @@
     "amostra:tcp": "f8b89a6ab85f5741",
     "amostra:dl": "69e310a16bccb1ab",
     "amostra:cmp": "f05d4960a2e6c7a5",
-    "textos": "7670cf52d13eff9d"
+    "textos": "3d1180a06c20bb8f"
   },
   "ataques-tcp-udp": {
     "syn-flood": "8b03704dd47555b7",
@@ -516,6 +516,6 @@
     "amostra:dns": "d68746c38fcabaa0",
     "amostra:vid": "a1e0b2f54d2e5a9b",
     "amostra:cmp": "73809bb93de10aee",
-    "textos": "f3240152a12eb9fa"
+    "textos": "3e39686effb46594"
   }
 }
