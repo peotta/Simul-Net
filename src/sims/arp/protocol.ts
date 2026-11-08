@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -32,6 +33,7 @@ export const arpProtocol: ProtocolDef = {
     sub === 'env' ? buildEnvenenamento(P as unknown as EnvParams) : sub === 'gra' ? buildGratuito(P as unknown as GraParams) : buildArp(P as unknown as ArpParams, sub),
   explain: (tr, P) => explain(tr, P as unknown as ArpParams),
   reference,
+  fundamentacao,
   setup,
 };
 

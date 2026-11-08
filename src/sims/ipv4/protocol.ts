@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -30,6 +31,7 @@ export const ipv4Protocol: ProtocolDef = {
   build: (P, sub) => (sub === 'end' ? buildEnd({ ...P, dest: P.edest } as unknown as EndParams, sub) : buildFwd(P as unknown as FwdParams, sub)),
   explain: (tr, P, scen) => explain(tr, P, scen),
   reference,
+  fundamentacao,
   setup,
 };
 

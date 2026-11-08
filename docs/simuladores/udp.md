@@ -12,12 +12,77 @@ UDP em diagrama de sequência: fluxo de datagramas com perda e reordenação, co
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| UDP: fluxo | Fluxo com perdas | 5.1.1 |
-| UDP: DNS | DNS com repetição | 5.2.1 |
-| UDP: vídeo | Vídeo em streaming | 5.3.1 a 5.3.4 |
-| Comparação UDP x TCP | TCP x UDP: 10% de perda | 5.4.1 e 5.4.2 |
+| UDP: fluxo | Fluxo com perdas | 6.1.1 |
+| UDP: DNS | DNS com repetição | 6.2.1 |
+| UDP: vídeo | Vídeo em streaming | 6.3.1 a 6.3.4 |
+| Comparação UDP x TCP | TCP x UDP: 10% de perda | 6.4.1 e 6.4.2 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o UDP resolve
+
+O IP entrega datagramas entre **hosts**. Falta dizer para **qual processo** do host o dado vai. O UDP (*User Datagram Protocol*, [RFC 768](https://www.rfc-editor.org/rfc/rfc768)) acrescenta ao IP só o mínimo para isso: **portas**, **comprimento** e **checksum**. Ele está na camada 4 e não cria conexão, não confirma, não reordena e não controla a taxa.
+
+Isso não é um defeito: é uma escolha. Cada datagrama é independente, então não há handshake para esperar, nem fila de retransmissão que atrase os dados novos. O UDP serve quando a **rapidez** importa mais que a entrega perfeita, ou quando a própria aplicação quer decidir como recuperar perdas.
+
+### 2.2 O diagrama do datagrama
+
+```mermaid
+flowchart LR
+  APP["Aplicação<br/>escreve uma mensagem"] --> U["UDP<br/>acrescenta 8 bytes:<br/>portas, comprimento, checksum"]
+  U --> IP["IP<br/>acrescenta o cabeçalho IPv4"]
+  IP --> NET(("Rede"))
+  NET --> IP2["IP<br/>entrega ao protocolo 17"]
+  IP2 --> U2["UDP<br/>usa a porta de destino"]
+  U2 --> APP2["Aplicação<br/>recebe a mensagem inteira"]
+```
+
+*Esquema 1 (caminho de um datagrama UDP).* Cada chamada de envio da aplicação vira **um** datagrama, e cada datagrama chega inteiro ou não chega. O UDP preserva as **fronteiras das mensagens**, ao contrário do TCP, que entrega um fluxo contínuo de bytes.
+
+A porta de destino escolhe o processo: o IP entrega ao protocolo 17 (UDP), e o UDP entrega à aplicação que abriu aquela porta.
+
+### 2.3 O cabeçalho UDP
+
+| Campo | Tamanho | Função |
+| --- | --- | --- |
+| Porta de origem | 16 bits | porta de quem enviou (pode ser zero se não há resposta) |
+| Porta de destino | 16 bits | escolhe o processo no receptor |
+| Comprimento | 16 bits | cabeçalho mais dados, em bytes (mínimo 8) |
+| Checksum | 16 bits | cobre o pseudocabeçalho IP, o cabeçalho UDP e os dados |
+
+O cabeçalho tem **8 bytes** ([RFC 768](https://www.rfc-editor.org/rfc/rfc768)), contra os 20 do TCP sem opções. No IPv4, o checksum pode ser zero, o que significa que o emissor não o calculou. Quando ele existe, o receptor descarta o datagrama que não confere.
+
+### 2.4 O que a aplicação ganha e o que passa a ser dela
+
+```mermaid
+flowchart TD
+  T["UDP entrega o que chegar"] --> P{"A aplicação precisa de...?"}
+  P -- "confirmação e reenvio" --> R["Implementa na aplicação<br/>exemplo: repetição de consulta do resolvedor DNS"]
+  P -- "ordem" --> O["Numera os pacotes<br/>exemplo: número de sequência do RTP"]
+  P -- "controle de taxa" --> C["Adapta a taxa à rede<br/>exemplo: ajuste de qualidade do vídeo"]
+  P -- "nada disso" --> N["Aceita a perda<br/>exemplo: um quadro de vídeo a menos"]
+```
+
+*Esquema 2 (responsabilidades que sobram para a aplicação).* Tudo o que o TCP faz por baixo, no UDP é decisão da aplicação. As diretrizes para usar o UDP com cuidado estão na [RFC 8085](https://www.rfc-editor.org/rfc/rfc8085), em especial a necessidade de a aplicação controlar o congestionamento.
+
+| Uso | Por que UDP | Como lida com a perda |
+| --- | --- | --- |
+| DNS ([RFC 1035](https://www.rfc-editor.org/rfc/rfc1035)) | uma pergunta e uma resposta pequenas, sem custo de conexão | o resolvedor repete a consulta se não houver resposta |
+| Vídeo e voz (RTP, [RFC 3550](https://www.rfc-editor.org/rfc/rfc3550)) | um dado atrasado perde o valor | número de sequência e *timestamp* no RTP, buffer no player |
+
+### 2.5 Como ler o diagrama do simulador
+
+- **Diagrama de sequência:** cada seta é um datagrama, sem handshake antes e sem ACK depois. A seta com X é um datagrama perdido, e o UDP não percebe isso.
+- **Modos:** *UDP: fluxo* mostra datagramas de mídia com perda e reordenação. *UDP: DNS* mostra a repetição feita pelo **resolvedor**, e não pelo UDP. *UDP: vídeo* mostra um streaming, com taxa, jitter e buffer do player. *Comparação UDP x TCP* envia a mesma carga pelos dois protocolos na mesma rede.
+- **Sem conexão:** o UDP não tem estados de conexão para mostrar, e o que se observa é o destino de cada datagrama: entregue, perdido ou entregue fora de ordem.
+
+### 2.6 Limites do modelo e do diagrama
+
+- O simulador não implementa o RTP nem o DNS por completo: usa o comportamento essencial de cada um para mostrar como a aplicação lida com a perda.
+- Os tempos, as taxas e o buffer do player são **didáticos**, e não medem uma rede real.
+- Fragmentação IP, multicast e QUIC (que usa UDP, mas acrescenta confiabilidade e controle de congestionamento) não são simulados.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -25,7 +90,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | --- | --- | --- | --- |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo B (sequência)**
 
@@ -35,33 +100,33 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo B (sequência)**
 
-- [Figura 5.1.1](#511-fluxo-com-perdas): sequência de "Fluxo com perdas"
-- [Figura 5.2.1](#521-dns-com-repetição): sequência de "DNS com repetição"
-- [Figura 5.3.1](#531-vídeo-em-streaming): sequência de "Vídeo em streaming"
-- [Figura 5.3.2](#532-vídeo-com-perdas): sequência de "Vídeo com perdas"
-- [Figura 5.3.3](#533-vídeo-acima-da-capacidade): sequência de "Vídeo acima da capacidade"
-- [Figura 5.3.4](#534-jitter-e-buffer-do-player): sequência de "Jitter e buffer do player"
-- [Figura 5.4.1](#541-tcp-x-udp-10-de-perda): sequência de "TCP x UDP: 10% de perda"
-- [Figura 5.4.2](#542-tcp-x-udp-reordenação): sequência de "TCP x UDP: reordenação"
+- [Figura 6.1.1](#611-fluxo-com-perdas): sequência de "Fluxo com perdas"
+- [Figura 6.2.1](#621-dns-com-repetição): sequência de "DNS com repetição"
+- [Figura 6.3.1](#631-vídeo-em-streaming): sequência de "Vídeo em streaming"
+- [Figura 6.3.2](#632-vídeo-com-perdas): sequência de "Vídeo com perdas"
+- [Figura 6.3.3](#633-vídeo-acima-da-capacidade): sequência de "Vídeo acima da capacidade"
+- [Figura 6.3.4](#634-jitter-e-buffer-do-player): sequência de "Jitter e buffer do player"
+- [Figura 6.4.1](#641-tcp-x-udp-10-de-perda): sequência de "TCP x UDP: 10% de perda"
+- [Figura 6.4.2](#642-tcp-x-udp-reordenação): sequência de "TCP x UDP: reordenação"
 
-## 3. Abas da bancada
+## 4. Abas da bancada
 
 Cenário, Captura, Mensagem, Janela (cwnd) (modos: Comparação UDP x TCP), Taxa do vídeo (modos: UDP: vídeo), Resultados, Experimento, Referência e Log.
 
-## 4. Configurações (campos do painel)
+## 5. Configurações (campos do painel)
 
-### 4.1 Transferência
+### 5.1 Transferência
 
 - **Segmentos**. Valores: 1; 2; 3; 4; 5; 6; 8; 10; 12; 15; 20; 25; 30; 40. Padrão: 20. Modos: Comparação UDP x TCP; UDP: fluxo.
   - Quantos segmentos (TCP) ou datagramas (UDP) de 1000 bytes serão enviados.
   - Cada segmento carrega 1000 bytes de dados (o MSS). 20 segmentos equivalem a um arquivo de 20 kB.
   - Com mais segmentos, o crescimento da janela de congestionamento fica mais visível.
 
-### 4.2 Rede
+### 5.2 Rede
 
 - **RTT (ms)**. Valores: 5; 10; 15; 20; 50; 100; 200. Padrão: 15. Modos: todos.
   - Tempo de ida e volta na rede, sem contar a transmissão.
@@ -97,7 +162,7 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: Comparação UDP x TCP), Taxa
   - Como o ACK do TCP é cumulativo, o ACK seguinte confirma também o que o ACK perdido confirmaria.
   - Por isso a perda de ACKs raramente causa retransmissão; na maioria das vezes, só atrasa um pouco o crescimento da janela.
 
-### 4.3 Vídeo
+### 5.3 Vídeo
 
 - **Taxa do vídeo**. Valores: 500 kbit/s; 1000 kbit/s; 2500 kbit/s; 4000 kbit/s. Padrão: 2500 kbit/s. Modos: UDP: vídeo.
   - Quantos kbit/s o codificador produz, em média.
@@ -116,7 +181,7 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: Comparação UDP x TCP), Taxa
   - É o buffer de jitter. Cada quadro é exibido no instante do envio + 40 ms (duração do quadro) + atraso de propagação + buffer.
   - O pacote que chega depois desse prazo é descartado. Buffer maior perde menos pacotes, mas aumenta o atraso entre a captura e a imagem.
 
-### 4.4 TCP
+### 5.4 TCP
 
 - **SACK (confirmação seletiva)**. Valores: caixa de seleção. Padrão: não. Modos: Comparação UDP x TCP.
   - Liga a opção SACK do TCP ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)).
@@ -138,15 +203,15 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: Comparação UDP x TCP), Taxa
   - Com 64, o slow start vai até a primeira perda ou até o limite da rwnd. Com 8, a mudança de fase aparece cedo. Com "sem limite", só a primeira perda encerra o slow start (útil no download).
   - Depois de uma perda, o TCP recalcula o ssthresh como metade do que estava em voo.
 
-## 5. Cenários
+## 6. Cenários
 
-### 5.1 Modo: UDP: fluxo
+### 6.1 Modo: UDP: fluxo
 
 > **Grupo:** UDP
 
 Datagramas sem conexão: o que a aplicação ganha em rapidez e o que precisa fazer por conta própria.
 
-#### 5.1.1 Fluxo com perdas
+#### 6.1.1 Fluxo com perdas
 
 *Datagramas sem conexão: perdas e desordem chegam à aplicação.*
 
@@ -192,7 +257,7 @@ sequenceDiagram
   n_c ->> n_s: Datagrama nº 20
 ```
 
-*Figura 5.1.1 (Tipo B, sequência).* Mensagens do cenário "Fluxo com perdas", na ordem do tempo, entre Cliente, Servidor: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 2 fases; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: fluxo", com a configuração aplicada acima.
+*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Fluxo com perdas", na ordem do tempo, entre Cliente, Servidor: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 2 fases; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: fluxo", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -202,13 +267,13 @@ sequenceDiagram
 
 **Por que importa.** Como não confirma nada, o UDP também não verifica a origem: é a base da falsificação, da reflexão e da amplificação (veja o simulador de Ataques e defesas TCP/UDP).
 
-### 5.2 Modo: UDP: DNS
+### 6.2 Modo: UDP: DNS
 
 > **Grupo:** UDP
 
 Datagramas sem conexão: o que a aplicação ganha em rapidez e o que precisa fazer por conta própria.
 
-#### 5.2.1 DNS com repetição
+#### 6.2.1 DNS com repetição
 
 *A aplicação, não o UDP, percebe a perda e repete a consulta.*
 
@@ -237,7 +302,7 @@ sequenceDiagram
   n_s ->> n_c: Resposta A 164.41.101.12
 ```
 
-*Figura 5.2.1 (Tipo B, sequência).* Mensagens do cenário "DNS com repetição", na ordem do tempo, entre Cliente, Servidor: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 2 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: DNS", com a configuração aplicada acima.
+*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "DNS com repetição", na ordem do tempo, entre Cliente, Servidor: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 2 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: DNS", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -248,13 +313,13 @@ sequenceDiagram
 
 **Por que importa.** Quem usa UDP assume a confiabilidade de que precisa. O DNS sobre UDP também é alvo de amplificação e de respostas forjadas; o identificador da consulta e a porta de origem aleatória dificultam o envenenamento de cache.
 
-### 5.3 Modo: UDP: vídeo
+### 6.3 Modo: UDP: vídeo
 
 > **Grupo:** Vídeo
 
 Vídeo ao vivo por UDP (RTP): quadros I e P, perdas sem retransmissão, jitter e buffer do player.
 
-#### 5.3.1 Vídeo em streaming
+#### 6.3.1 Vídeo em streaming
 
 *25 quadros por segundo sobre UDP, sem handshake, com buffer no player.*
 
@@ -406,7 +471,7 @@ sequenceDiagram
   n_s ->> n_c: 5004 → 50432 RTP quadro P nº 125: 9 pacotes, 10417 bytes
 ```
 
-*Figura 5.3.1 (Tipo B, sequência).* Mensagens do cenário "Vídeo em streaming", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
+*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "Vídeo em streaming", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -418,7 +483,7 @@ sequenceDiagram
 
 **Por que importa.** Em vídeo ao vivo, é melhor perder um pacote do que esperar a retransmissão: o quadro atrasado já não pode ser exibido. Por isso voz, vídeo e videoconferência preferem o UDP.
 
-#### 5.3.2 Vídeo com perdas
+#### 6.3.2 Vídeo com perdas
 
 *Cada pacote perdido deixa um quadro incompleto, e o erro se propaga.*
 
@@ -570,7 +635,7 @@ sequenceDiagram
   n_s ->> n_c: P nº 125 incompleto: artefatos
 ```
 
-*Figura 5.3.2 (Tipo B, sequência).* Mensagens do cenário "Vídeo com perdas", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
+*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "Vídeo com perdas", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -581,7 +646,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra por que redes de vídeo usam FEC (redundância), retransmissão seletiva e quadros I mais frequentes, e por que 3% de perda já degrada muito a experiência.
 
-#### 5.3.3 Vídeo acima da capacidade
+#### 6.3.3 Vídeo acima da capacidade
 
 *O UDP não reduz a taxa: o excesso de vídeo é descartado na fila.*
 
@@ -733,7 +798,7 @@ sequenceDiagram
   n_s ->> n_c: 5004 → 50432 RTP quadro P nº 125: 14 pacotes, 16667 bytes (6 descartado(s) na fila do enla
 ```
 
-*Figura 5.3.3 (Tipo B, sequência).* Mensagens do cenário "Vídeo acima da capacidade", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
+*Figura 6.3.3 (Tipo B, sequência).* Mensagens do cenário "Vídeo acima da capacidade", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -744,7 +809,7 @@ sequenceDiagram
 
 **Por que importa.** Aplicações de mídia sobre UDP precisam implementar a própria adaptação (taxa adaptativa, RTCP, controle de congestionamento do WebRTC). Sem isso, um fluxo UDP pode sufocar os fluxos TCP que dividem o enlace.
 
-#### 5.3.4 Jitter e buffer do player
+#### 6.3.4 Jitter e buffer do player
 
 *Se o atraso varia mais do que o buffer cobre, pacotes chegam tarde demais.*
 
@@ -896,7 +961,7 @@ sequenceDiagram
   n_s ->> n_c: 5004 → 50432 RTP quadro P nº 125: 9 pacotes, 10417 bytes (4 fora do prazo (descartado(s) p
 ```
 
-*Figura 5.3.4 (Tipo B, sequência).* Mensagens do cenário "Jitter e buffer do player", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
+*Figura 6.3.4 (Tipo B, sequência).* Mensagens do cenário "Jitter e buffer do player", na ordem do tempo, entre Cliente (player), Servidor de vídeo: 125 mensagens, numeradas de 1 a 125 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "UDP: vídeo", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -907,13 +972,13 @@ sequenceDiagram
 
 **Por que importa.** Em vídeo ao vivo e em chamadas, o tamanho do buffer é um compromisso entre fluidez e latência. Chamadas de voz toleram poucos milissegundos; transmissões gravadas toleram segundos.
 
-### 5.4 Modo: Comparação UDP x TCP
+### 6.4 Modo: Comparação UDP x TCP
 
 > **Grupo:** Comparação
 
 Os dois protocolos lado a lado, na mesma rede e com as mesmas perdas.
 
-#### 5.4.1 TCP x UDP: 10% de perda
+#### 6.4.1 TCP x UDP: 10% de perda
 
 *O UDP é mais rápido e entrega só o que chegou; o TCP, de referência, entrega tudo.*
 
@@ -1013,7 +1078,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.4.1 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: 10% de perda", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 70 mensagens, numeradas de 1 a 70 na ordem da comunicação (em 4 fases; 6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação UDP x TCP", com a configuração aplicada acima.
+*Figura 6.4.1 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: 10% de perda", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 70 mensagens, numeradas de 1 a 70 na ordem da comunicação (em 4 fases; 6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação UDP x TCP", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1024,7 +1089,7 @@ sequenceDiagram
 
 **Por que importa.** Voz e vídeo em tempo real preferem perder um pacote a esperar por ele: o UDP entrega o que chegou na hora, e a aplicação esconde a perda.
 
-#### 5.4.2 TCP x UDP: reordenação
+#### 6.4.2 TCP x UDP: reordenação
 
 *O UDP entrega na ordem de chegada; reordenar é problema da aplicação.*
 
@@ -1119,7 +1184,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.4.2 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: reordenação", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 67 mensagens, numeradas de 1 a 67 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação UDP x TCP", com a configuração aplicada acima.
+*Figura 6.4.2 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: reordenação", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 67 mensagens, numeradas de 1 a 67 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação UDP x TCP", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1130,9 +1195,9 @@ sequenceDiagram
 
 **Por que importa.** Mostra que, no UDP, ordem e perda são assuntos da aplicação: por isso o RTP numera os pacotes e o player usa um buffer.
 
-## 6. Referência
+## 7. Referência
 
-### 6.1 A camada de transporte
+### 7.1 A camada de transporte
 
 O IP entrega pacotes entre **hosts**, sem garantias. A camada de transporte entrega dados entre **processos**, identificados por **portas**. O **UDP** ([RFC 768](https://www.rfc-editor.org/rfc/rfc768)) acrescenta apenas portas, comprimento e checksum: cada datagrama é independente, sem conexão, sem confirmação, sem ordem e sem controle de taxa. O **TCP** ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293)) oferece um fluxo de bytes confiável e ordenado, com controle de fluxo e de congestionamento, ao custo de abrir uma conexão e de esperar confirmações.
 
@@ -1148,11 +1213,11 @@ O IP entrega pacotes entre **hosts**, sem garantias. A camada de transporte entr
 
 O TCP (conexão, controle de congestionamento e download) tem simulador próprio.
 
-### 6.2 UDP na prática
+### 7.2 UDP na prática
 
 Quem usa UDP assume o que precisa. O **DNS** repete a consulta se a resposta não chegar no tempo limite. A **voz e o vídeo** preferem perder um pacote a esperar por ele, porque um áudio atrasado já não serve. O **QUIC** ([RFC 9000](https://www.rfc-editor.org/rfc/rfc9000)) implementa sobre o UDP a confiabilidade e o controle de congestionamento, com criptografia embutida.
 
-### 6.3 Vídeo em streaming com UDP
+### 7.3 Vídeo em streaming com UDP
 
 - **RTP sobre UDP** ([RFC 3550](https://www.rfc-editor.org/rfc/rfc3550)): cada pacote leva número de sequência e marca de tempo. O UDP não retransmite; o receptor usa esses campos para reordenar e para medir perdas e jitter.
 - **Quadros I e P:** o quadro I é completo e grande; os quadros P guardam só a diferença para o anterior. Por isso um pacote perdido num P estraga os quadros seguintes até o próximo I, e a perda num I congela a imagem até o próximo I.
@@ -1160,18 +1225,18 @@ Quem usa UDP assume o que precisa. O **DNS** repete a consulta se a resposta nã
 - **Sem controle de congestionamento:** o UDP não reduz a taxa quando a fila enche. Na prática, as aplicações usam taxa adaptativa (vários bitrates, como no DASH e no HLS) ou controle de taxa no próprio RTP (RTCP e algoritmos como o GCC do WebRTC).
 - **Recuperação de perdas:** pode usar FEC (redundância enviada junto) ou retransmissão seletiva (NACK do RTCP) quando o atraso permite. O simulador mostra o caso sem nenhuma proteção.
 
-### 6.4 Segurança do UDP
+### 7.4 Segurança do UDP
 
 - **UDP sem conexão:** nada confirma a origem de um datagrama. Isso permite falsificação, reflexão e amplificação (DNS, NTP, memcached). A defesa começa na rede de origem ([BCP 38](https://www.rfc-editor.org/info/bcp38)) e no próprio serviço (sem recursão aberta, limite de respostas).
 - **Varreduras:** o TCP responde SYN-ACK em porta aberta e RST em porta fechada; o UDP só denuncia porta fechada com ICMP Port Unreachable. Política padrão de descarte e firewall stateful reduzem o que a varredura revela.
 - **Streaming:** o RTP simples vai em claro e sem autenticação; use SRTP ([RFC 3711](https://www.rfc-editor.org/rfc/rfc3711)) ou DTLS-SRTP. Servidores de mídia UDP expostos também podem ser usados em ataques de reflexão e inundação.
 - Para praticar a defesa contra esses ataques, use o Simulador de Ataques e Defesas TCP/UDP.
 
-### 6.5 Limitações do simulador
+### 7.5 Limitações do simulador
 
 - O tempo de repetição do DNS (1 s) é um valor didático.
 
-### 6.6 Roteiro de exercícios
+### 7.6 Roteiro de exercícios
 
 1. **DNS com repetição:** o que a aplicação precisa fazer por conta própria quando usa UDP e a resposta se perde?
 2. **TCP x UDP: 10% de perda:** compare o tempo e os dados entregues. Para voz em tempo real e para transferência de arquivos, qual protocolo você escolheria, e por quê?
@@ -1179,7 +1244,7 @@ Quem usa UDP assume o que precisa. O **DNS** repete a consulta se a resposta nã
 4. **Jitter e buffer do player** e **Vídeo acima da capacidade:** qual o preço de aumentar o buffer? O UDP reduz a taxa quando o enlace congestiona? Que mecanismos uma aplicação real usaria?
 
 
-## 7. Glossário
+## 8. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

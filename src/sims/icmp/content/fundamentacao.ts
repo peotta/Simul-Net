@@ -1,0 +1,69 @@
+// Fundamentação do simulador ICMP, em Markdown: aparece na documentação (docs/simuladores/icmp.md e na wiki), antes de
+// "Como ler os diagramas". Explica o papel do ICMP, as mensagens e as ferramentas que dependem dele.
+export const fundamentacao: string = `
+### O problema que o ICMP resolve
+
+O IP não avisa quando algo dá errado: um roteador sem rota simplesmente descarta o pacote. O ICMP (*Internet Control Message Protocol*, RFC 792) é o **canal de aviso** do IP: os roteadores e os hosts o usam para informar erros e fazer testes simples. Ele é parte obrigatória de uma implementação de IP, mas viaja **dentro** de um datagrama IP (protocolo 1), e não é um protocolo de transporte.
+
+O ICMP **informa**, mas não corrige: a decisão de tentar de novo, mudar de rota ou desistir é de quem recebe o aviso.
+
+### O diagrama das mensagens
+
+\`\`\`mermaid
+sequenceDiagram
+  participant A as PC-A
+  participant R as Roteador
+  participant S as Servidor
+  A->>S: Echo Request, tipo 8
+  S->>A: Echo Reply, tipo 0
+  A->>R: pacote com TTL 1
+  R->>A: Time Exceeded, tipo 11 código 0
+  A->>R: pacote para destino sem rota
+  R->>A: Destination Unreachable, tipo 3 código 0
+\`\`\`
+
+*Esquema 1 (as três situações básicas).* O **eco** testa se o destino responde. O **tempo excedido** avisa que o TTL chegou a zero. O **destino inalcançável** avisa que não há caminho. Em todos os erros, o ICMP vai ao endereço de **origem** do datagrama que causou o problema.
+
+### Formato e tipos de mensagem
+
+Toda mensagem ICMP começa com **tipo** (1 byte), **código** (1 byte) e **checksum** (2 bytes, que cobre toda a mensagem). O restante depende do tipo (RFC 792).
+
+| Tipo | Mensagem | Códigos principais |
+| --- | --- | --- |
+| 0 | Echo Reply (resposta de eco) | 0 |
+| 8 | Echo (pedido de eco) | 0 |
+| 3 | Destination Unreachable (destino inalcançável) | 0 rede, 1 host, 2 protocolo, 3 porta, 4 fragmentação necessária com DF ligado |
+| 11 | Time Exceeded (tempo excedido) | 0 TTL esgotado em trânsito, 1 tempo de remontagem excedido |
+| 5 | Redirect | 0 rede, 1 host |
+
+As mensagens de erro carregam o **cabeçalho IP original mais os 8 primeiros bytes** dos dados do datagrama que as provocou (RFC 792). Com isso, quem recebe o aviso identifica a conexão ou o processo afetado, pois as portas do TCP e do UDP estão nesses 8 bytes.
+
+Duas regras evitam tempestades de avisos: **não se envia ICMP de erro sobre outro ICMP de erro**, e só se avisa sobre o **primeiro fragmento** de um datagrama fragmentado (RFC 792). A RFC 1812 acrescenta que os roteadores devem limitar a taxa dos erros que geram.
+
+### As ferramentas que dependem do ICMP
+
+\`\`\`mermaid
+flowchart TD
+  P["ping: Echo Request e Echo Reply"] --> R1["Mede acessibilidade e tempo de ida e volta"]
+  T["traceroute: TTL 1, 2, 3 ..."] --> R2["Cada roteador responde Time Exceeded:<br/>revela o caminho salto a salto"]
+  H["scan UDP: porta fechada"] --> R3["Destino responde Destination Unreachable, código 3:<br/>porta fechada, e o silêncio indica porta aberta ou filtrada"]
+  D["PMTUD: DF ligado"] --> R4["Roteador responde tipo 3, código 4:<br/>o pacote não cabe no enlace"]
+\`\`\`
+
+*Esquema 2 (ferramentas e a mensagem em que se apoiam).* O **ping** usa o par eco. O **traceroute** envia pacotes com TTL crescente e lê o endereço de cada roteador que responde com tempo excedido: é uma técnica, e não um protocolo próprio. O **PMTUD** (*Path MTU Discovery*, RFC 1191) usa o aviso de código 4 para descobrir o maior pacote que cabe no caminho; os problemas práticos de filtrar esse aviso estão na RFC 2923.
+
+Isso explica um erro comum de projeto: **bloquear todo o ICMP** quebra o PMTUD e o traceroute. O correto é filtrar pelo tipo, e não descartar tudo.
+
+### Como ler o diagrama do simulador
+
+- **Topologia:** o PC-A, três roteadores e o servidor. O destaque mostra por onde o pacote passa, e onde ele é descartado.
+- **Diagrama de sequência:** as setas são os pacotes e as mensagens ICMP de volta, com o TTL em cada salto.
+- **Abas:** *Terminal* mostra a saída do comando como o usuário a veria, *Comando* explica cada parte do comando usado, e *Rotas* mostra as tabelas dos roteadores.
+- **Modos:** *Ping*, *Traceroute e tracert* e *Scan UDP (hping3)*. O scan é mostrado só no nível defensivo: o que o administrador observa e como se proteger.
+
+### Limites do modelo e do diagrama
+
+- O simulador cobre o ICMP do **IPv4**. O ICMPv6 (RFC 4443) tem outras mensagens e mais funções, como a descoberta de vizinhos.
+- Os tempos de ida e volta são **didáticos**, e a saída do terminal é uma aproximação do formato de cada sistema operacional.
+- Nem todo equipamento responde a tudo: na prática, firewalls e roteadores limitam ou bloqueiam respostas ICMP, e o traceroute então mostra asteriscos.
+`;

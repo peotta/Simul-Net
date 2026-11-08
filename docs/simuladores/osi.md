@@ -333,6 +333,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **HTTP/1** | HTTP versão 1.1 | versão textual do HTTP, com uma requisição por vez em cada conexão |
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
 | **IEEE** | Institute of Electrical and Electronics Engineers | entidade que publica padrões de redes locais, como o 802.3 (Ethernet), o 802.1 (comutação) e o 802.11 (Wi-Fi) |
+| **IHL** | Internet Header Length, comprimento do cabeçalho IP | campo do cabeçalho IPv4 com o tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
 | **IP** | Internet Protocol, protocolo de internet | endereça e encaminha pacotes entre redes, de origem a destino |
 | **ITU-T** | International Telecommunication Union, Telecommunication Standardization Sector, setor de normalização de telecomunicações da UIT | publica recomendações de telecomunicações; a X.200 é o texto do modelo OSI equivalente à ISO/IEC 7498-1 |
 | **LAN** | Local Area Network, rede local | rede de alcance restrito, como a de um prédio ou laboratório, ligada por switches ou por Wi-Fi |
@@ -344,6 +345,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **SFD** | Start Frame Delimiter, delimitador de início de quadro | byte que, depois do preâmbulo, marca o início do quadro Ethernet |
 | **SSH** | Secure Shell | acesso remoto e transferência de arquivos por um canal cifrado, com autenticação do servidor e do usuário |
 | **TCP** | Transmission Control Protocol, protocolo de controle de transmissão | entrega dados de forma ordenada e confiável, com conexão, confirmação e controle de congestionamento |
+| **TCP/IP** | Transmission Control Protocol e Internet Protocol | refere-se à pilha de protocolos da Internet, nomeada pelos seus dois protocolos mais conhecidos |
 | **TLS** | Transport Layer Security, segurança da camada de transporte | estabelece um canal cifrado e autenticado entre dois pontos, a base do HTTPS |
 | **TTL** | Time To Live, tempo de vida | limita quantos saltos um pacote pode dar; cada roteador o reduz de 1, e ao chegar a zero o pacote é descartado |
 | **UDP** | User Datagram Protocol | entrega datagramas sem conexão nem confirmação, com baixo custo; usado em consultas curtas e em tempo real |

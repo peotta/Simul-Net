@@ -37,6 +37,7 @@ export const GLOSSARIO: Sigla[] = [
   { sigla: 'TCP', expansao: 'Transmission Control Protocol', pt: 'protocolo de controle de transmissão', serve: 'entrega dados de forma ordenada e confiável, com conexão, confirmação e controle de congestionamento' },
   { sigla: 'UDP', expansao: 'User Datagram Protocol', serve: 'entrega datagramas sem conexão nem confirmação, com baixo custo; usado em consultas curtas e em tempo real' },
   { sigla: 'TCP/UDP', expansao: 'Transmission Control Protocol e User Datagram Protocol', serve: 'refere-se aos dois protocolos de transporte da pilha da Internet', partes: ['TCP', 'UDP'] },
+  { sigla: 'TCP/IP', expansao: 'Transmission Control Protocol e Internet Protocol', serve: 'refere-se à pilha de protocolos da Internet, nomeada pelos seus dois protocolos mais conhecidos', partes: ['TCP', 'IP'] },
   { sigla: 'TCP-AO', expansao: 'TCP Authentication Option', pt: 'opção de autenticação do TCP', serve: 'autentica cada segmento TCP por chave compartilhada; sucede a opção TCP MD5 e protege sessões como as do BGP' },
   { sigla: 'SYN', expansao: 'Synchronize', serve: 'flag do TCP que inicia uma conexão e sincroniza os números de sequência' },
   { sigla: 'SYN-ACK', expansao: 'Synchronize-Acknowledge', serve: 'resposta do servidor ao SYN no handshake de três vias: aceita a conexão e envia o próprio número de sequência' },
@@ -277,6 +278,7 @@ export const GLOSSARIO: Sigla[] = [
   // ---- ICMP ----
   { sigla: 'DF', expansao: 'Don\'t Fragment', pt: 'não fragmentar', serve: 'flag do cabeçalho IPv4 que proíbe a fragmentação do pacote; é a base do PMTUD', escopo: ['icmp'] },
   { sigla: 'MF', expansao: 'More Fragments', pt: 'mais fragmentos', serve: 'flag do cabeçalho IPv4 que indica que ainda há fragmentos depois deste', escopo: ['icmp'] },
+  { sigla: 'IHL', expansao: 'Internet Header Length', pt: 'comprimento do cabeçalho IP', serve: 'campo do cabeçalho IPv4 com o tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes)' },
   { sigla: 'uRPF', expansao: 'Unicast Reverse Path Forwarding', pt: 'encaminhamento por caminho reverso unicast', serve: 'confere, pela tabela de rotas, se a origem de um pacote é plausível na interface de chegada, para barrar endereços de origem forjados (RFC 3704)', escopo: ['ipv4'] },
   { sigla: 'PMTU', expansao: 'Path MTU', pt: 'MTU do caminho', serve: 'menor MTU entre os enlaces do caminho; limita o tamanho do pacote sem fragmentar' },
   { sigla: 'WAN', expansao: 'Wide Area Network', pt: 'rede de longa distância', serve: 'rede que liga locais distantes, como as filiais de uma empresa, em geral por operadoras' },

@@ -12,11 +12,133 @@ TCP em diagrama de sequência: handshake e estados, ACKs, RTO, fast retransmit, 
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| TCP: conexão | Handshake e encerramento | 5.1.1 a 5.1.8 |
-| TCP: download | Download de arquivo | 5.2.1 a 5.2.4 |
-| Comparação TCP x UDP | TCP x UDP: 10% de perda | 5.3.1 e 5.3.2 |
+| TCP: conexão | Handshake e encerramento | 6.1.1 a 6.1.8 |
+| TCP: download | Download de arquivo | 6.2.1 a 6.2.4 |
+| Comparação TCP x UDP | TCP x UDP: 10% de perda | 6.3.1 e 6.3.2 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o TCP resolve
+
+O IP entrega datagramas sem garantia: eles podem se perder, chegar fora de ordem ou duplicados. O TCP (*Transmission Control Protocol*, [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293)) está na camada 4 e constrói, sobre esse serviço, um **fluxo de bytes confiável, ordenado e sem duplicatas** entre dois processos. Para isso, ele usa quatro mecanismos:
+
+- **Conexão:** os dois lados combinam os números de sequência iniciais antes de trocar dados.
+- **Confirmação e retransmissão:** o receptor confirma o que recebeu, e o emissor reenvia o que não foi confirmado.
+- **Controle de fluxo:** o receptor diz quanto espaço tem (janela anunciada, *rwnd*).
+- **Controle de congestionamento:** o emissor limita o próprio ritmo conforme a rede aguenta (janela de congestionamento, *cwnd*).
+
+### 2.2 O diagrama da conexão
+
+```mermaid
+sequenceDiagram
+  participant C as Cliente
+  participant S as Servidor
+  C->>S: SYN, seq = x
+  S->>C: SYN e ACK, seq = y, ack = x + 1
+  C->>S: ACK, ack = y + 1
+  Note over C,S: conexão estabelecida
+  C->>S: dados, seq = x + 1
+  S->>C: ACK, ack = x + 1 + tamanho
+  Note over C,S: encerramento
+  C->>S: FIN
+  S->>C: ACK
+  S->>C: FIN
+  C->>S: ACK
+```
+
+*Esquema 1 (conexão do TCP).* A abertura em três vias ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.5) sincroniza os números de sequência: cada lado escolhe o seu e o outro o confirma somando 1. O encerramento (seção 3.6) fecha cada sentido separadamente: cada lado envia o seu FIN e recebe o ACK dele.
+
+O número de sequência identifica o **byte**, e não o segmento. O ACK é **cumulativo**: ele diz "recebi tudo até o byte anterior a este número, e espero este" (seção 3.4).
+
+### 2.3 Os estados da conexão
+
+```mermaid
+stateDiagram-v2
+  [*] --> CLOSED
+  CLOSED --> LISTEN: abertura passiva
+  CLOSED --> SYN_SENT: abertura ativa, envia SYN
+  LISTEN --> SYN_RECEIVED: recebe SYN, envia SYN e ACK
+  SYN_SENT --> ESTABLISHED: recebe SYN e ACK, envia ACK
+  SYN_RECEIVED --> ESTABLISHED: recebe ACK
+  ESTABLISHED --> FIN_WAIT_1: fecha, envia FIN
+  ESTABLISHED --> CLOSE_WAIT: recebe FIN
+  FIN_WAIT_1 --> FIN_WAIT_2: recebe ACK do FIN
+  FIN_WAIT_2 --> TIME_WAIT: recebe FIN, envia ACK
+  CLOSE_WAIT --> LAST_ACK: fecha, envia FIN
+  LAST_ACK --> CLOSED: recebe ACK do FIN
+  TIME_WAIT --> CLOSED: espera 2 MSL
+```
+
+*Esquema 2 (estados principais).* É o caminho comum da máquina de estados da [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.3.2 (Figura 5). Os casos de fechamento simultâneo (CLOSING) e de reinício (RST) foram omitidos para manter o desenho legível.
+
+O estado **TIME-WAIT** mantém a conexão por um tempo (2 vezes o MSL, *Maximum Segment Lifetime*) para que segmentos atrasados da conexão antiga não sejam confundidos com os de uma nova.
+
+### 2.4 O cabeçalho TCP
+
+| Campo | Tamanho | Função |
+| --- | --- | --- |
+| Porta de origem e de destino | 16 bits cada | identificam os processos |
+| Número de sequência | 32 bits | posição, no fluxo, do primeiro byte do segmento |
+| Número de confirmação | 32 bits | próximo byte esperado, quando o bit ACK está ligado |
+| Deslocamento de dados | 4 bits | tamanho do cabeçalho em palavras de 32 bits |
+| Flags | 8 bits | CWR, ECE, URG, ACK, PSH, RST, SYN e FIN |
+| Janela | 16 bits | espaço livre no receptor (rwnd) |
+| Checksum | 16 bits | cobre cabeçalho, dados e um pseudocabeçalho com os endereços IP |
+| Ponteiro urgente e opções | variável | por exemplo, SACK ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)) |
+
+O cabeçalho tem 20 bytes quando não há opções ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.1).
+
+### 2.5 Janelas: quanto o emissor pode enviar
+
+```mermaid
+flowchart LR
+  A["cwnd<br/>o que a rede aguenta"] --> M["Janela efetiva<br/>é o menor valor"]
+  B["rwnd<br/>o que o receptor aguenta"] --> M
+  M --> E["Bytes em voo<br/>sem confirmação"]
+```
+
+*Esquema 3 (janela efetiva).* O emissor mantém em voo, no máximo, o **menor** entre a janela de congestionamento (cwnd) e a janela anunciada pelo receptor (rwnd).
+
+- A **rwnd** protege o receptor (controle de fluxo, [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.8.6).
+- A **cwnd** protege a rede (controle de congestionamento, [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681)).
+
+### 2.6 O controle de congestionamento
+
+```mermaid
+flowchart TD
+  SS["Slow start<br/>cwnd dobra a cada RTT"] -- "cwnd chega a ssthresh" --> CA["Congestion avoidance<br/>cwnd cresce cerca de 1 segmento por RTT"]
+  SS -- "perda por timeout" --> T["ssthresh vira metade da carga em voo<br/>cwnd volta a 1 segmento"]
+  CA -- "perda por timeout" --> T
+  CA -- "3 ACKs duplicados" --> FR["Fast retransmit e fast recovery<br/>ssthresh vira metade da carga em voo"]
+  T --> SS
+  FR --> CA
+```
+
+*Esquema 4 (fases do controle de congestionamento).* Segue a [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681): o *slow start* cresce depressa até o limiar (*ssthresh*), e depois a *congestion avoidance* cresce devagar. Uma perda é lida como sinal de congestionamento, e a janela é reduzida.
+
+Dois sinais de perda têm custos muito diferentes:
+
+| Sinal | Como o emissor percebe | Reação |
+| --- | --- | --- |
+| Três ACKs duplicados | segmentos seguintes chegam, mas o ACK não avança | retransmite logo (*fast retransmit*) e reduz a cwnd pela metade |
+| Timeout (RTO) | nenhum ACK volta antes do prazo | cwnd volta a 1 segmento e recomeça no slow start |
+
+O prazo de retransmissão (RTO) é calculado a partir do RTT medido ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), que a [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) adota na seção 3.8.1). Com **SACK** ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)), o receptor informa também os blocos recebidos fora de ordem, e o emissor reenvia só o que falta.
+
+### 2.7 Como ler o diagrama do simulador
+
+- **Diagrama de sequência:** cada seta é um segmento. A seta com X é um segmento perdido. No modo de download, cada seta representa uma **rodada** (uma janela inteira), para o desenho caber na tela.
+- **Estado da conexão (painel lateral):** mostra o estado TCP de cada ponta, e a cwnd, o ssthresh e o RTO no instante atual.
+- **Modos:** *TCP: conexão* mostra abertura, crescimento da janela, perdas e encerramento. *TCP: download* mostra um arquivo grande, com a fila do roteador e a vazão. *Comparação TCP x UDP* envia a mesma carga pelos dois protocolos na mesma rede.
+- **O relógio:** o tempo avança com o botão Passo ou com a reprodução, e os painéis acompanham o instante atual.
+
+### 2.8 Limites do modelo e do diagrama
+
+- O simulador mostra o **caminho típico** da máquina de estados e do controle de congestionamento. Ele não simula CUBIC, BBR, *Nagle*, ACK atrasado nem reinício por RST.
+- Os tempos, os tamanhos e a fila do roteador são **didáticos**: servem para comparar comportamentos, e não para prever o desempenho de uma rede real.
+- O controle de congestionamento segue a [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681) (estilo Reno), com SACK opcional. Implementações reais variam, e o simulador não reproduz um sistema operacional específico.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -24,7 +146,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | --- | --- | --- | --- |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo B (sequência)**
 
@@ -34,32 +156,32 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo B (sequência)**
 
-- [Figura 5.1.1](#511-handshake-e-encerramento): sequência de "Handshake e encerramento"
-- [Figura 5.1.2](#512-slow-start): sequência de "Slow start"
-- [Figura 5.1.3](#513-fast-retransmit): sequência de "Fast retransmit"
-- [Figura 5.1.4](#514-timeout-rto): sequência de "Timeout (RTO)"
-- [Figura 5.1.5](#515-janela-do-receptor): sequência de "Janela do receptor"
-- [Figura 5.1.6](#516-perdas-aleatórias): sequência de "Perdas aleatórias"
-- [Figura 5.1.7](#517-várias-perdas-sem-sack): sequência de "Várias perdas sem SACK"
-- [Figura 5.1.8](#518-várias-perdas-com-sack): sequência de "Várias perdas com SACK"
-- [Figura 5.2.1](#521-download-de-arquivo): sequência de "Download de arquivo"
-- [Figura 5.2.2](#522-download-com-perdas): sequência de "Download com perdas"
-- [Figura 5.2.3](#523-download-limitado-pela-janela): sequência de "Download limitado pela janela"
-- [Figura 5.2.4](#524-download-com-rtt-alto): sequência de "Download com RTT alto"
-- [Figura 5.3.1](#531-tcp-x-udp-10-de-perda): sequência de "TCP x UDP: 10% de perda"
-- [Figura 5.3.2](#532-tcp-x-udp-reordenação): sequência de "TCP x UDP: reordenação"
+- [Figura 6.1.1](#611-handshake-e-encerramento): sequência de "Handshake e encerramento"
+- [Figura 6.1.2](#612-slow-start): sequência de "Slow start"
+- [Figura 6.1.3](#613-fast-retransmit): sequência de "Fast retransmit"
+- [Figura 6.1.4](#614-timeout-rto): sequência de "Timeout (RTO)"
+- [Figura 6.1.5](#615-janela-do-receptor): sequência de "Janela do receptor"
+- [Figura 6.1.6](#616-perdas-aleatórias): sequência de "Perdas aleatórias"
+- [Figura 6.1.7](#617-várias-perdas-sem-sack): sequência de "Várias perdas sem SACK"
+- [Figura 6.1.8](#618-várias-perdas-com-sack): sequência de "Várias perdas com SACK"
+- [Figura 6.2.1](#621-download-de-arquivo): sequência de "Download de arquivo"
+- [Figura 6.2.2](#622-download-com-perdas): sequência de "Download com perdas"
+- [Figura 6.2.3](#623-download-limitado-pela-janela): sequência de "Download limitado pela janela"
+- [Figura 6.2.4](#624-download-com-rtt-alto): sequência de "Download com RTT alto"
+- [Figura 6.3.1](#631-tcp-x-udp-10-de-perda): sequência de "TCP x UDP: 10% de perda"
+- [Figura 6.3.2](#632-tcp-x-udp-reordenação): sequência de "TCP x UDP: reordenação"
 
-## 3. Abas da bancada
+## 4. Abas da bancada
 
 Cenário, Captura, Mensagem, Janela (cwnd) (modos: TCP: conexão; TCP: download; Comparação TCP x UDP), Resultados, Experimento, Referência e Log.
 
-## 4. Configurações (campos do painel)
+## 5. Configurações (campos do painel)
 
-### 4.1 Transferência
+### 5.1 Transferência
 
 - **Segmentos**. Valores: 1; 2; 3; 4; 5; 6; 8; 10; 12; 15; 20; 25; 30; 40. Padrão: 20. Modos: TCP: conexão; Comparação TCP x UDP.
   - Quantos segmentos (TCP) ou datagramas (UDP) de 1000 bytes serão enviados.
@@ -70,7 +192,7 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: TCP: conexão; TCP: download;
   - Cada 1 MB equivale a 1000 segmentos de 1000 bytes.
   - Arquivos grandes mostram o regime estável (dente de serra da cwnd). Arquivos pequenos são dominados pelo handshake e pelo slow start.
 
-### 4.2 Rede
+### 5.2 Rede
 
 - **RTT (ms)**. Valores: 5; 10; 15; 20; 50; 100; 200. Padrão: 15. Modos: todos.
   - Tempo de ida e volta na rede, sem contar a transmissão.
@@ -106,7 +228,7 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: TCP: conexão; TCP: download;
   - Como o ACK do TCP é cumulativo, o ACK seguinte confirma também o que o ACK perdido confirmaria.
   - Por isso a perda de ACKs raramente causa retransmissão; na maioria das vezes, só atrasa um pouco o crescimento da janela.
 
-### 4.3 TCP
+### 5.3 TCP
 
 - **SACK (confirmação seletiva)**. Valores: caixa de seleção. Padrão: não. Modos: TCP: conexão; Comparação TCP x UDP; TCP: download.
   - Liga a opção SACK do TCP ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)).
@@ -128,15 +250,15 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: TCP: conexão; TCP: download;
   - Com 64, o slow start vai até a primeira perda ou até o limite da rwnd. Com 8, a mudança de fase aparece cedo. Com "sem limite", só a primeira perda encerra o slow start (útil no download).
   - Depois de uma perda, o TCP recalcula o ssthresh como metade do que estava em voo.
 
-## 5. Cenários
+## 6. Cenários
 
-### 5.1 Modo: TCP: conexão
+### 6.1 Modo: TCP: conexão
 
 > **Grupo:** TCP
 
 Conexão confiável: abertura e encerramento, controle de congestionamento, controle de fluxo e recuperação de perdas.
 
-#### 5.1.1 Handshake e encerramento
+#### 6.1.1 Handshake e encerramento
 
 *Abertura em três vias, transferência e encerramento.*
 
@@ -177,7 +299,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.1 (Tipo B, sequência).* Mensagens do cenário "Handshake e encerramento", na ordem do tempo, entre Cliente, Servidor: 13 mensagens, numeradas de 1 a 13 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Handshake e encerramento", na ordem do tempo, entre Cliente, Servidor: 13 mensagens, numeradas de 1 a 13 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -190,7 +312,7 @@ sequenceDiagram
 
 **Por que importa.** O handshake garante que os dois lados estão prontos e sincronizados, mas custa 1 RTT antes do primeiro byte. Também é o alvo do SYN flood, que deixa conexões presas na metade (veja o simulador de Ataques e defesas TCP/UDP).
 
-#### 5.1.2 Slow start
+#### 6.1.2 Slow start
 
 *A janela de congestionamento dobra a cada RTT até o ssthresh.*
 
@@ -285,7 +407,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.2 (Tipo B, sequência).* Mensagens do cenário "Slow start", na ordem do tempo, entre Cliente, Servidor: 67 mensagens, numeradas de 1 a 67 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Slow start", na ordem do tempo, entre Cliente, Servidor: 67 mensagens, numeradas de 1 a 67 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -296,7 +418,7 @@ sequenceDiagram
 
 **Por que importa.** Evita que um emissor recém-chegado inunde a rede ([RFC 5681](https://www.rfc-editor.org/rfc/rfc5681)). O Linux começa com janela 10 ([RFC 6928](https://www.rfc-editor.org/rfc/rfc6928), de status Experimental) para acelerar transferências curtas.
 
-#### 5.1.3 Fast retransmit
+#### 6.1.3 Fast retransmit
 
 *Três ACKs duplicados disparam a retransmissão sem esperar o timeout.*
 
@@ -372,7 +494,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.3 (Tipo B, sequência).* Mensagens do cenário "Fast retransmit", na ordem do tempo, entre Cliente, Servidor: 48 mensagens, numeradas de 1 a 48 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Fast retransmit", na ordem do tempo, entre Cliente, Servidor: 48 mensagens, numeradas de 1 a 48 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -384,7 +506,7 @@ sequenceDiagram
 
 **Por que importa.** Recupera perdas isoladas em cerca de 1 RTT e preserva boa parte da vazão. É o caso mais comum de perda em redes congestionadas.
 
-#### 5.1.4 Timeout (RTO)
+#### 6.1.4 Timeout (RTO)
 
 *Sem ACKs duplicados, só o temporizador percebe a perda.*
 
@@ -432,7 +554,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.4 (Tipo B, sequência).* Mensagens do cenário "Timeout (RTO)", na ordem do tempo, entre Cliente, Servidor: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "Timeout (RTO)", na ordem do tempo, entre Cliente, Servidor: 20 mensagens, numeradas de 1 a 20 na ordem da comunicação (em 4 fases; 1 perdida). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -444,7 +566,7 @@ sequenceDiagram
 
 **Por que importa.** Timeouts custam caro: a conexão fica parada e a janela recomeça do zero. Por isso perdas no fim de transferências curtas pesam tanto no carregamento de páginas web.
 
-#### 5.1.5 Janela do receptor
+#### 6.1.5 Janela do receptor
 
 *O receptor limita quanto o emissor pode ter em voo.*
 
@@ -519,7 +641,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.5 (Tipo B, sequência).* Mensagens do cenário "Janela do receptor", na ordem do tempo, entre Cliente, Servidor: 47 mensagens, numeradas de 1 a 47 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "Janela do receptor", na ordem do tempo, entre Cliente, Servidor: 47 mensagens, numeradas de 1 a 47 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -530,7 +652,7 @@ sequenceDiagram
 
 **Por que importa.** Controle de fluxo (receptor) e controle de congestionamento (rede) são mecanismos diferentes. Uma janela anunciada pequena limita a vazão mesmo em uma rede rápida.
 
-#### 5.1.6 Perdas aleatórias
+#### 6.1.6 Perdas aleatórias
 
 *Perdas sorteadas: o TCP combina todos os mecanismos de recuperação.*
 
@@ -629,7 +751,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.6 (Tipo B, sequência).* Mensagens do cenário "Perdas aleatórias", na ordem do tempo, entre Cliente, Servidor: 71 mensagens, numeradas de 1 a 71 na ordem da comunicação (em 4 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.6 (Tipo B, sequência).* Mensagens do cenário "Perdas aleatórias", na ordem do tempo, entre Cliente, Servidor: 71 mensagens, numeradas de 1 a 71 na ordem da comunicação (em 4 fases; 4 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -641,7 +763,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra por que a vazão do TCP cai rápido com a perda: cada perda corta a janela. Em redes sem fio, perdas que não vêm de congestionamento também reduzem a janela.
 
-#### 5.1.7 Várias perdas sem SACK
+#### 6.1.7 Várias perdas sem SACK
 
 *Com várias perdas na mesma janela, o ACK cumulativo revela uma lacuna por RTT.*
 
@@ -719,7 +841,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.7 (Tipo B, sequência).* Mensagens do cenário "Várias perdas sem SACK", na ordem do tempo, entre Cliente, Servidor: 50 mensagens, numeradas de 1 a 50 na ordem da comunicação (em 4 fases; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.7 (Tipo B, sequência).* Mensagens do cenário "Várias perdas sem SACK", na ordem do tempo, entre Cliente, Servidor: 50 mensagens, numeradas de 1 a 50 na ordem da comunicação (em 4 fases; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -732,7 +854,7 @@ sequenceDiagram
 
 **Por que importa.** Com perdas em rajada (comuns em filas cheias e em redes sem fio), a recuperação sem SACK é lenta: a conexão passa vários RTTs presa na recuperação, com a janela reduzida.
 
-#### 5.1.8 Várias perdas com SACK
+#### 6.1.8 Várias perdas com SACK
 
 *SACK informa o que já chegou e permite repor todos os buracos de uma vez.*
 
@@ -810,7 +932,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.1.8 (Tipo B, sequência).* Mensagens do cenário "Várias perdas com SACK", na ordem do tempo, entre Cliente, Servidor: 50 mensagens, numeradas de 1 a 50 na ordem da comunicação (em 4 fases; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
+*Figura 6.1.8 (Tipo B, sequência).* Mensagens do cenário "Várias perdas com SACK", na ordem do tempo, entre Cliente, Servidor: 50 mensagens, numeradas de 1 a 50 na ordem da comunicação (em 4 fases; 3 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: conexão", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -822,13 +944,13 @@ sequenceDiagram
 
 **Por que importa.** O SACK é padrão em todos os sistemas atuais. Ele faz o TCP recuperar várias perdas por janela em cerca de 1 RTT e é a base de técnicas como o RACK e a sonda de cauda (TLP).
 
-### 5.2 Modo: TCP: download
+### 6.2 Modo: TCP: download
 
 > **Grupo:** Download
 
 Um arquivo grande por TCP: abertura, crescimento da janela, fila do roteador, perdas e limites de vazão.
 
-#### 5.2.1 Download de arquivo
+#### 6.2.1 Download de arquivo
 
 *Slow start, fila do roteador estourando e o dente de serra da cwnd.*
 
@@ -991,7 +1113,7 @@ sequenceDiagram
   n_s ->> n_c: ACK=122
 ```
 
-*Figura 5.2.1 (Tipo B, sequência).* Mensagens do cenário "Download de arquivo", na ordem do tempo, entre Cliente, Servidor: 133 mensagens, numeradas de 1 a 133 na ordem da comunicação (em 6 fases; 6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
+*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Download de arquivo", na ordem do tempo, entre Cliente, Servidor: 133 mensagens, numeradas de 1 a 133 na ordem da comunicação (em 6 fases; 6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1004,7 +1126,7 @@ sequenceDiagram
 
 **Por que importa.** É o comportamento de qualquer download ou envio de arquivo: a vazão do TCP se ajusta sozinha à capacidade do caminho, mas só descobre o limite perdendo pacotes. Por isso o tamanho da fila do roteador (bufferbloat) e o RTT pesam tanto na experiência.
 
-#### 5.2.2 Download com perdas
+#### 6.2.2 Download com perdas
 
 *Com perda aleatória, a vazão fica muito abaixo da capacidade do enlace.*
 
@@ -1196,7 +1318,7 @@ sequenceDiagram
   n_s ->> n_c: ACK=122
 ```
 
-*Figura 5.2.2 (Tipo B, sequência).* Mensagens do cenário "Download com perdas", na ordem do tempo, entre Cliente, Servidor: 162 mensagens, numeradas de 1 a 162 na ordem da comunicação (em 6 fases; 27 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
+*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Download com perdas", na ordem do tempo, entre Cliente, Servidor: 162 mensagens, numeradas de 1 a 162 na ordem da comunicação (em 6 fases; 27 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1208,7 +1330,7 @@ sequenceDiagram
 
 **Por que importa.** Explica por que enlaces com perda que não vem de congestionamento (Wi-Fi fraco, rádio, satélite) rendem pouco com o TCP clássico, e por que algoritmos como CUBIC e BBR reagem de formas diferentes à perda.
 
-#### 5.2.3 Download limitado pela janela
+#### 6.2.3 Download limitado pela janela
 
 *A janela do receptor limita a vazão, mesmo com o enlace livre.*
 
@@ -1371,7 +1493,7 @@ sequenceDiagram
   n_s ->> n_c: ACK=122
 ```
 
-*Figura 5.2.3 (Tipo B, sequência).* Mensagens do cenário "Download limitado pela janela", na ordem do tempo, entre Cliente, Servidor: 133 mensagens, numeradas de 1 a 133 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
+*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Download limitado pela janela", na ordem do tempo, entre Cliente, Servidor: 133 mensagens, numeradas de 1 a 133 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1382,7 +1504,7 @@ sequenceDiagram
 
 **Por que importa.** Por isso existe a escala de janela (window scale, [RFC 7323](https://www.rfc-editor.org/rfc/rfc7323)): sem ela, a janela máxima de 64 kB limita a vazão em caminhos de RTT alto.
 
-#### 5.2.4 Download com RTT alto
+#### 6.2.4 Download com RTT alto
 
 *Em RTT alto, o handshake e o slow start dominam o tempo de um arquivo pequeno.*
 
@@ -1433,7 +1555,7 @@ sequenceDiagram
   n_s ->> n_c: ACK=122
 ```
 
-*Figura 5.2.4 (Tipo B, sequência).* Mensagens do cenário "Download com RTT alto", na ordem do tempo, entre Cliente, Servidor: 21 mensagens, numeradas de 1 a 21 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
+*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Download com RTT alto", na ordem do tempo, entre Cliente, Servidor: 21 mensagens, numeradas de 1 a 21 na ordem da comunicação (em 6 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "TCP: download", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1444,13 +1566,13 @@ sequenceDiagram
 
 **Por que importa.** É a razão de HTTP/2, conexões persistentes, TLS 1.3, TCP Fast Open e QUIC: evitar pagar novos RTTs de handshake e partir de uma janela maior.
 
-### 5.3 Modo: Comparação TCP x UDP
+### 6.3 Modo: Comparação TCP x UDP
 
 > **Grupo:** Comparação
 
 Os dois protocolos lado a lado, na mesma rede e com as mesmas perdas.
 
-#### 5.3.1 TCP x UDP: 10% de perda
+#### 6.3.1 TCP x UDP: 10% de perda
 
 *O que o TCP faz para entregar tudo, comparado ao UDP sem garantias.*
 
@@ -1550,7 +1672,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.3.1 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: 10% de perda", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 70 mensagens, numeradas de 1 a 70 na ordem da comunicação (em 4 fases; 6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação TCP x UDP", com a configuração aplicada acima.
+*Figura 6.3.1 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: 10% de perda", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 70 mensagens, numeradas de 1 a 70 na ordem da comunicação (em 4 fases; 6 perdidas). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação TCP x UDP", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1561,7 +1683,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra o preço da confiabilidade: a garantia de entrega vem de confirmações e retransmissões, que custam tempo.
 
-#### 5.3.2 TCP x UDP: reordenação
+#### 6.3.2 TCP x UDP: reordenação
 
 *O TCP reordena os dados; a desordem pode gerar retransmissão desnecessária.*
 
@@ -1656,7 +1778,7 @@ sequenceDiagram
   n_c ->> n_s: ACK=2
 ```
 
-*Figura 5.3.2 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: reordenação", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 67 mensagens, numeradas de 1 a 67 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação TCP x UDP", com a configuração aplicada acima.
+*Figura 6.3.2 (Tipo B, sequência).* Mensagens do cenário "TCP x UDP: reordenação", na ordem do tempo, entre Cliente (TCP), Servidor (TCP), Cliente (UDP), Servidor (UDP): 67 mensagens, numeradas de 1 a 67 na ordem da comunicação (em 4 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Comparação TCP x UDP", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1667,9 +1789,9 @@ sequenceDiagram
 
 **Por que importa.** Mostra que ACK duplicado nem sempre significa perda. Pilhas modernas detectam retransmissões espúrias e desfazem a redução da janela.
 
-## 6. Referência
+## 7. Referência
 
-### 6.1 A camada de transporte
+### 7.1 A camada de transporte
 
 O IP entrega pacotes entre **hosts**, sem garantias. A camada de transporte entrega dados entre **processos**, identificados por **portas**. O **UDP** ([RFC 768](https://www.rfc-editor.org/rfc/rfc768)) acrescenta apenas portas, comprimento e checksum: cada datagrama é independente, sem conexão, sem confirmação, sem ordem e sem controle de taxa. O **TCP** ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293)) oferece um fluxo de bytes confiável e ordenado, com controle de fluxo e de congestionamento, ao custo de abrir uma conexão e de esperar confirmações.
 
@@ -1685,19 +1807,19 @@ O IP entrega pacotes entre **hosts**, sem garantias. A camada de transporte entr
 
 O UDP, o DNS e o vídeo em streaming têm simulador próprio.
 
-### 6.2 Conexão TCP
+### 7.2 Conexão TCP
 
 - **Abertura:** SYN, SYN-ACK e ACK. Cada lado escolhe um número de sequência inicial (ISN). O Wireshark, assim como este simulador, mostra números **relativos** (o ISN aparece como 0).
 - **Estados:** o cliente passa por SYN_SENT e ESTABLISHED; o servidor por LISTEN, SYN_RCVD e ESTABLISHED.
 - **Encerramento:** cada sentido é fechado com FIN e ACK. Quem fecha primeiro passa por FIN_WAIT_1, FIN_WAIT_2 e **TIME_WAIT**, onde espera 2×MSL (a [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) usa MSL de 2 min; o Linux fixa 60 s) para absorver segmentos atrasados da conexão.
 
-### 6.3 Confiabilidade e janela deslizante
+### 7.3 Confiabilidade e janela deslizante
 
 - **ACK cumulativo:** informa o próximo byte esperado. Um segmento que chega fora de ordem faz o receptor repetir o último ACK (**ACK duplicado**).
 - **RTO ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298)):** o temporizador de retransmissão vale SRTT + 4×RTTVAR. Pelo **algoritmo de Karn**, segmentos retransmitidos não geram amostra de RTT. A cada timeout, o RTO dobra (backoff exponencial). A RFC recomenda mínimo de 1 s; o Linux usa 200 ms, valor adotado aqui.
 - **Controle de fluxo:** o receptor anuncia quanto ainda consegue armazenar (rwnd). O emissor nunca tem mais dados em voo que min(cwnd, rwnd).
 
-### 6.4 Controle de congestionamento ([RFC 5681](https://www.rfc-editor.org/rfc/rfc5681) e [RFC 6582](https://www.rfc-editor.org/rfc/rfc6582))
+### 7.4 Controle de congestionamento ([RFC 5681](https://www.rfc-editor.org/rfc/rfc5681) e [RFC 6582](https://www.rfc-editor.org/rfc/rfc6582))
 
 - **Slow start:** a cwnd começa pequena (1 a 4 segmentos; 10 no Linux; a [RFC 6928](https://www.rfc-editor.org/rfc/rfc6928) é Experimental) e cresce 1 segmento por ACK, o que a **dobra a cada RTT**.
 - **Congestion avoidance:** acima do ssthresh, cresce cerca de 1 segmento por RTT (crescimento linear).
@@ -1706,7 +1828,7 @@ O UDP, o DNS e o vídeo em streaming têm simulador próprio.
 - **SACK ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)):** opção negociada no SYN (SACK_PERM). Cada ACK duplicado leva até 4 blocos (3 quando a opção Timestamps está em uso) (SLE e SRE) com os bytes recebidos além da lacuna, e o emissor mantém um placar (scoreboard). Este simulador usa uma versão simplificada: dá como perdido todo buraco abaixo do maior byte confirmado (ideia do antigo FACK; o Linux atual usa RACK-TLP, [RFC 8985](https://www.rfc-editor.org/rfc/rfc8985), e o sysctl tcp_fack já não tem efeito), sem DSACK e sem os detalhes da [RFC 6675](https://www.rfc-editor.org/rfc/rfc6675).
 - O Linux usa **CUBIC** ([RFC 9438](https://www.rfc-editor.org/rfc/rfc9438)) por padrão. A lógica de crescer até perceber perda e então reduzir é a mesma mostrada aqui com Reno/NewReno.
 
-### 6.5 Download de arquivo com TCP
+### 7.5 Download de arquivo com TCP
 
 - **Custo da conexão:** o primeiro byte do arquivo só chega depois de 2 RTT (handshake mais pedido HTTP). Em arquivos pequenos, esse custo e o slow start dominam o tempo.
 - **Slow start e fila do roteador:** a janela dobra a cada RTT até a rede não aguentar. O que passa da capacidade do caminho (banda × RTT mais a fila do roteador) é descartado no fim da fila (tail drop), o TCP reduz a janela e volta a crescer: é o dente de serra da cwnd.
@@ -1715,7 +1837,7 @@ O UDP, o DNS e o vídeo em streaming têm simulador próprio.
 - **Perdas no fim da janela:** sem segmentos depois da perda, não há ACKs duplicados. As pilhas atuais, com SACK, usam a sonda de cauda (TLP, [RFC 8985](https://www.rfc-editor.org/rfc/rfc8985)): cerca de 2 RTT depois, o emissor reenvia o último segmento, descobre o que falta e recupera sem esperar o RTO. Só a perda de uma janela inteira cai em timeout.
 - **Modelo desta tela:** o simulador trabalha por rodada (uma janela inteira por RTT) e desenha uma seta por rodada. Rodadas parecidas são omitidas do diagrama, mas entram no gráfico e nas métricas.
 
-### 6.6 Segurança do TCP
+### 7.6 Segurança do TCP
 
 - **SYN flood:** muitos SYN sem o ACK final esgotam a fila de conexões semiabertas do servidor. SYN cookies ([RFC 4987](https://www.rfc-editor.org/rfc/rfc4987)) evitam reservar estado antes do handshake terminar.
 - **Números de sequência:** um ISN previsível permite injetar segmentos ou derrubar conexões de fora do caminho. Pilhas modernas sorteiam o ISN ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293)) e só aceitam RST com a sequência exata ([RFC 5961](https://www.rfc-editor.org/rfc/rfc5961)).
@@ -1723,7 +1845,7 @@ O UDP, o DNS e o vídeo em streaming têm simulador próprio.
 - **Download:** o TCP entrega os bytes, mas não garante que são os bytes certos. Use HTTPS (TLS) e confira o hash do arquivo; sem TLS, um atacante no caminho pode alterar a transferência.
 - Para praticar a defesa contra esses ataques, use o Simulador de Ataques e Defesas TCP/UDP.
 
-### 6.7 Limitações do simulador
+### 7.7 Limitações do simulador
 
 - Cada segmento é confirmado por um ACK. Os ACKs atrasados (um ACK a cada dois segmentos, [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122) e [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681)) não são simulados; com eles, a cwnd cresceria cerca de 1,5 vez por RTT, e não 2.
 - O handshake não negocia Window Scale nem Timestamps ([RFC 7323](https://www.rfc-editor.org/rfc/rfc7323)). Por isso a rwnd de 256 e 1024 segmentos (acima de 64 kB) é um valor didático: na prática exigiria a opção Window Scale.
@@ -1731,7 +1853,7 @@ O UDP, o DNS e o vídeo em streaming têm simulador próprio.
 - O RTO mínimo de 200 ms é um valor didático.
 - O simulador trabalha por rodada (uma janela por RTT) e usa SACK simplificado, sem DSACK e sem os detalhes da [RFC 6675](https://www.rfc-editor.org/rfc/rfc6675).
 
-### 6.8 Roteiro de exercícios
+### 7.8 Roteiro de exercícios
 
 1. **Handshake e encerramento:** identifique na aba Captura os números de sequência e de confirmação de cada segmento. Por que o SYN e o FIN consomem um número de sequência?
 2. **Slow start:** acompanhe a aba Janela (cwnd) e mostre que a janela dobra a cada RTT. Em que momento o crescimento passa a ser linear?
@@ -1743,7 +1865,7 @@ O UDP, o DNS e o vídeo em streaming têm simulador próprio.
 8. **Download limitado pela janela:** calcule rwnd × 1000 bytes / RTT e compare com a vazão útil medida. O que muda com rwnd = 256?
 
 
-## 7. Glossário
+## 8. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 

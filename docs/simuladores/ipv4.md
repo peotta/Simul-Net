@@ -12,10 +12,123 @@ Como o host e o roteador decidem: máscara e gateway, prefixo mais específico, 
 
 | Modo | Cenário inicial | Cenários |
 | --- | --- | --- |
-| Encaminhamento | Dois candidatos: vence o /16 | 6.1.1 a 6.1.16 |
-| Endereçamento | Destino na mesma sub-rede | 6.2.1 a 6.2.14 |
+| Encaminhamento | Dois candidatos: vence o /16 | 7.1.1 a 7.1.16 |
+| Endereçamento | Destino na mesma sub-rede | 7.2.1 a 7.2.14 |
 
-## 2. Como ler os diagramas
+## 2. Fundamentação
+
+### 2.1 O problema que o IPv4 resolve
+
+Uma internet é um conjunto de redes diferentes ligadas por roteadores. O IPv4 (*Internet Protocol* versão 4, [RFC 791](https://www.rfc-editor.org/rfc/rfc791)) dá a cada interface um **endereço lógico de 32 bits** e define como um **datagrama** viaja de uma origem a um destino atravessando várias redes. Ele está na camada 3 do modelo OSI (camada Internet do TCP/IP).
+
+O serviço é de **melhor esforço**: o IP não garante entrega, ordem nem ausência de duplicatas. Cada roteador decide sozinho, olhando só o endereço de destino e a própria tabela de rotas. Confiabilidade e ordem ficam para as camadas de cima (por exemplo, o TCP).
+
+### 2.2 O diagrama da viagem de um datagrama
+
+```mermaid
+flowchart LR
+  A["PC-A"] -- "quadro 1<br/>MAC: PC-A para R1" --> R1["Roteador R1<br/>TTL 64 para 63"]
+  R1 -- "quadro 2<br/>MAC: R1 para R2" --> R2["Roteador R2<br/>TTL 63 para 62"]
+  R2 -- "quadro 3<br/>MAC: R2 para R3" --> R3["Roteador R3<br/>TTL 62 para 61"]
+  R3 -- "quadro 4<br/>MAC: R3 para SRV2" --> S["SRV2<br/>10.2.5.20"]
+```
+
+*Esquema 1 (a viagem do datagrama).* O endereço IP de origem e o de destino não mudam de ponta a ponta. A cada salto mudam o **quadro** (MAC de origem e de destino), o **TTL** e o **checksum** do cabeçalho IP, que é recalculado porque o TTL mudou.
+
+Essa é a ideia central do roteamento: o endereço físico (MAC) vale em **um enlace**, e o endereço IP vale **fim a fim**.
+
+### 2.3 Endereço, máscara e prefixo
+
+Um endereço IPv4 tem duas partes: a **rede** (os bits mais à esquerda) e o **host** (os bits restantes). A máscara de sub-rede, ou o comprimento do prefixo (por exemplo, /24), diz onde está a divisa.
+
+| Valor | Como se calcula | Exemplo (192.168.10.10/24) |
+| --- | --- | --- |
+| Máscara | prefixo de bits 1 seguido de bits 0 | 255.255.255.0 |
+| Endereço da rede | endereço E máscara (E lógico, bit a bit) | 192.168.10.0 |
+| Endereço de broadcast | rede com todos os bits de host em 1 | 192.168.10.255 |
+| Hosts utilizáveis | 2 elevado a (32 menos prefixo), menos 2 | 254 |
+
+Em enlaces ponto a ponto, o prefixo /31 usa os dois endereços como hosts, sem rede nem broadcast ([RFC 3021](https://www.rfc-editor.org/rfc/rfc3021), seção 2.1).
+
+### 2.4 A decisão do host: entrega direta ou gateway
+
+```mermaid
+flowchart TD
+  I["Host tem um pacote para o destino D"] --> T{"D E máscara<br/>é igual à minha rede?"}
+  T -- "sim" --> DIR["Entrega direta:<br/>ARP resolve o MAC de D"]
+  T -- "não" --> G{"Existe gateway<br/>na minha sub-rede?"}
+  G -- "sim" --> GW["Envia ao gateway:<br/>MAC do gateway, IP de D"]
+  G -- "não" --> E["Rede inalcançável no próprio host:<br/>nada é enviado"]
+```
+
+*Esquema 2 (decisão do host).* O host compara o destino com a própria rede ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.3.1.1; [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.2). Se o destino é de outra rede, o quadro vai ao **gateway**, com o MAC do gateway e o IP do destino final. O gateway precisa estar na sub-rede do host, porque é alcançado por ARP.
+
+Por isso um erro de máscara ou de gateway no host não aparece como erro de roteamento: aparece como falta de resposta.
+
+### 2.5 A decisão do roteador: o prefixo mais específico
+
+```mermaid
+flowchart TD
+  P["Pacote chega com destino D"] --> V{"TTL maior que 1?"}
+  V -- "não" --> X1["Descarta e envia<br/>ICMP 11/0 à origem"]
+  V -- "sim" --> C["Seleciona as rotas cujo prefixo contém D"]
+  C --> N{"Alguma rota casa?"}
+  N -- "não" --> X2["Descarta e envia<br/>ICMP 3/0 à origem"]
+  N -- "sim" --> L["Fica com o maior comprimento de prefixo"]
+  L --> D2["Desempate: preferência administrativa e depois métrica"]
+  D2 --> F["Decrementa o TTL, recalcula o checksum<br/>e encaminha ao próximo salto"]
+```
+
+*Esquema 3 (decisão do roteador).* Cada roteador consulta só a própria tabela. A rota de maior prefixo vence ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.3), qualquer que seja a ordem em que as rotas foram escritas. A rota padrão (0.0.0.0/0) tem o menor prefixo e só vence quando nada mais casa. O TTL e o ICMP 11/0 seguem a [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.3.1.
+
+Exemplo: com as rotas 10.2.0.0/16 e 10.2.5.0/24, o destino 10.2.5.20 casa com as duas, e vence a /24.
+
+### 2.6 O cabeçalho IPv4
+
+| Campo | Tamanho | Função |
+| --- | --- | --- |
+| Versão | 4 bits | vale 4 |
+| IHL | 4 bits | tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
+| DSCP e ECN | 8 bits | prioridade e sinalização de congestionamento (antigo Tipo de Serviço) |
+| Comprimento total | 16 bits | cabeçalho mais dados, em bytes |
+| Identificação, flags e deslocamento | 32 bits | usados na fragmentação (não simulada aqui) |
+| TTL | 8 bits | limite de saltos, decrementado em cada roteador |
+| Protocolo | 8 bits | camada de cima (1 ICMP, 6 TCP, 17 UDP) |
+| Checksum do cabeçalho | 16 bits | soma de verificação só do cabeçalho ([RFC 1071](https://www.rfc-editor.org/rfc/rfc1071)) |
+| Endereço de origem e de destino | 32 bits cada | quem enviou e para quem vai |
+
+A aba **Cabeçalho IPv4** do simulador mostra esses campos com os valores do pacote em trânsito.
+
+### 2.7 Como ler o diagrama do simulador
+
+O simulador tem dois modos, e cada um mostra uma das decisões.
+
+- **Encaminhamento:** o caminho do pacote por três roteadores. O destaque da topologia mostra o enlace percorrido, e a aba **Tabela de rotas** marca a rota vencedora em cada roteador, com as candidatas que casaram. O diagrama de sequência mostra o pedido (ping) e a resposta, ou o erro ICMP que volta quando o pacote é descartado.
+- **Endereçamento:** o que o **host** decide antes de enviar. A aba **Endereços** mostra o cálculo E lógico com a máscara, em binário, e o bloco especial a que o endereço pertence.
+- **O estado da decisão:** o painel lateral resume o resultado (entregue, descartado, inalcançável) e o motivo.
+
+O ping é só a **sonda**: serve para mostrar o caminho e os erros, e os tempos são didáticos.
+
+### 2.8 Blocos de endereço especiais
+
+| Bloco | Uso | Definido em |
+| --- | --- | --- |
+| 10.0.0.0/8, 172.16.0.0/12 e 192.168.0.0/16 | uso privado | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) |
+| 100.64.0.0/10 | espaço compartilhado do NAT de operadora | [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) |
+| 169.254.0.0/16 | link-local, nunca é encaminhado | [RFC 3927](https://www.rfc-editor.org/rfc/rfc3927) |
+| 192.0.2.0/24, 198.51.100.0/24 e 203.0.113.0/24 | documentação e exemplos | [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737) |
+| 255.255.255.255 | broadcast limitado, nunca é encaminhado | [RFC 919](https://www.rfc-editor.org/rfc/rfc919) |
+
+A lista completa e atual está no registro de endereços de uso especial ([RFC 6890](https://www.rfc-editor.org/rfc/rfc6890)).
+
+### 2.9 Limites do modelo e do diagrama
+
+- O simulador usa **rotas estáticas**. As entradas "OSPF" são apenas rotas de outra origem, sem o protocolo em execução (veja os simuladores de OSPF, RIP e BGP).
+- Não há fragmentação (veja o simulador de ICMP), ECMP, multicast, opções IP nem IPv6.
+- A distância administrativa segue convenções de fabricantes, e não de RFC.
+- O diagrama mostra **um** pacote por vez. Em redes reais, os roteadores encaminham milhares de datagramas por segundo, cada um decidido de forma independente.
+
+## 3. Como ler os diagramas
 
 Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com o tipo, o que mostra e a que modo ou cenário se refere.
 
@@ -24,7 +137,7 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 | A, topologia | Os elementos da rede e os enlaces que os ligam. É estático. | Um modo inteiro | A visão "Topologia" do painel principal |
 | B, sequência | As mensagens na ordem do tempo, entre os participantes. É dinâmico. | Um único cenário, com a configuração indicada | Ao diagrama de sequência e à aba Captura |
 
-### 2.1 Legenda dos diagramas
+### 3.1 Legenda dos diagramas
 
 **Tipo A (topologia)**
 
@@ -44,54 +157,54 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 - Faixa horizontal com texto: início de uma fase do cenário.
 - A ordem é a da aba Captura; os intervalos de tempo não são desenhados em escala.
 
-### 2.2 Lista de figuras
+### 3.2 Lista de figuras
 
 **Tipo A (topologia)**
 
-- [Figura 3.1](#31-encaminhamento): topologia do modo "Encaminhamento"
-- [Figura 3.2a](#32-endereçamento): topologia do modo "Endereçamento", variante a
-- [Figura 3.2b](#32-endereçamento): topologia do modo "Endereçamento", variante b
-- [Figura 3.2c](#32-endereçamento): topologia do modo "Endereçamento", variante c
-- [Figura 3.2d](#32-endereçamento): topologia do modo "Endereçamento", variante d
+- [Figura 4.1](#41-encaminhamento): topologia do modo "Encaminhamento"
+- [Figura 4.2a](#42-endereçamento): topologia do modo "Endereçamento", variante a
+- [Figura 4.2b](#42-endereçamento): topologia do modo "Endereçamento", variante b
+- [Figura 4.2c](#42-endereçamento): topologia do modo "Endereçamento", variante c
+- [Figura 4.2d](#42-endereçamento): topologia do modo "Endereçamento", variante d
 
 **Tipo B (sequência)**
 
-- [Figura 6.1.1](#611-dois-candidatos-vence-o-16): sequência de "Dois candidatos: vence o /16"
-- [Figura 6.1.2](#612-três-candidatos-vence-o-24): sequência de "Três candidatos: vence o /24"
-- [Figura 6.1.3](#613-rota-padrão-até-a-borda): sequência de "Rota padrão até a borda"
-- [Figura 6.1.4](#614-mesmo-prefixo-fontes-diferentes): sequência de "Mesmo prefixo, fontes diferentes"
-- [Figura 6.1.5](#615-mesma-fonte-métricas-diferentes): sequência de "Mesma fonte, métricas diferentes"
-- [Figura 6.1.6](#616-sem-rota-no-r3-icmp-30): sequência de "Sem rota no R3 (ICMP 3/0)"
-- [Figura 6.1.7](#617-sem-agregada-e-sem-padrão): sequência de "Sem agregada e sem padrão"
-- [Figura 6.1.8](#618-a-rota-padrão-esconde-a-falha): sequência de "A rota padrão esconde a falha"
-- [Figura 6.1.9](#619-rota-blackhole): sequência de "Rota blackhole"
-- [Figura 6.1.10](#6110-ida-entregue-volta-perdida): sequência de "Ida entregue, volta perdida"
-- [Figura 6.1.11](#6111-ttl-expira-no-r3): sequência de "TTL expira no R3"
-- [Figura 6.1.12](#6112-loop-entre-r2-e-r3): sequência de "Loop entre R2 e R3"
-- [Figura 6.1.13](#6113-origem-forjada-sem-urpf): sequência de "Origem forjada, sem uRPF"
-- [Figura 6.1.14](#6114-urpf-estrito-descarta): sequência de "uRPF estrito descarta"
-- [Figura 6.1.15](#6115-urpf-flexível-e-a-rota-padrão): sequência de "uRPF flexível e a rota padrão"
-- [Figura 6.1.16](#6116-urpf-estrito-com-origem-legítima): sequência de "uRPF estrito com origem legítima"
-- [Figura 6.2.1](#621-destino-na-mesma-sub-rede): sequência de "Destino na mesma sub-rede"
-- [Figura 6.2.2](#622-destino-remoto-via-gateway): sequência de "Destino remoto, via gateway"
-- [Figura 6.2.3](#623-sem-gateway-configurado): sequência de "Sem gateway configurado"
-- [Figura 6.2.4](#624-gateway-fora-da-sub-rede): sequência de "Gateway fora da sub-rede"
-- [Figura 6.2.5](#625-máscara-larga-demais): sequência de "Máscara larga demais"
-- [Figura 6.2.6](#626-sub-redes-sobrepostas): sequência de "Sub-redes sobrepostas"
-- [Figura 6.2.7](#627-enlace-ponto-a-ponto-31): sequência de "Enlace ponto a ponto /31"
-- [Figura 6.2.8](#628-broadcast-da-sub-rede): sequência de "Broadcast da sub-rede"
-- [Figura 6.2.9](#629-broadcast-limitado): sequência de "Broadcast limitado"
-- [Figura 6.2.10](#6210-broadcast-dirigido-bloqueado): sequência de "Broadcast dirigido, bloqueado"
-- [Figura 6.2.11](#6211-broadcast-dirigido-encaminhado): sequência de "Broadcast dirigido, encaminhado"
-- [Figura 6.2.12](#6212-link-local): sequência de "Link-local"
-- [Figura 6.2.13](#6213-espaço-do-cgnat): sequência de "Espaço do CGNAT"
-- [Figura 6.2.14](#6214-endereço-de-documentação): sequência de "Endereço de documentação"
+- [Figura 7.1.1](#711-dois-candidatos-vence-o-16): sequência de "Dois candidatos: vence o /16"
+- [Figura 7.1.2](#712-três-candidatos-vence-o-24): sequência de "Três candidatos: vence o /24"
+- [Figura 7.1.3](#713-rota-padrão-até-a-borda): sequência de "Rota padrão até a borda"
+- [Figura 7.1.4](#714-mesmo-prefixo-fontes-diferentes): sequência de "Mesmo prefixo, fontes diferentes"
+- [Figura 7.1.5](#715-mesma-fonte-métricas-diferentes): sequência de "Mesma fonte, métricas diferentes"
+- [Figura 7.1.6](#716-sem-rota-no-r3-icmp-30): sequência de "Sem rota no R3 (ICMP 3/0)"
+- [Figura 7.1.7](#717-sem-agregada-e-sem-padrão): sequência de "Sem agregada e sem padrão"
+- [Figura 7.1.8](#718-a-rota-padrão-esconde-a-falha): sequência de "A rota padrão esconde a falha"
+- [Figura 7.1.9](#719-rota-blackhole): sequência de "Rota blackhole"
+- [Figura 7.1.10](#7110-ida-entregue-volta-perdida): sequência de "Ida entregue, volta perdida"
+- [Figura 7.1.11](#7111-ttl-expira-no-r3): sequência de "TTL expira no R3"
+- [Figura 7.1.12](#7112-loop-entre-r2-e-r3): sequência de "Loop entre R2 e R3"
+- [Figura 7.1.13](#7113-origem-forjada-sem-urpf): sequência de "Origem forjada, sem uRPF"
+- [Figura 7.1.14](#7114-urpf-estrito-descarta): sequência de "uRPF estrito descarta"
+- [Figura 7.1.15](#7115-urpf-flexível-e-a-rota-padrão): sequência de "uRPF flexível e a rota padrão"
+- [Figura 7.1.16](#7116-urpf-estrito-com-origem-legítima): sequência de "uRPF estrito com origem legítima"
+- [Figura 7.2.1](#721-destino-na-mesma-sub-rede): sequência de "Destino na mesma sub-rede"
+- [Figura 7.2.2](#722-destino-remoto-via-gateway): sequência de "Destino remoto, via gateway"
+- [Figura 7.2.3](#723-sem-gateway-configurado): sequência de "Sem gateway configurado"
+- [Figura 7.2.4](#724-gateway-fora-da-sub-rede): sequência de "Gateway fora da sub-rede"
+- [Figura 7.2.5](#725-máscara-larga-demais): sequência de "Máscara larga demais"
+- [Figura 7.2.6](#726-sub-redes-sobrepostas): sequência de "Sub-redes sobrepostas"
+- [Figura 7.2.7](#727-enlace-ponto-a-ponto-31): sequência de "Enlace ponto a ponto /31"
+- [Figura 7.2.8](#728-broadcast-da-sub-rede): sequência de "Broadcast da sub-rede"
+- [Figura 7.2.9](#729-broadcast-limitado): sequência de "Broadcast limitado"
+- [Figura 7.2.10](#7210-broadcast-dirigido-bloqueado): sequência de "Broadcast dirigido, bloqueado"
+- [Figura 7.2.11](#7211-broadcast-dirigido-encaminhado): sequência de "Broadcast dirigido, encaminhado"
+- [Figura 7.2.12](#7212-link-local): sequência de "Link-local"
+- [Figura 7.2.13](#7213-espaço-do-cgnat): sequência de "Espaço do CGNAT"
+- [Figura 7.2.14](#7214-endereço-de-documentação): sequência de "Endereço de documentação"
 
-## 3. Topologia
+## 4. Topologia
 
 Figuras do Tipo A, uma por modo (e uma por variante do desenho, quando a rede muda entre cenários). Foram geradas a partir da mesma definição de topologia que a bancada usa.
 
-### 3.1 Encaminhamento
+### 4.1 Encaminhamento
 
 ```mermaid
 flowchart LR
@@ -112,9 +225,9 @@ flowchart LR
   n_r4 -- "203.0.113.0/30" --- n_isp
 ```
 
-*Figura 3.1 (Tipo A, topologia).* Elementos do modo "Encaminhamento": PC-A (10.1.1.10); R1 (10.1.1.1); R2 (10.0.12.2); R3 (10.0.23.2); R4 (10.0.24.2); SRV1 (10.2.1.20); SRV2 (10.2.5.20); Provedor (203.0.113.1). Vale para todos os cenários do modo (6.1.1 a 6.1.16).
+*Figura 4.1 (Tipo A, topologia).* Elementos do modo "Encaminhamento": PC-A (10.1.1.10); R1 (10.1.1.1); R2 (10.0.12.2); R3 (10.0.23.2); R4 (10.0.24.2); SRV1 (10.2.1.20); SRV2 (10.2.5.20); Provedor (203.0.113.1). Vale para todos os cenários do modo (7.1.1 a 7.1.16).
 
-### 3.2 Endereçamento
+### 4.2 Endereçamento
 
 ```mermaid
 flowchart LR
@@ -129,7 +242,7 @@ flowchart LR
   n_r -. "eth2" .- n_lan2
 ```
 
-*Figura 3.2a (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/24); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.0.50); 10.20.0.128/25 (eth2 sobreposta). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (6.2.1 a 6.2.4; 6.2.6; 6.2.8 a 6.2.10; 6.2.12 a 6.2.14).
+*Figura 4.2a (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/24); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.0.50); 10.20.0.128/25 (eth2 sobreposta). Linhas tracejadas: enlaces alternativos, forjados ou caídos. Vale para os cenários (7.2.1 a 7.2.4; 7.2.6; 7.2.8 a 7.2.10; 7.2.12 a 7.2.14).
 
 ```mermaid
 flowchart LR
@@ -142,7 +255,7 @@ flowchart LR
   n_r -- "eth1 10.20.0.0/24" --- n_s
 ```
 
-*Figura 3.2b (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/16); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.0.50). Vale para os cenários (6.2.5).
+*Figura 4.2b (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/16); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.0.50). Vale para os cenários (7.2.5).
 
 ```mermaid
 flowchart LR
@@ -155,7 +268,7 @@ flowchart LR
   n_r -- "eth3 10.20.1.0/31" --- n_s
 ```
 
-*Figura 3.2c (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/24); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.1.1). Vale para os cenários (6.2.7).
+*Figura 4.2c (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/24); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.1.1). Vale para os cenários (7.2.7).
 
 ```mermaid
 flowchart LR
@@ -168,21 +281,21 @@ flowchart LR
   n_r -- "eth1 10.20.0.0/24" --- n_s
 ```
 
-*Figura 3.2d (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/24); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.0.255). Vale para os cenários (6.2.11).
+*Figura 4.2d (Tipo A, topologia).* Elementos do modo "Endereçamento": Host A (192.168.10.10/24); Host B (192.168.10.20); Roteador (192.168.10.1); Servidor (10.20.0.255). Vale para os cenários (7.2.11).
 
-## 4. Abas da bancada
+## 5. Abas da bancada
 
 Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços (modos: Endereçamento), Cabeçalho IPv4, Experimento, Referência e Log.
 
-## 5. Configurações (campos do painel)
+## 6. Configurações (campos do painel)
 
-### 5.1 Rede
+### 6.1 Rede
 
 - **Atraso por enlace (ms)**. Valores: 1; 2; 5; 10; 20. Padrão: 2. Modos: todos.
   - Tempo de cada salto.
   - Define quanto tempo o pacote leva em cada enlace. Não muda nenhuma decisão de rota: só estica ou encolhe a linha do tempo.
 
-### 5.2 Pacote
+### 6.2 Pacote
 
 - **Destino do ping**. Valores: SRV1, 10.2.1.20 (atrás do R3); SRV2, 10.2.5.20 (atrás do R4); 10.2.9.9 (na faixa 10.2.0.0/16, sem host); 198.51.100.9 (internet). Padrão: SRV1, 10.2.1.20 (atrás do R3). Modos: Encaminhamento.
   - Para onde o PC-A envia o ping.
@@ -194,7 +307,7 @@ Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços
   - O PC-A usa um endereço de origem que não é o dele.
   - O endereço 192.0.2.77 (documentação, [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)) não pertence à LAN de A. É o caso que o uRPF existe para barrar na borda ([BCP 38](https://www.rfc-editor.org/info/bcp38)). Este simulador só mostra o efeito e a defesa.
 
-### 5.3 Rotas do R2
+### 6.3 Rotas do R2
 
 - **R2 tem a rota agregada 10.2.0.0/16**. Valores: caixa de seleção. Padrão: sim. Modos: Encaminhamento.
   - Uma rota que cobre toda a faixa 10.2.0.0/16 via R3.
@@ -206,7 +319,7 @@ Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços
   - O que decide entre rotas de mesmo prefixo.
   - **Duas fontes:** com o mesmo prefixo, vence a menor **distância administrativa** (estática 1, OSPF 110). **Dois caminhos da mesma fonte:** vence a menor **métrica**. O conceito é a preferência administrativa da [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812) (seção 5.2.4.4); os valores usuais variam por fabricante.
 
-### 5.4 Rotas do R3
+### 6.4 Rotas do R3
 
 - **R3 tem rota padrão apontando para R2**. Valores: caixa de seleção. Padrão: não. Modos: Encaminhamento.
   - Cria um loop com a rota agregada do R2.
@@ -218,19 +331,19 @@ Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços
   - A resposta também precisa de rota.
   - O ping só funciona se o caminho de volta existir. Sem a rota no R3, o pedido é entregue, a resposta não, e o PC-A só vê um timeout.
 
-### 5.5 Defesa na borda (R1)
+### 6.5 Defesa na borda (R1)
 
 - **uRPF na entrada da LAN do R1**. Valores: Desligado; Estrito; Flexível. Padrão: Desligado. Modos: Encaminhamento.
   - Confere a origem pela tabela de rotas ([RFC 3704](https://www.rfc-editor.org/rfc/rfc3704)).
   - **Estrito:** aceita só se a rota de volta para a origem sai pela mesma interface por onde o pacote chegou. **Flexível:** aceita se existir qualquer rota para a origem, e com uma rota padrão isso vale para qualquer endereço. O estrito exige rotas simétricas.
 
-### 5.6 Destino
+### 6.6 Destino
 
 - **Destino do ping**. Valores: Host B, 192.168.10.20 (mesma LAN); Servidor, 10.20.0.50; Servidor, 10.20.0.200; Servidor, 10.20.1.1 (enlace /31); 192.168.20.7 (outra rede 192.168.x.x); 192.168.10.255 (broadcast da sub-rede); 255.255.255.255 (broadcast limitado); 10.20.0.255 (broadcast dirigido); 169.254.10.5 (link-local); 100.64.5.5 (espaço do CGNAT); 192.0.2.7 (documentação). Padrão: Host B, 192.168.10.20 (mesma LAN). Modos: Endereçamento.
   - O tipo de endereço decide o caminho.
   - Cada destino aciona uma regra diferente: entrega direta, gateway, broadcast, descarte ou erro. A aba Endereços mostra a conta bit a bit e o bloco especial a que o destino pertence.
 
-### 5.7 Host A (192.168.10.10)
+### 6.7 Host A (192.168.10.10)
 
 - **Máscara do host**. Valores: /24 (255.255.255.0); /16 (255.255.0.0). Padrão: /24 (255.255.255.0). Modos: Endereçamento.
   - Define o que o host considera "na mesma rede".
@@ -239,7 +352,7 @@ Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços
   - Para onde vai o que não é local.
   - O gateway precisa estar na sub-rede do host, porque o host o alcança por ARP. Sem gateway, o que é de outra rede nem sai do host.
 
-### 5.8 Roteador
+### 6.8 Roteador
 
 - **Interface eth2 sobreposta (10.20.0.128/25)**. Valores: caixa de seleção. Padrão: não. Modos: Endereçamento.
   - Duas redes conectadas que se cobrem.
@@ -248,15 +361,15 @@ Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços
   - Permite que o roteador converta o pacote em broadcast da rede de destino.
   - O padrão correto é bloquear ([RFC 2644](https://www.rfc-editor.org/rfc/rfc2644)). Ligado, qualquer um pode fazer todos os hosts da rede responderem a um alvo. Serve aqui apenas para mostrar por que o padrão mudou.
 
-## 6. Cenários
+## 7. Cenários
 
-### 6.1 Modo: Encaminhamento
+### 7.1 Modo: Encaminhamento
 
 > **Grupo:** Prefixo mais específico
 
 O roteador compara o destino com todos os prefixos da tabela e escolhe o que casa com mais bits. A rota padrão (/0) só vence quando nada mais específico casa.
 
-#### 6.1.1 Dois candidatos: vence o /16
+#### 7.1.1 Dois candidatos: vence o /16
 
 *O maior prefixo vence, mesmo com a rota padrão também casando.*
 
@@ -293,7 +406,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Echo Reply, TTL 61
 ```
 
-*Figura 6.1.1 (Tipo B, sequência).* Mensagens do cenário "Dois candidatos: vence o /16", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.1 (Tipo B, sequência).* Mensagens do cenário "Dois candidatos: vence o /16", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -304,7 +417,7 @@ sequenceDiagram
 
 **Por que importa.** A regra do prefixo mais longo é o que permite agregar rotas e, ao mesmo tempo, abrir exceções mais específicas ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.3).
 
-#### 6.1.2 Três candidatos: vence o /24
+#### 7.1.2 Três candidatos: vence o /24
 
 *Três rotas casam e a mais específica manda o pacote por outro caminho.*
 
@@ -341,7 +454,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Echo Reply, TTL 61
 ```
 
-*Figura 6.1.2 (Tipo B, sequência).* Mensagens do cenário "Três candidatos: vence o /24", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV2: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.2 (Tipo B, sequência).* Mensagens do cenário "Três candidatos: vence o /24", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV2: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -352,7 +465,7 @@ sequenceDiagram
 
 **Por que importa.** Sem a regra do maior prefixo, uma exceção dentro de uma rota agregada nunca seria respeitada.
 
-#### 6.1.3 Rota padrão até a borda
+#### 7.1.3 Rota padrão até a borda
 
 *O que não tem rota específica segue a rota padrão até a borda.*
 
@@ -384,7 +497,7 @@ sequenceDiagram
   n_r4 ->> n_isp: Echo Request, TTL 61
 ```
 
-*Figura 6.1.3 (Tipo B, sequência).* Mensagens do cenário "Rota padrão até a borda", na ordem do tempo, entre PC-A, R1, R2, R3, R4, Provedor: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.3 (Tipo B, sequência).* Mensagens do cenário "Rota padrão até a borda", na ordem do tempo, entre PC-A, R1, R2, R3, R4, Provedor: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -398,7 +511,7 @@ sequenceDiagram
 
 Quando duas rotas têm o mesmo prefixo, o prefixo não decide mais. Vence a fonte mais confiável (menor distância administrativa) e, na mesma fonte, o caminho mais barato (menor métrica).
 
-#### 6.1.4 Mesmo prefixo, fontes diferentes
+#### 7.1.4 Mesmo prefixo, fontes diferentes
 
 *Com o mesmo prefixo, vence a fonte mais confiável.*
 
@@ -435,7 +548,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Echo Reply, TTL 61
 ```
 
-*Figura 6.1.4 (Tipo B, sequência).* Mensagens do cenário "Mesmo prefixo, fontes diferentes", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV2: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.4 (Tipo B, sequência).* Mensagens do cenário "Mesmo prefixo, fontes diferentes", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV2: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -446,7 +559,7 @@ sequenceDiagram
 
 **Por que importa.** A distância administrativa permite que uma rota estática de contingência ou de política prevaleça sobre o que o protocolo de roteamento aprende. O conceito é a preferência administrativa da [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812) (seção 5.2.4.4); os valores são convenções de fabricantes.
 
-#### 6.1.5 Mesma fonte, métricas diferentes
+#### 7.1.5 Mesma fonte, métricas diferentes
 
 *Na mesma fonte, vence o caminho de menor métrica.*
 
@@ -483,7 +596,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Echo Reply, TTL 61
 ```
 
-*Figura 6.1.5 (Tipo B, sequência).* Mensagens do cenário "Mesma fonte, métricas diferentes", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.5 (Tipo B, sequência).* Mensagens do cenário "Mesma fonte, métricas diferentes", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -498,7 +611,7 @@ sequenceDiagram
 
 Uma tabela incompleta produz sintomas diferentes: aviso ICMP, silêncio, vazamento pela rota padrão ou uma resposta sem caminho de volta.
 
-#### 6.1.6 Sem rota no R3 (ICMP 3/0)
+#### 7.1.6 Sem rota no R3 (ICMP 3/0)
 
 *Sem rota, o roteador descarta e avisa a origem.*
 
@@ -531,7 +644,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Net Unreachable, TTL 62
 ```
 
-*Figura 6.1.6 (Tipo B, sequência).* Mensagens do cenário "Sem rota no R3 (ICMP 3/0)", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.6 (Tipo B, sequência).* Mensagens do cenário "Sem rota no R3 (ICMP 3/0)", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -542,7 +655,7 @@ sequenceDiagram
 
 **Por que importa.** O ICMP 3/0 é o sintoma de uma rota que falta e aponta exatamente o roteador onde a rota faltou.
 
-#### 6.1.7 Sem agregada e sem padrão
+#### 7.1.7 Sem agregada e sem padrão
 
 *Sem rota agregada nem padrão, o R2 não tem como encaminhar.*
 
@@ -573,7 +686,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Net Unreachable, TTL 63
 ```
 
-*Figura 6.1.7 (Tipo B, sequência).* Mensagens do cenário "Sem agregada e sem padrão", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.7 (Tipo B, sequência).* Mensagens do cenário "Sem agregada e sem padrão", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -584,7 +697,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra que o erro aponta para o roteador que não sabe chegar ao destino, e não para o destino.
 
-#### 6.1.8 A rota padrão esconde a falha
+#### 7.1.8 A rota padrão esconde a falha
 
 *A rota padrão transforma uma rota que falta em vazamento.*
 
@@ -616,7 +729,7 @@ sequenceDiagram
   n_r4 ->> n_isp: Echo Request, TTL 61
 ```
 
-*Figura 6.1.8 (Tipo B, sequência).* Mensagens do cenário "A rota padrão esconde a falha", na ordem do tempo, entre PC-A, R1, R2, R3, R4, Provedor: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.8 (Tipo B, sequência).* Mensagens do cenário "A rota padrão esconde a falha", na ordem do tempo, entre PC-A, R1, R2, R3, R4, Provedor: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -626,7 +739,7 @@ sequenceDiagram
 
 **Por que importa.** A rota padrão esconde falhas. Em redes reais, isso exige filtros de saída para endereços privados e de documentação ([RFC 6890](https://www.rfc-editor.org/rfc/rfc6890)).
 
-#### 6.1.9 Rota blackhole
+#### 7.1.9 Rota blackhole
 
 *A rota blackhole descarta sem avisar ninguém.*
 
@@ -656,7 +769,7 @@ sequenceDiagram
   n_r2 ->> n_r3: Echo Request, TTL 62
 ```
 
-*Figura 6.1.9 (Tipo B, sequência).* Mensagens do cenário "Rota blackhole", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.9 (Tipo B, sequência).* Mensagens do cenário "Rota blackhole", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -666,7 +779,7 @@ sequenceDiagram
 
 **Por que importa.** Blackholes são usados de propósito para conter tráfego indesejado (por exemplo, em resposta a ataques), com o custo de não dar nenhum sinal.
 
-#### 6.1.10 Ida entregue, volta perdida
+#### 7.1.10 Ida entregue, volta perdida
 
 *A ida funciona, mas a resposta não tem caminho de volta.*
 
@@ -701,7 +814,7 @@ sequenceDiagram
   n_r3 ->> n_dst: Net Unreachable, TTL 64
 ```
 
-*Figura 6.1.10 (Tipo B, sequência).* Mensagens do cenário "Ida entregue, volta perdida", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.10 (Tipo B, sequência).* Mensagens do cenário "Ida entregue, volta perdida", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -717,7 +830,7 @@ sequenceDiagram
 
 O TTL limita a vida do pacote em saltos. Ele corta loops de roteamento e é a base do traceroute.
 
-#### 6.1.11 TTL expira no R3
+#### 7.1.11 TTL expira no R3
 
 *O TTL acaba no caminho e o roteador avisa a origem.*
 
@@ -750,7 +863,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Time Exceeded, TTL 62
 ```
 
-*Figura 6.1.11 (Tipo B, sequência).* Mensagens do cenário "TTL expira no R3", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.11 (Tipo B, sequência).* Mensagens do cenário "TTL expira no R3", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -761,7 +874,7 @@ sequenceDiagram
 
 **Por que importa.** O TTL impede que pacotes vivam para sempre e revela, salto a salto, o caminho percorrido.
 
-#### 6.1.12 Loop entre R2 e R3
+#### 7.1.12 Loop entre R2 e R3
 
 *Rotas inconsistentes fazem o pacote circular até o TTL acabar.*
 
@@ -798,7 +911,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Time Exceeded, TTL 63
 ```
 
-*Figura 6.1.12 (Tipo B, sequência).* Mensagens do cenário "Loop entre R2 e R3", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.12 (Tipo B, sequência).* Mensagens do cenário "Loop entre R2 e R3", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 10 mensagens, numeradas de 1 a 10 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -813,7 +926,7 @@ sequenceDiagram
 
 O uRPF confere se a origem de um pacote é plausível, olhando a tabela de rotas ao contrário ([RFC 3704](https://www.rfc-editor.org/rfc/rfc3704) e [BCP 38](https://www.rfc-editor.org/info/bcp38)). Barra origens forjadas, com limites que dependem do modo.
 
-#### 6.1.13 Origem forjada, sem uRPF
+#### 7.1.13 Origem forjada, sem uRPF
 
 *Sem verificação, a origem forjada atravessa a borda.*
 
@@ -848,7 +961,7 @@ sequenceDiagram
   n_r3 ->> n_dst: Net Unreachable, TTL 64
 ```
 
-*Figura 6.1.13 (Tipo B, sequência).* Mensagens do cenário "Origem forjada, sem uRPF", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.13 (Tipo B, sequência).* Mensagens do cenário "Origem forjada, sem uRPF", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -859,7 +972,7 @@ sequenceDiagram
 
 **Por que importa.** É por isso que o provedor ou o administrador da borda deve filtrar origens inválidas ([BCP 38](https://www.rfc-editor.org/info/bcp38)).
 
-#### 6.1.14 uRPF estrito descarta
+#### 7.1.14 uRPF estrito descarta
 
 *O uRPF estrito barra a origem que não volta pela mesma interface.*
 
@@ -887,7 +1000,7 @@ sequenceDiagram
   n_pc ->> n_r1: Echo Request, TTL 64
 ```
 
-*Figura 6.1.14 (Tipo B, sequência).* Mensagens do cenário "uRPF estrito descarta", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.14 (Tipo B, sequência).* Mensagens do cenário "uRPF estrito descarta", na ordem do tempo, entre PC-A, R1, R2, R3, R4: 1 mensagem, numeradas de 1 a 1 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -897,7 +1010,7 @@ sequenceDiagram
 
 **Por que importa.** O uRPF estrito é a forma mais eficaz de barrar origens forjadas na borda de clientes, mas exige rotas simétricas: com roteamento assimétrico, derruba tráfego legítimo.
 
-#### 6.1.15 uRPF flexível e a rota padrão
+#### 7.1.15 uRPF flexível e a rota padrão
 
 *No modo flexível, a rota padrão faz qualquer origem passar.*
 
@@ -932,7 +1045,7 @@ sequenceDiagram
   n_r3 ->> n_dst: Net Unreachable, TTL 64
 ```
 
-*Figura 6.1.15 (Tipo B, sequência).* Mensagens do cenário "uRPF flexível e a rota padrão", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.15 (Tipo B, sequência).* Mensagens do cenário "uRPF flexível e a rota padrão", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -943,7 +1056,7 @@ sequenceDiagram
 
 **Por que importa.** O modo flexível é útil em borda com várias saídas, mas com rota padrão ele quase não filtra.
 
-#### 6.1.16 uRPF estrito com origem legítima
+#### 7.1.16 uRPF estrito com origem legítima
 
 *O uRPF estrito aceita a origem verdadeira.*
 
@@ -980,7 +1093,7 @@ sequenceDiagram
   n_r1 ->> n_pc: Echo Reply, TTL 61
 ```
 
-*Figura 6.1.16 (Tipo B, sequência).* Mensagens do cenário "uRPF estrito com origem legítima", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
+*Figura 7.1.16 (Tipo B, sequência).* Mensagens do cenário "uRPF estrito com origem legítima", na ordem do tempo, entre PC-A, R1, R2, R3, R4, SRV1: 8 mensagens, numeradas de 1 a 8 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Encaminhamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -991,13 +1104,13 @@ sequenceDiagram
 
 **Por que importa.** O uRPF bem aplicado é transparente para o tráfego legítimo e só incomoda quem forja a origem.
 
-### 6.2 Modo: Endereçamento
+### 7.2 Modo: Endereçamento
 
 > **Grupo:** Mesmo enlace ou gateway
 
 O host compara o destino com a própria rede, usando a máscara. Se é a mesma, entrega direto. Se não, envia ao gateway.
 
-#### 6.2.1 Destino na mesma sub-rede
+#### 7.2.1 Destino na mesma sub-rede
 
 *Mesma sub-rede: o host resolve o MAC do próprio destino.*
 
@@ -1028,7 +1141,7 @@ sequenceDiagram
   n_b ->> n_a: Echo Reply para 192.168.10.10
 ```
 
-*Figura 6.2.1 (Tipo B, sequência).* Mensagens do cenário "Destino na mesma sub-rede", na ordem do tempo, entre Host A, Host B, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.1 (Tipo B, sequência).* Mensagens do cenário "Destino na mesma sub-rede", na ordem do tempo, entre Host A, Host B, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1039,7 +1152,7 @@ sequenceDiagram
 
 **Por que importa.** A máscara é o que separa "vizinho" de "outra rede". Todo o resto da decisão parte dessa comparação.
 
-#### 6.2.2 Destino remoto, via gateway
+#### 7.2.2 Destino remoto, via gateway
 
 *Fora da sub-rede: o quadro vai ao gateway, o IP vai ao destino.*
 
@@ -1072,7 +1185,7 @@ sequenceDiagram
   n_r ->> n_a: Echo Reply para 192.168.10.10
 ```
 
-*Figura 6.2.2 (Tipo B, sequência).* Mensagens do cenário "Destino remoto, via gateway", na ordem do tempo, entre Host A, Roteador, Servidor: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.2 (Tipo B, sequência).* Mensagens do cenário "Destino remoto, via gateway", na ordem do tempo, entre Host A, Roteador, Servidor: 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1088,7 +1201,7 @@ sequenceDiagram
 
 Máscara e gateway errados quebram a comunicação de formas diferentes: o pacote nem sai, ou o host tenta alcançar diretamente quem está atrás de um roteador.
 
-#### 6.2.3 Sem gateway configurado
+#### 7.2.3 Sem gateway configurado
 
 *Sem gateway, o que é de outra rede nem sai do host.*
 
@@ -1118,7 +1231,7 @@ sequenceDiagram
   n_b ->> n_a: Echo Reply para 192.168.10.10
 ```
 
-*Figura 6.2.3 (Tipo B, sequência).* Mensagens do cenário "Sem gateway configurado", na ordem do tempo, entre Host A, Host B, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.3 (Tipo B, sequência).* Mensagens do cenário "Sem gateway configurado", na ordem do tempo, entre Host A, Host B, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1128,7 +1241,7 @@ sequenceDiagram
 
 **Por que importa.** Um ping que falha na hora, sem tráfego na rede, aponta para a configuração do próprio host.
 
-#### 6.2.4 Gateway fora da sub-rede
+#### 7.2.4 Gateway fora da sub-rede
 
 *O gateway precisa estar na sub-rede do host.*
 
@@ -1158,7 +1271,7 @@ sequenceDiagram
   n_b ->> n_a: Echo Reply para 192.168.10.10
 ```
 
-*Figura 6.2.4 (Tipo B, sequência).* Mensagens do cenário "Gateway fora da sub-rede", na ordem do tempo, entre Host A, Host B, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.4 (Tipo B, sequência).* Mensagens do cenário "Gateway fora da sub-rede", na ordem do tempo, entre Host A, Host B, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1168,7 +1281,7 @@ sequenceDiagram
 
 **Por que importa.** Um erro de digitação no gateway ou na máscara produz exatamente este sintoma: o host recusa a configuração.
 
-#### 6.2.5 Máscara larga demais
+#### 7.2.5 Máscara larga demais
 
 *A máscara larga trata como vizinho quem está atrás do roteador.*
 
@@ -1196,7 +1309,7 @@ sequenceDiagram
   n_a ->> n_r: ARP: quem tem 192.168.20.7?
 ```
 
-*Figura 6.2.5 (Tipo B, sequência).* Mensagens do cenário "Máscara larga demais", na ordem do tempo, entre Host A, Roteador: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.5 (Tipo B, sequência).* Mensagens do cenário "Máscara larga demais", na ordem do tempo, entre Host A, Roteador: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 2 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1210,7 +1323,7 @@ sequenceDiagram
 
 No roteador, cada interface conectada vira uma rota. Prefixos que se cobrem e enlaces ponto a ponto mudam qual interface recebe o pacote.
 
-#### 6.2.6 Sub-redes sobrepostas
+#### 7.2.6 Sub-redes sobrepostas
 
 *O prefixo mais longo leva o pacote à rede errada.*
 
@@ -1240,7 +1353,7 @@ sequenceDiagram
   n_r ->> n_a: Dest. Unreachable para 192.168.10.10
 ```
 
-*Figura 6.2.6 (Tipo B, sequência).* Mensagens do cenário "Sub-redes sobrepostas", na ordem do tempo, entre Host A, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.6 (Tipo B, sequência).* Mensagens do cenário "Sub-redes sobrepostas", na ordem do tempo, entre Host A, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1251,7 +1364,7 @@ sequenceDiagram
 
 **Por que importa.** Sub-redes sobrepostas são um erro de planejamento de endereços: o roteador não reclama, apenas escolhe o prefixo mais longo.
 
-#### 6.2.7 Enlace ponto a ponto /31
+#### 7.2.7 Enlace ponto a ponto /31
 
 *Em um /31, os dois endereços são de hosts.*
 
@@ -1284,7 +1397,7 @@ sequenceDiagram
   n_r ->> n_a: Echo Reply para 192.168.10.10
 ```
 
-*Figura 6.2.7 (Tipo B, sequência).* Mensagens do cenário "Enlace ponto a ponto /31", na ordem do tempo, entre Host A, Roteador, SRV (/31): 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.7 (Tipo B, sequência).* Mensagens do cenário "Enlace ponto a ponto /31", na ordem do tempo, entre Host A, Roteador, SRV (/31): 6 mensagens, numeradas de 1 a 6 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1299,7 +1412,7 @@ sequenceDiagram
 
 Há três tipos: o da sub-rede, o limitado (255.255.255.255) e o dirigido a outra rede. Só o dirigido atravessa roteadores, e hoje vem desligado por padrão.
 
-#### 6.2.8 Broadcast da sub-rede
+#### 7.2.8 Broadcast da sub-rede
 
 *O último endereço da sub-rede alcança todos do enlace.*
 
@@ -1326,7 +1439,7 @@ sequenceDiagram
   n_a ->> n_r: Echo Request para 192.168.10.255
 ```
 
-*Figura 6.2.8 (Tipo B, sequência).* Mensagens do cenário "Broadcast da sub-rede", na ordem do tempo, entre Host A, Host B, Roteador: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.8 (Tipo B, sequência).* Mensagens do cenário "Broadcast da sub-rede", na ordem do tempo, entre Host A, Host B, Roteador: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1336,7 +1449,7 @@ sequenceDiagram
 
 **Por que importa.** O broadcast da sub-rede é o endereço que torna perigoso o ping de broadcast, e por isso quase todo sistema o ignora.
 
-#### 6.2.9 Broadcast limitado
+#### 7.2.9 Broadcast limitado
 
 *O broadcast limitado nunca passa do enlace.*
 
@@ -1363,7 +1476,7 @@ sequenceDiagram
   n_a ->> n_r: Echo Request para 255.255.255.255
 ```
 
-*Figura 6.2.9 (Tipo B, sequência).* Mensagens do cenário "Broadcast limitado", na ordem do tempo, entre Host A, Host B, Roteador: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.9 (Tipo B, sequência).* Mensagens do cenário "Broadcast limitado", na ordem do tempo, entre Host A, Host B, Roteador: 2 mensagens, numeradas de 1 a 2 na ordem da comunicação (em 1 fase). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1373,7 +1486,7 @@ sequenceDiagram
 
 **Por que importa.** Mostra o alcance mínimo do broadcast: o enlace local. O DHCP depende exatamente disso.
 
-#### 6.2.10 Broadcast dirigido, bloqueado
+#### 7.2.10 Broadcast dirigido, bloqueado
 
 *O broadcast dirigido a outra rede é descartado por padrão.*
 
@@ -1402,7 +1515,7 @@ sequenceDiagram
   n_a ->> n_r: Echo Request para 10.20.0.255
 ```
 
-*Figura 6.2.10 (Tipo B, sequência).* Mensagens do cenário "Broadcast dirigido, bloqueado", na ordem do tempo, entre Host A, Roteador: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.10 (Tipo B, sequência).* Mensagens do cenário "Broadcast dirigido, bloqueado", na ordem do tempo, entre Host A, Roteador: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1412,7 +1525,7 @@ sequenceDiagram
 
 **Por que importa.** Bloquear o broadcast dirigido por padrão elimina a base de ataques de amplificação como o smurf.
 
-#### 6.2.11 Broadcast dirigido, encaminhado
+#### 7.2.11 Broadcast dirigido, encaminhado
 
 *Encaminhar broadcast dirigido amplifica o tráfego.*
 
@@ -1443,7 +1556,7 @@ sequenceDiagram
   n_r ->> n_s: Echo Request para 10.20.0.255
 ```
 
-*Figura 6.2.11 (Tipo B, sequência).* Mensagens do cenário "Broadcast dirigido, encaminhado", na ordem do tempo, entre Host A, Roteador, Servidor: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.11 (Tipo B, sequência).* Mensagens do cenário "Broadcast dirigido, encaminhado", na ordem do tempo, entre Host A, Roteador, Servidor: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1457,7 +1570,7 @@ sequenceDiagram
 
 Alguns blocos têm regras próprias ([RFC 6890](https://www.rfc-editor.org/rfc/rfc6890)): link-local, o espaço do CGNAT e os de documentação não se comportam como endereços comuns.
 
-#### 6.2.12 Link-local
+#### 7.2.12 Link-local
 
 *Link-local só vale no enlace e o roteador não o encaminha.*
 
@@ -1486,7 +1599,7 @@ sequenceDiagram
   n_a ->> n_r: Echo Request para 169.254.10.5
 ```
 
-*Figura 6.2.12 (Tipo B, sequência).* Mensagens do cenário "Link-local", na ordem do tempo, entre Host A, Roteador: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.12 (Tipo B, sequência).* Mensagens do cenário "Link-local", na ordem do tempo, entre Host A, Roteador: 3 mensagens, numeradas de 1 a 3 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1496,7 +1609,7 @@ sequenceDiagram
 
 **Por que importa.** Um host com endereço 169.254.x.x indica que o DHCP falhou: ele só fala com quem está no mesmo enlace.
 
-#### 6.2.13 Espaço do CGNAT
+#### 7.2.13 Espaço do CGNAT
 
 *O espaço do CGNAT não é roteável aqui.*
 
@@ -1526,7 +1639,7 @@ sequenceDiagram
   n_r ->> n_a: Dest. Unreachable para 192.168.10.10
 ```
 
-*Figura 6.2.13 (Tipo B, sequência).* Mensagens do cenário "Espaço do CGNAT", na ordem do tempo, entre Host A, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.13 (Tipo B, sequência).* Mensagens do cenário "Espaço do CGNAT", na ordem do tempo, entre Host A, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1537,7 +1650,7 @@ sequenceDiagram
 
 **Por que importa.** Ver 100.64.x.x no traceroute indica que há um NAT de operadora no caminho.
 
-#### 6.2.14 Endereço de documentação
+#### 7.2.14 Endereço de documentação
 
 *Endereços de documentação não devem ser roteados.*
 
@@ -1567,7 +1680,7 @@ sequenceDiagram
   n_r ->> n_a: Dest. Unreachable para 192.168.10.10
 ```
 
-*Figura 6.2.14 (Tipo B, sequência).* Mensagens do cenário "Endereço de documentação", na ordem do tempo, entre Host A, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
+*Figura 7.2.14 (Tipo B, sequência).* Mensagens do cenário "Endereço de documentação", na ordem do tempo, entre Host A, Roteador: 4 mensagens, numeradas de 1 a 4 na ordem da comunicação (em 3 fases). Corresponde ao diagrama de sequência e à aba Captura, no modo "Endereçamento", com a configuração aplicada acima.
 
 **Mensagens**
 
@@ -1578,19 +1691,19 @@ sequenceDiagram
 
 **Por que importa.** Usar blocos de documentação nos exemplos evita colidir com endereços reais de alguém.
 
-## 7. Referência
+## 8. Referência
 
-### 7.1 O que o IPv4 faz
+### 8.1 O que o IPv4 faz
 
 O IP ([RFC 791](https://www.rfc-editor.org/rfc/rfc791)) entrega datagramas de uma origem a um destino pela rede, salto a salto, sem garantia de entrega, de ordem ou de ausência de duplicatas. Cada roteador decide sozinho, olhando só o endereço de destino e a própria tabela de rotas. Confiabilidade e ordem ficam para as camadas de cima (por exemplo, o TCP).
 
-### 7.2 Decisão do host: mesma rede ou gateway
+### 8.2 Decisão do host: mesma rede ou gateway
 
 - O host faz um E lógico entre o endereço de destino e a máscara e compara com a própria rede ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.3.1.1; [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.2).
 - **Igual:** entrega direta. O host resolve por ARP o MAC do destino.
 - **Diferente:** o quadro vai ao gateway. O MAC de destino é o do gateway e o IP de destino continua sendo o final. O gateway precisa estar na sub-rede do host, porque é alcançado por ARP.
 
-### 7.3 Decisão do roteador: o prefixo mais específico
+### 8.3 Decisão do roteador: o prefixo mais específico
 
 1. Seleciona todas as rotas cujo prefixo contém o destino.
 2. Fica com a de **maior comprimento de prefixo** ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.3). A rota padrão, 0.0.0.0/0, é a de menor prefixo e só vence quando nada mais casa.
@@ -1605,20 +1718,20 @@ O IP ([RFC 791](https://www.rfc-editor.org/rfc/rfc791)) entrega datagramas de um
 
 Os valores são convenções de fabricantes (os do quadro são os mais comuns), e não de RFC.
 
-### 7.4 TTL e ICMP
+### 8.4 TTL e ICMP
 
 - Todo roteador que encaminha um pacote decrementa o TTL de ao menos um. Se ele chegaria a zero, o roteador descarta e envia à origem ICMP 11/0, Time Exceeded ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.3.1).
 - Sem rota, o roteador envia ICMP 3/0 (rede inalcançável). Quando a rede é conectada mas o host não responde, envia 3/1 (host inalcançável).
 - Nunca se gera um erro ICMP sobre outro erro ICMP ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 4.3.2.7).
 - O checksum do cabeçalho ([RFC 1071](https://www.rfc-editor.org/rfc/rfc1071)) cobre só o cabeçalho e é recalculado a cada salto, porque o TTL muda.
 
-### 7.5 Defesa na borda: uRPF
+### 8.5 Defesa na borda: uRPF
 
 - **Estrito** ([RFC 3704](https://www.rfc-editor.org/rfc/rfc3704), seção 2.2): aceita o pacote só se a rota de volta para a origem sai pela interface de chegada. Barra bem origens forjadas, mas exige rotas simétricas.
 - **Flexível** (seção 2.4): aceita se existir qualquer rota para a origem. Com uma rota padrão, isso vale para qualquer endereço, salvo nas implementações que a ignoram nessa conferência (seção 2.5).
 - A recomendação de filtrar origens inválidas na entrada da rede é o [BCP 38](https://www.rfc-editor.org/info/bcp38) ([RFC 2827](https://www.rfc-editor.org/rfc/rfc2827)).
 
-### 7.6 Blocos de endereço especiais
+### 8.6 Blocos de endereço especiais
 
 | Bloco | Uso | Definido em |
 | --- | --- | --- |
@@ -1631,18 +1744,18 @@ Os valores são convenções de fabricantes (os do quadro são os mais comuns), 
 
 A lista completa e atual está no registro de endereços de uso especial ([RFC 6890](https://www.rfc-editor.org/rfc/rfc6890), atualizada pela [RFC 8190](https://www.rfc-editor.org/rfc/rfc8190)).
 
-### 7.7 Broadcast e /31
+### 8.7 Broadcast e /31
 
 - **Da sub-rede:** o último endereço da rede. O quadro vai a ff:ff:ff:ff:ff:ff e todos do enlace o recebem. Um host pode descartar eco enviado a endereço de broadcast ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.2.2.6).
 - **Dirigido:** o broadcast de uma rede remota. O padrão dos roteadores é **não encaminhar** ([RFC 2644](https://www.rfc-editor.org/rfc/rfc2644), seção 5.3.5.2), para evitar a amplificação de tráfego.
 - **/31:** em enlaces ponto a ponto, os dois endereços são de hosts, sem endereço de rede nem de broadcast ([RFC 3021](https://www.rfc-editor.org/rfc/rfc3021), seção 2.1).
 
-### 7.8 Limitações do simulador
+### 8.8 Limitações do simulador
 
 As rotas são estáticas, e as entradas "OSPF" são apenas rotas de outra origem, sem o protocolo em execução (veja os simuladores de OSPF, RIP, BGP e IS-IS). Não há ECMP, roteamento por política, multicast, opções IP, fragmentação (veja o simulador de ICMP para a fragmentação e o PMTUD) nem IPv6. As tabelas ARP já estão preenchidas, exceto no primeiro salto do host A. O ping é só a sonda: os tempos são didáticos e não há tráfego real. A distância administrativa e as métricas seguem convenções comuns de fabricantes. No uRPF flexível, o simulador considera a rota padrão como qualquer outra rota. Os endereços são de uso privado ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)) e de documentação ([RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)).
 
 
-## 8. Glossário
+## 9. Glossário
 
 Significado e finalidade das siglas usadas neste documento.
 
@@ -1653,7 +1766,9 @@ Significado e finalidade das siglas usadas neste documento.
 | **BGP** | Border Gateway Protocol, protocolo de roteador de borda | troca rotas entre sistemas autônomos e sustenta o roteamento entre operadoras na Internet |
 | **CGNAT** | Carrier-Grade NAT | NAT em grande escala feito pela operadora, que compartilha um endereço público entre muitos clientes |
 | **DHCP** | Dynamic Host Configuration Protocol, protocolo de configuração dinâmica de hosts | entrega ao cliente endereço IP, máscara, gateway e DNS, por empréstimo (lease) |
+| **ECN** | Explicit Congestion Notification, notificação explícita de congestionamento | os roteadores marcam os pacotes quando há congestionamento, e o TCP reduz a taxa sem precisar de perda |
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
+| **IHL** | Internet Header Length, comprimento do cabeçalho IP | campo do cabeçalho IPv4 com o tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
 | **IP** | Internet Protocol, protocolo de internet | endereça e encaminha pacotes entre redes, de origem a destino |
 | **LAN** | Local Area Network, rede local | rede de alcance restrito, como a de um prédio ou laboratório, ligada por switches ou por Wi-Fi |
 | **MAC** | Media Access Control | camada de enlace que controla o acesso ao meio; também nomeia o endereço físico de 48 bits de uma interface |
@@ -1663,7 +1778,9 @@ Significado e finalidade das siglas usadas neste documento.
 | **RFC** | Request for Comments, pedido de comentários | documento numerado do IETF que define ou descreve um protocolo da Internet; cada documento do projeto cita as RFCs com link para o RFC Editor |
 | **RIP** | Routing Information Protocol, protocolo de informação de roteamento | protocolo de vetor de distância que usa a contagem de saltos (máximo de 15) |
 | **TCP** | Transmission Control Protocol, protocolo de controle de transmissão | entrega dados de forma ordenada e confiável, com conexão, confirmação e controle de congestionamento |
+| **TCP/IP** | Transmission Control Protocol e Internet Protocol | refere-se à pilha de protocolos da Internet, nomeada pelos seus dois protocolos mais conhecidos |
 | **TTL** | Time To Live, tempo de vida | limita quantos saltos um pacote pode dar; cada roteador o reduz de 1, e ao chegar a zero o pacote é descartado |
+| **UDP** | User Datagram Protocol | entrega datagramas sem conexão nem confirmação, com baixo custo; usado em consultas curtas e em tempo real |
 
 
 ---

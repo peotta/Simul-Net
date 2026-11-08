@@ -58,7 +58,7 @@ describe('página de documentação (Markdown e Mermaid)', () => {
     const gh = screen.getByRole('link', { name: /Ver no GitHub/ });
     expect(gh.getAttribute('href')).toBe('https://github.com/peotta/Simul-Net/blob/main/docs/simuladores/arp.md');
     expect(gh.getAttribute('target')).toBe('_blank');
-    expect(screen.getByRole('heading', { level: 2, name: '3. Topologia' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: '4. Topologia' })).toBeTruthy();
     expect(screen.getAllByRole('table').length).toBeGreaterThan(0);
     // todos os diagramas do documento (topologias e sequências) são desenhados
     const total = mermaidBlocks('arp');
@@ -74,15 +74,15 @@ describe('página de documentação (Markdown e Mermaid)', () => {
   it('o índice lateral leva ao título correspondente', async () => {
     await open('arp');
     const toc = screen.getByRole('navigation', { name: 'Nesta página' });
-    fireEvent.click(within(toc).getByRole('link', { name: '4. Abas da bancada' }));
+    fireEvent.click(within(toc).getByRole('link', { name: '5. Abas da bancada' }));
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
-    expect(document.activeElement?.id).toBe('4-abas-da-bancada');
+    expect(document.activeElement?.id).toBe('5-abas-da-bancada');
   }, 40000);
 
   it('as âncoras do texto (lista de figuras) não trocam de página', async () => {
     await open('arp');
-    fireEvent.click(screen.getByRole('link', { name: 'Figura 3.1' }));
-    expect(document.activeElement?.id).toBe('31-resolução');
+    fireEvent.click(screen.getByRole('link', { name: 'Figura 4.1' }));
+    expect(document.activeElement?.id).toBe('41-resolução');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('ARP');
   }, 40000);
 

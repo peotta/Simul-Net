@@ -1,5 +1,6 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
+import { fundamentacao } from './content/fundamentacao';
 import { explain, setup } from './content/explain';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -36,6 +37,7 @@ export const icmpProtocol: ProtocolDef = {
   build: (P, sub) => buildIcmp(P as unknown as IcmpParams, sub),
   explain: (tr, P, scen) => explain(tr, P as unknown as IcmpParams, scen),
   reference,
+  fundamentacao,
   setup,
 };
 

@@ -4,6 +4,7 @@ import { stageTitles } from '../transporte-base/content/scenarios';
 import { derive } from '../transporte-base/derive';
 import { buildTcpUdp, C, type TcpUdpParams } from '../transporte-base/modes';
 import { comparacao } from './content/comparacao';
+import { fundamentacao } from './content/fundamentacao';
 import { reference } from './content/reference';
 
 const d = derive(['tcp', 'dl', 'cmp'], comparacao);
@@ -35,6 +36,7 @@ export const tcpProtocol: ProtocolDef = {
   build: (P, sub) => buildTcpUdp(P as unknown as TcpUdpParams, sub),
   explain,
   reference,
+  fundamentacao,
   setup,
 };
 
