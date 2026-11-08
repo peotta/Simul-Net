@@ -552,5 +552,28 @@
     "amostra:fwd": "5c5449be86bc960d",
     "amostra:end": "14ff829914366cd4",
     "textos": "a2c3c4fd31a09bbf"
+  },
+  "ipv6": {
+    "f-lpm48": "a7e4fe6720d3b6d1",
+    "f-lpm64": "d929b1f321ee3765",
+    "f-default": "55c415bcbf57281b",
+    "f-noroute": "657510470279b70d",
+    "f-nodef": "02f579c4af239997",
+    "f-ghost": "cd1a44d8df1e4483",
+    "f-noback": "76cdc72c236803c5",
+    "f-hl": "a11938a31b9b88e4",
+    "e-slaac": "9db8f36cd3bef828",
+    "e-srv": "8cae752ad74cd5e9",
+    "e-priv": "2f814be8ade71193",
+    "e-nora": "55ce22582f8d3715",
+    "e-aoff": "ca6317fa980807a2",
+    "e-pfx80": "0682a6e1f11df909",
+    "e-dad": "dfc3027efbb6cab1",
+    "e-llr": "f3b8af20d6b3348f",
+    "e-mc": "2909a57874656700",
+    "e-ula": "1289c3e813d71a59",
+    "amostra:end": "ffdf74e98fa4bd00",
+    "amostra:fwd": "5103de2cfe660209",
+    "textos": "24244a2421e2b4bc"
   }
 }

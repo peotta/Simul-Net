@@ -384,6 +384,12 @@ export const GLOSSARIO: Sigla[] = [
   { sigla: 'GVRP/MVRP', expansao: 'GARP VLAN Registration Protocol / Multiple VLAN Registration Protocol', serve: 'protocolos que anunciam e registram as VLANs entre switches; o MVRP substitui o GVRP', escopo: ['vlan'] },
   { sigla: 'VTP', expansao: 'VLAN Trunking Protocol', pt: 'protocolo de tronco de VLAN', serve: 'protocolo proprietário da Cisco que replica o cadastro de VLANs entre switches', escopo: ['vlan'] },
   { sigla: 'DTP', expansao: 'Dynamic Trunking Protocol', pt: 'protocolo de tronco dinâmico', serve: 'protocolo proprietário da Cisco que negocia automaticamente o modo de tronco de uma porta', escopo: ['vlan'] },
+  { sigla: 'SLAAC', expansao: 'Stateless Address Autoconfiguration', pt: 'autoconfiguração de endereço sem estado', serve: 'o host forma o próprio endereço IPv6 global com o prefixo anunciado pelo roteador e um identificador de interface, sem servidor de endereços', escopo: ['ipv6'] },
+  { sigla: 'DAD', expansao: 'Duplicate Address Detection', pt: 'detecção de endereço duplicado', serve: 'teste que o host faz antes de usar um endereço IPv6: um Neighbor Solicitation com origem :: e, se alguém responder, o endereço não é atribuído', escopo: ['ipv6'] },
+  { sigla: 'ULA', expansao: 'Unique Local Address', pt: 'endereço local único', serve: 'bloco fc00::/7 de uso privado no IPv6, sem rota na internet, equivalente ao RFC 1918 do IPv4', escopo: ['ipv6'] },
+  { sigla: 'EUI-64', expansao: 'Extended Unique Identifier de 64 bits', pt: 'identificador único estendido de 64 bits', serve: 'identificador de interface formado a partir do MAC, com ff:fe no meio e o bit U/L invertido; revela o MAC, por isso há alternativas temporárias', escopo: ['ipv6'] },
+  { sigla: 'RS', expansao: 'Router Solicitation', pt: 'solicitação de roteador', serve: 'mensagem ICMPv6 (tipo 133) com que o host pede um Router Advertisement sem esperar o próximo envio periódico', escopo: ['ipv6'] },
+  { sigla: 'NA', expansao: 'Neighbor Advertisement', pt: 'anúncio de vizinho', serve: 'mensagem ICMPv6 (tipo 136) que informa o MAC de um endereço, em resposta a um Neighbor Solicitation', escopo: ['ipv6'] },
 ];
 
 /** Siglas que aparecem nos documentos mas não são siglas de glossário: métodos, estados, nomes de equipamentos de exemplo. */
@@ -395,7 +401,7 @@ export const NAO_SIGLAS = new Set([
   // nomes de mensagens e de estados dos protocolos: ficam para um glossário de mensagens
   'INIT', 'OPEN', 'READ', 'KEXINIT', 'NEWKEYS', 'REFUSED', 'DHCPDECLINE',
   // nomes de equipamentos e de fluxos de exemplo
-  'PC1', 'PC2', 'WEB', 'SW', 'DHCP-1', 'DHCP-2', 'SW3', 'SW1-SW3', 'SW2-SW3', 'PE1', 'PE2', 'P1', 'P2', 'P3', 'P4', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9',
+  'PC1', 'PC2', 'SRV1', 'SRV2', 'WEB', 'SW', 'DHCP-1', 'DHCP-2', 'SW3', 'SW1-SW3', 'SW2-SW3', 'PE1', 'PE2', 'P1', 'P2', 'P3', 'P4', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9',
   'PREROUTING', 'POSTROUTING', 'REQ-1', 'REQ-4', 'REQ-5', 'REQ-8', 'REQ-9', 'AS64496', 'AS64500', 'AS64501', 'AS64510', 'AS64511', 'AS64666',
   // nomes de comandos, mensagens, estados, flags de estado e campos: ficam para um glossário de mensagens
   'UPDATE', 'KEEPALIVE', 'NOTIFICATION', 'ORIGIN', 'DISCOVER', 'OFFER', 'REQUEST', 'RELEASE', 'BOUND', 'REBINDING', 'RENEWING', 'SELECTING', 'REQUESTING', 'INIT-REBOOT',

@@ -69,7 +69,6 @@ export const SIMS: SimMeta[] = [
     rfcs: ['RFC 791', 'RFC 9293', 'RFC 9112', 'RFC 1812'],
     status: 'available',
     engine: 'nativo',
-    novo: true,
   },
   {
     id: 'ospf',
@@ -108,6 +107,17 @@ export const SIMS: SimMeta[] = [
     summary: 'Como o host e o roteador decidem: máscara e gateway, prefixo mais específico, rota padrão, distância administrativa e métrica, TTL e loops, rotas ausentes e blackhole, uRPF contra origem forjada, broadcast, /31 e blocos de uso especial.',
     topics: ['Prefixo mais específico', 'Máscara, gateway e ARP', 'TTL, loops e falhas de rota', 'uRPF e endereços especiais'],
     rfcs: ['RFC 791', 'RFC 1122', 'RFC 1812', 'RFC 3704', 'RFC 2644', 'RFC 3021', 'RFC 6890'],
+    status: 'available',
+    engine: 'nativo',
+    novo: true,
+  },
+  {
+    id: 'ipv6',
+    category: 'camada-de-rede',
+    title: 'IPv6 (fundamentos)',
+    summary: 'Os fundamentos do IPv6: endereço de 128 bits e seus tipos, identificador de interface EUI-64 e temporário, SLAAC com Router Advertisement e DAD, Neighbor Discovery no lugar do ARP, prefixo mais específico, Hop Limit e avisos ICMPv6.',
+    topics: ['Endereços e tipos', 'SLAAC e DAD', 'Neighbor Discovery', 'Encaminhamento, Hop Limit e ICMPv6'],
+    rfcs: ['RFC 8200', 'RFC 4291', 'RFC 4443', 'RFC 4861', 'RFC 4862', 'RFC 5952', 'RFC 4193'],
     status: 'available',
     engine: 'nativo',
     novo: true,
@@ -377,7 +387,11 @@ export const SIMS: SimMeta[] = [
   },
 ];
 
-export const simsByCategory = (id: CategoryId) => SIMS.filter((s) => s.category === id);
+/** Simuladores de uma categoria: os disponíveis primeiro e os "em breve" por último (a ordem do registro é mantida dentro de cada grupo). */
+export const simsByCategory = (id: CategoryId) => {
+  const list = SIMS.filter((s) => s.category === id);
+  return [...list.filter((s) => s.status === 'available'), ...list.filter((s) => s.status !== 'available')];
+};
 export const findSim = (id: string | undefined) => SIMS.find((s) => s.id === id);
 /** Documentação completa de cada simulador (docs/simuladores/<id>.md), versionada junto com o código e gerada por `npm run docs:simuladores`. */
 export const DOCS_BASE = 'https://github.com/peotta/Simul-Net/blob/main/docs/simuladores/';
