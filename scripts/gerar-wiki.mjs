@@ -250,7 +250,7 @@ function nativePage(sim, def) {
   // Numeração das seções (a de topologia só existe quando há desenho) e dos cenários, na ordem em que são exibidos.
   const topo = def.topology ? topologyData(def) : [];
   let n = 0;
-  const S = { modos: ++n, ler: ++n, topo: topo.length ? ++n : 0, abas: ++n, conf: ++n, cen: ++n, ref: ++n };
+  const S = { modos: ++n, fund: def.fundamentacao ? ++n : 0, ler: ++n, topo: topo.length ? ++n : 0, abas: ++n, conf: ++n, cen: ++n, ref: ++n };
   const order = def.subs.map((sub, i) => {
     const sc = def.scenarios.filter((s) => s.sub === sub.key);
     const list = [];
@@ -270,6 +270,12 @@ function nativePage(sim, def) {
     L.push(`| ${o.sub.label} | ${byId[o.sub.default]?.label ?? o.sub.default} | ${cen} |`);
   }
   L.push('');
+
+  // Fundamentação (opcional): texto em Markdown do próprio simulador, com as subseções numeradas como as demais.
+  if (def.fundamentacao) {
+    L.push(`## ${S.fund}. Fundamentação`, '');
+    L.push(numberSubs(def.fundamentacao.trim(), S.fund), '');
+  }
 
   const lerAt = L.length;
 

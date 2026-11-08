@@ -62,6 +62,6 @@ describe.each(modules)('módulo nativo %s', (_id, def) => {
       const html = [def.explain(tr, P, s), def.setup ? def.setup(s) : '', ...(def.tabs || []).map((t) => t.render(tr, { c: 1e6, timeAt: (c) => c * 10, P }))].join('\n');
       expect(FORBIDDEN_DASHES.test(html), `cenário ${s.id}`).toBe(false);
     });
-    expect(FORBIDDEN_DASHES.test(JSON.stringify({ c: def.controls, s: def.scenarios, g: def.groupDoc, d: def.scenDoc, r: def.reference }))).toBe(false);
+    expect(FORBIDDEN_DASHES.test(JSON.stringify({ c: def.controls, s: def.scenarios, g: def.groupDoc, d: def.scenDoc, r: def.reference, f: def.fundamentacao ?? '' }))).toBe(false);
   });
 });

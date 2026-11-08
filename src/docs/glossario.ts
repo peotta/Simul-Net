@@ -24,6 +24,13 @@ export const GLOSSARIO: Sigla[] = [
   { sigla: 'RFC', expansao: 'Request for Comments', pt: 'pedido de comentários', serve: 'documento numerado do IETF que define ou descreve um protocolo da Internet; cada documento do projeto cita as RFCs com link para o RFC Editor' },
   { sigla: 'IETF', expansao: 'Internet Engineering Task Force', serve: 'organização aberta que desenvolve e publica os padrões da Internet, as RFCs' },
   { sigla: 'IEEE', expansao: "Institute of Electrical and Electronics Engineers", serve: 'entidade que publica padrões de redes locais, como o 802.3 (Ethernet), o 802.1 (comutação) e o 802.11 (Wi-Fi)' },
+  { sigla: 'ISO', expansao: 'International Organization for Standardization', pt: 'Organização Internacional de Normalização', serve: 'entidade que publica normas técnicas internacionais, como a ISO/IEC 7498-1, que define o modelo OSI', escopo: ['osi'] },
+  { sigla: 'IEC', expansao: 'International Electrotechnical Commission', pt: 'Comissão Eletrotécnica Internacional', serve: 'entidade que publica normas de eletrotecnia e, em conjunto com a ISO, as normas de tecnologia da informação (ISO/IEC)', escopo: ['osi'] },
+  { sigla: 'ITU-T', expansao: 'International Telecommunication Union, Telecommunication Standardization Sector', pt: 'setor de normalização de telecomunicações da UIT', serve: 'publica recomendações de telecomunicações; a X.200 é o texto do modelo OSI equivalente à ISO/IEC 7498-1', escopo: ['osi'] },
+  { sigla: 'OSI', expansao: 'Open Systems Interconnection', pt: 'interconexão de sistemas abertos', serve: 'modelo de referência que divide a comunicação em sete camadas, usado para nomear funções e localizar problemas', escopo: ['osi'] },
+  { sigla: 'PDU', expansao: 'Protocol Data Unit', pt: 'unidade de dados de protocolo', serve: 'a unidade de dados de cada camada: dados, segmento, pacote, quadro e bits', escopo: ['osi'] },
+  { sigla: 'SFD', expansao: 'Start Frame Delimiter', pt: 'delimitador de início de quadro', serve: 'byte que, depois do preâmbulo, marca o início do quadro Ethernet', escopo: ['osi'] },
+  { sigla: 'ASCII', expansao: 'American Standard Code for Information Interchange', serve: 'codificação de caracteres em texto simples, usada aqui nas mensagens HTTP sem cifra', escopo: ['osi'] },
   { sigla: 'BCP', expansao: 'Best Current Practice', pt: 'melhor prática atual', serve: 'série de RFCs com práticas recomendadas de operação, como a BCP 38 (filtragem de endereços de origem forjados)' },
   // ---- internet e transporte ----
   { sigla: 'IP', expansao: 'Internet Protocol', pt: 'protocolo de internet', serve: 'endereça e encaminha pacotes entre redes, de origem a destino' },

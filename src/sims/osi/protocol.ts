@@ -1,6 +1,7 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
 import { explain, setup } from './content/explain';
+import { fundamentacao } from './content/fundamentacao';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
 import { tabs } from './content/tabs';
@@ -28,6 +29,7 @@ export const osiProtocol: ProtocolDef = {
   build: (P, sub) => buildOsi(P as unknown as OsiParams, sub),
   explain: (tr) => explain(tr),
   reference,
+  fundamentacao,
   setup,
 };
 

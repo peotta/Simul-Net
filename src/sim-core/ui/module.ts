@@ -135,5 +135,7 @@ export interface ProtocolDef {
   build: (P: Params, sub: string) => Trace;
   explain: (tr: Trace, P: Params, scen: ScenarioDef | undefined) => string;
   reference: string;
+  /** Fundamentação em Markdown, só para a documentação gerada (docs e wiki): aparece antes de "Como ler os diagramas". */
+  fundamentacao?: string;
   setup?: (s: ScenarioDef) => string;
 }
