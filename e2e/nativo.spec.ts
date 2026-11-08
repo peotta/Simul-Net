@@ -24,12 +24,15 @@ async function open(page: Page, id: string) {
   await page.waitForSelector('.simnet .scen-row button.chip');
 }
 
-/** Roda a animação na velocidade máxima até o botão voltar a "Simular", e abre todas as abas. */
+/**
+ * Roda a animação na velocidade máxima até o botão voltar a "Simular", e abre todas as abas. A espera é larga porque
+ * a reprodução anda em linhas por segundo: os cenários mais longos (centenas de linhas) levam mais de 30 s na CI.
+ */
 async function exercise(page: Page) {
   await page.getByLabel('Velocidade').selectOption({ label: 'Muito rápida' });
   await page.getByRole('button', { name: 'Voltar ao início' }).click();
   await page.getByRole('button', { name: /^(Simular|Continuar)$/ }).click();
-  await expect(page.getByRole('button', { name: 'Simular', exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('button', { name: 'Simular', exact: true })).toBeVisible({ timeout: 120_000 });
   const tabs = page.getByRole('tab');
   const n = await tabs.count();
   for (let i = 0; i < n; i++) await tabs.nth(i).click();
