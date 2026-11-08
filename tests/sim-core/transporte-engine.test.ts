@@ -1,8 +1,8 @@
 // Regras do motor de TCP e UDP: handshake, recuperação de perdas, SACK, UDP, DNS, download e vídeo.
 import { describe, expect, it } from 'vitest';
-import { buildTcpUdp, type TcpUdpParams } from '../../src/sims/tcp-udp/modes';
-import { scenarios } from '../../src/sims/tcp-udp/content/scenarios';
-import { controls } from '../../src/sims/tcp-udp/content/controls';
+import { buildTcpUdp, type TcpUdpParams } from '../../src/sims/transporte-base/modes';
+import { scenarios } from '../../src/sims/transporte-base/content/scenarios';
+import { controls } from '../../src/sims/transporte-base/content/controls';
 
 const BASE = Object.fromEntries(controls.map((c) => [c.id, c.def])) as unknown as TcpUdpParams;
 const run = (o: Partial<TcpUdpParams>, sub = 'tcp') => buildTcpUdp({ ...BASE, ...o }, sub);

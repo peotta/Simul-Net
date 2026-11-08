@@ -12,7 +12,7 @@ describe('seção de siglas do documento', () => {
 
   it('não altera o texto corrido e acrescenta a seção antes do rodapé', () => {
     const base = '# Doc\n\n## 1. Visão\n\nO ACK confirma o recebimento. Usa `SYN` em código.' + RODAPE;
-    const out = comSecaoDeSiglas(base, 'tcp-udp');
+    const out = comSecaoDeSiglas(base, 'tcp');
     expect(out.startsWith('# Doc\n\n## 1. Visão\n\nO ACK confirma o recebimento. Usa `SYN` em código.')).toBe(true);
     expect(out).toContain('## 2. Glossário');
     expect(out).toMatch(/\| \*\*ACK\*\* \| Acknowledgment, confirmação \|/);
@@ -26,7 +26,7 @@ describe('seção de siglas do documento', () => {
   });
 
   it('a página avisa que existe a seção quando o documento a tem', () => {
-    const md = comSecaoDeSiglas('## 1. A\n\nO ACK confirma.' + RODAPE, 'tcp-udp');
+    const md = comSecaoDeSiglas('## 1. A\n\nO ACK confirma.' + RODAPE, 'tcp');
     render(
       <MemoryRouter>
         <DocView markdown={md} />
