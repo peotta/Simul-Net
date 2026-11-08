@@ -17,8 +17,9 @@ Destaques: diagrama de sequência, captura de pacotes e campos das mensagens em 
 
 | Categoria | Simulador |
 | --- | --- |
+| Fundamentos e modelo de camadas | Modelo OSI (jornada de um quadro HTTP por cliente, switch, roteador e servidor, com palco próprio: pilhas de camadas animadas, passo a passo suave por camada, encapsulamento aninhado, bytes reais, checksum do IP e FCS, TTL e MAC a cada salto, com e sem VLAN) |
 | Camada de enlace e redes locais | Switching e aprendizado de MAC (tabela de endereços, inundação, filtragem, envelhecimento, broadcast, multicast com IGMP snooping, inundação de MAC e segurança de porta), STP, RSTP e MSTP (eleição da raiz, estados, reconvergência, tempestade de broadcast, BPDU Guard e Root Guard), VLAN e trunking 802.1Q (marcação, isolamento, router-on-a-stick, VLAN nativa e VLAN hopping) |
-| Roteamento e serviços de rede | OSPF (estado de enlace), RIP (vetor de distância), ARP (resolução de endereços, proxy ARP, ARP gratuito, conflito de endereço, failover e envenenamento de cache com as defesas), DHCP (DORA), ICMP (ping e traceroute), BGP (sessões e seleção de caminho), MPLS (LDP e L3VPN), NAT (SNAT, DNAT e NAPT) |
+| Roteamento e serviços de rede | OSPF (estado de enlace), RIP (vetor de distância), ARP (resolução de endereços, proxy ARP, ARP gratuito, conflito de endereço, failover e envenenamento de cache com as defesas), DHCP (DORA), IPv4 (encaminhamento: prefixo mais específico, distância administrativa e métrica, TTL e loops, rota ausente e blackhole, uRPF contra origem forjada; endereçamento: máscara, gateway e ARP, sub-redes sobrepostas, /31, broadcast e blocos de uso especial), ICMP (ping e traceroute), BGP (sessões e seleção de caminho), MPLS (LDP e L3VPN), NAT (SNAT, DNAT e NAPT) |
 | Camada de transporte e segurança | TCP (com SACK e download) e UDP (com DNS e vídeo), Ataques e defesas TCP/UDP, HTTP/1.1, HTTP/2 e HTTP/3 (conexões, fluxos, QUIC, 0-RTT, perda de pacote e fallback) |
 | Protocolos de rede seguros | SSH (negociação, chaves, autenticação, túneis), HTTPS e TLS (handshake, certificados, HSTS e comparação HTTP x HTTPS), DNS e DNSSEC (resolução, cache e TTL, cadeia de confiança, envenenamento de cache, amplificação, DoT e DoH), FTP, FTPS e SFTP (canais de controle e dados, NAT e firewall, TLS e SSH), Firewall (filtragem sem estado e com estado, DMZ e defesas), 802.1X e RADIUS (EAP-TLS, PEAP e EAP-MD5, estado da porta, falhas, reautenticação, logoff, segundo dispositivo e riscos com defesas) |
 
@@ -41,7 +42,7 @@ npm run dev          # servidor de desenvolvimento (http://localhost:5173)
 
 | Pasta | Conteúdo |
 | --- | --- |
-| `src/sims/` | simuladores nativos (um por pasta: `engine`, `content` e `protocol.ts`), `native.ts` e o registro `registry.ts`, fonte única dos simuladores |
+| `src/sims/` | simuladores nativos (um por pasta: motor, `content` e `protocol.ts`; OSPF e RIP compartilham `roteamento-base` e TCP e UDP compartilham `transporte-base`), `native.ts` e o registro `registry.ts`, fonte única dos simuladores |
 | `src/sim-core/` | núcleo compartilhado: contrato do motor, `Trace` e componentes das abas |
 | `src/components/`, `src/pages/`, `src/layouts/` | hub, cartões, páginas e layout |
 | `public/` | arquivos estáticos (favicon, imagem de compartilhamento, `robots.txt` e `sitemap.xml`) |

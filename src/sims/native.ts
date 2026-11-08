@@ -26,6 +26,7 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   'bgp': () => import('./bgp/protocol'),
   tcp: () => import('./tcp/protocol'),
   udp: () => import('./udp/protocol'),
+  ipv4: () => import('./ipv4/protocol'),
   'ataques-tcp-udp': () => import('./ataques-tcp-udp/protocol'),
   'osi': () => import('./osi/protocol'),
 };

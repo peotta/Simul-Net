@@ -420,6 +420,7 @@
 .simnet td.osi-on{color:var(--muted);}
 .simnet td.osi-act{background:var(--amber);color:#06231C;font-weight:700;}
 .simnet tr.osi-cur td{background:color-mix(in srgb,var(--amber) 22%,transparent);}
+.simnet tr.osi-cur td.meaning{color:var(--ink);}
 .simnet td.chg{font-weight:700;text-decoration:underline dotted;}
 
 /* Palco do OSI: pilhas de camadas e encapsulamento */

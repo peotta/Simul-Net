@@ -50,13 +50,13 @@ Este documento usa até dois tipos de diagrama. Cada figura traz uma legenda com
 
 ## 3. Abas da bancada
 
-Cenário, Captura, Mensagem, Janela (cwnd) (modos: tcp; dl; Comparação UDP x TCP), Taxa do vídeo (modos: UDP: vídeo), Resultados, Experimento, Referência e Log.
+Cenário, Captura, Mensagem, Janela (cwnd) (modos: Comparação UDP x TCP), Taxa do vídeo (modos: UDP: vídeo), Resultados, Experimento, Referência e Log.
 
 ## 4. Configurações (campos do painel)
 
 ### 4.1 Transferência
 
-- **Segmentos**. Valores: 1; 2; 3; 4; 5; 6; 8; 10; 12; 15; 20; 25; 30; 40. Padrão: 20. Modos: tcp; Comparação UDP x TCP; UDP: fluxo.
+- **Segmentos**. Valores: 1; 2; 3; 4; 5; 6; 8; 10; 12; 15; 20; 25; 30; 40. Padrão: 20. Modos: Comparação UDP x TCP; UDP: fluxo.
   - Quantos segmentos (TCP) ou datagramas (UDP) de 1000 bytes serão enviados.
   - Cada segmento carrega 1000 bytes de dados (o MSS). 20 segmentos equivalem a um arquivo de 20 kB.
   - Com mais segmentos, o crescimento da janela de congestionamento fica mais visível.
@@ -68,7 +68,7 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: tcp; dl; Comparação UDP x T
   - Metade do RTT é o atraso de propagação em cada sentido.
   - Ele define o custo do handshake (1 RTT antes do primeiro dado), o ritmo do slow start (a janela dobra a cada RTT) e o valor do RTO.
   - Referências: cerca de 1 ms em rede local, 15 ms em uma rede metropolitana e de 100 a 200 ms entre continentes.
-- **Banda (Mbps)**. Valores: 1; 2; 5; 10; 20; 50. Padrão: 1. Modos: tcp; Comparação UDP x TCP; UDP: fluxo; dl; UDP: vídeo.
+- **Banda (Mbps)**. Valores: 1; 2; 5; 10; 20; 50. Padrão: 1. Modos: Comparação UDP x TCP; UDP: fluxo; UDP: vídeo.
   - Capacidade do enlace em megabits por segundo.
   - Define o tempo de transmissão de cada segmento: 1000 bytes levam 8 ms a 1 Mbps e 1,6 ms a 5 Mbps. Por isso as setas saem espaçadas no diagrama. Os valores de 10 a 50 Mbps servem ao download e ao vídeo.
   - O produto banda × RTT indica quantos dados precisam estar em voo para ocupar o enlace inteiro.
@@ -82,17 +82,17 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: tcp; dl; Comparação UDP x T
   - A mesma semente gera sempre as mesmas perdas: a simulação se repete igual em aula.
   - No modo Comparação, TCP e UDP sofrem exatamente as mesmas perdas.
   - Troque o valor para ver outra sequência de perdas com a mesma taxa.
-- **Reordenação (%)** (ajuste avançado). Valores: 0; 5; 10; 15; 20; 30. Padrão: 0. Modos: tcp; Comparação UDP x TCP; UDP: fluxo; UDP: vídeo.
+- **Reordenação (%)** (ajuste avançado). Valores: 0; 5; 10; 15; 20; 30. Padrão: 0. Modos: Comparação UDP x TCP; UDP: fluxo; UDP: vídeo.
   - Probabilidade de um pacote atrasar e chegar depois dos seguintes.
   - Simula pacotes que seguem caminhos diferentes ou ficam mais tempo em uma fila.
   - No TCP, o receptor guarda o pacote adiantado e repete o ACK do que falta (ACK duplicado). Se a desordem gerar 3 ACKs duplicados, o emissor retransmite sem necessidade.
   - No UDP, a aplicação recebe os datagramas fora de ordem.
-- **Descartar na 1ª transmissão (nº)** (ajuste avançado). Valores: nenhum; #1; #3; #5; #6; #8; #10; #15; #5, #7 e #9; #3, #6 e #9. Padrão: nenhum. Modos: tcp; Comparação UDP x TCP; UDP: fluxo; UDP: DNS; dl.
+- **Descartar na 1ª transmissão (nº)** (ajuste avançado). Valores: nenhum; #1; #3; #5; #6; #8; #10; #15; #5, #7 e #9; #3, #6 e #9. Padrão: nenhum. Modos: Comparação UDP x TCP; UDP: fluxo; UDP: DNS.
   - Números dos segmentos que se perdem na primeira vez que são enviados.
   - Escolha o número do segmento (ou uma combinação pronta). A retransmissão desses segmentos não é descartada, a não ser pela perda aleatória.
   - Permite criar situações exatas: perder um segmento do meio provoca fast retransmit; perder o último provoca timeout.
   - No DNS, "#1" descarta a primeira consulta.
-- **Perda também nos ACKs** (ajuste avançado). Valores: caixa de seleção. Padrão: não. Modos: tcp; Comparação UDP x TCP.
+- **Perda também nos ACKs** (ajuste avançado). Valores: caixa de seleção. Padrão: não. Modos: Comparação UDP x TCP.
   - Aplica a mesma taxa de perda aos ACKs do servidor.
   - Como o ACK do TCP é cumulativo, o ACK seguinte confirma também o que o ACK perdido confirmaria.
   - Por isso a perda de ACKs raramente causa retransmissão; na maioria das vezes, só atrasa um pouco o crescimento da janela.
@@ -118,21 +118,21 @@ Cenário, Captura, Mensagem, Janela (cwnd) (modos: tcp; dl; Comparação UDP x T
 
 ### 4.4 TCP
 
-- **SACK (confirmação seletiva)**. Valores: caixa de seleção. Padrão: não. Modos: tcp; Comparação UDP x TCP; dl.
+- **SACK (confirmação seletiva)**. Valores: caixa de seleção. Padrão: não. Modos: Comparação UDP x TCP.
   - Liga a opção SACK do TCP ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)).
   - Os dois lados negociam a opção no handshake (SACK_PERM). Nos ACKs duplicados, o receptor informa os blocos de bytes que já chegaram além da lacuna (SLE e SRE).
   - Ligado, o emissor repõe todos os buracos de uma janela em cerca de 1 RTT. Desligado, vale o NewReno: uma lacuna por RTT, descoberta pelos ACKs parciais.
   - Faz diferença quando há várias perdas na mesma janela. Com uma só perda, os dois se comportam quase igual.
-- **Janela inicial** (ajuste avançado). Valores: 1 seg.; 4 seg.; 10 seg.. Padrão: 1 seg.. Modos: tcp; Comparação UDP x TCP; dl.
+- **Janela inicial** (ajuste avançado). Valores: 1 seg.; 4 seg.; 10 seg.. Padrão: 1 seg.. Modos: Comparação UDP x TCP.
   - Valor da cwnd no início da transferência, em segmentos.
   - É quantos segmentos o emissor pode enviar antes do primeiro ACK.
   - O valor original era 1; a [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681) permite de 2 a 4 e o Linux usa 10 ([RFC 6928](https://www.rfc-editor.org/rfc/rfc6928), de status Experimental).
   - Com 1, o slow start fica bem visível: 1, 2, 4, 8 segmentos por RTT.
-- **rwnd (seg.)** (ajuste avançado). Valores: 4; 8; 16; 32; 64; 256; 1024. Padrão: 16. Modos: tcp; Comparação UDP x TCP; dl.
+- **rwnd (seg.)** (ajuste avançado). Valores: 4; 8; 16; 32; 64; 256; 1024. Padrão: 16. Modos: Comparação UDP x TCP.
   - Espaço de buffer que o servidor anuncia em cada ACK.
   - É o controle de fluxo: protege o receptor de receber mais do que consegue guardar. O valor aparece no campo Janela dos ACKs (16 segmentos = 16000 bytes).
   - O emissor nunca tem mais que o mínimo entre cwnd e rwnd em voo. Com rwnd = 4, a cwnd pode crescer, mas o envio fica limitado a 4 segmentos.
-- **ssthresh inicial** (ajuste avançado). Valores: 64 seg.; 8 seg.; sem limite. Padrão: 64 seg.. Modos: tcp; Comparação UDP x TCP; dl.
+- **ssthresh inicial** (ajuste avançado). Valores: 64 seg.; 8 seg.; sem limite. Padrão: 64 seg.. Modos: Comparação UDP x TCP.
   - Limiar entre o slow start e o congestion avoidance.
   - Abaixo do ssthresh, a cwnd cresce exponencialmente (slow start). Acima, cresce cerca de 1 segmento por RTT (congestion avoidance).
   - Com 64, o slow start vai até a primeira perda ou até o limite da rwnd. Com 8, a mudança de fase aparece cedo. Com "sem limite", só a primeira perda encerra o slow start (útil no download).

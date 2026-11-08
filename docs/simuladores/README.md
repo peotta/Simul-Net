@@ -30,6 +30,7 @@ Roteamento, endereçamento automático, diagnóstico e redes de operadora, em di
 | [OSPF (estado de enlace)](ospf.md) | nativo | disponível | [RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), [RFC 5709](https://www.rfc-editor.org/rfc/rfc5709) |
 | [RIP (vetor de distância)](rip.md) | nativo | disponível | [RFC 2453](https://www.rfc-editor.org/rfc/rfc2453), [RFC 4822](https://www.rfc-editor.org/rfc/rfc4822) |
 | [DHCP (DORA)](dhcp.md) | nativo | disponível | [RFC 2131](https://www.rfc-editor.org/rfc/rfc2131), [RFC 2132](https://www.rfc-editor.org/rfc/rfc2132), [RFC 5227](https://www.rfc-editor.org/rfc/rfc5227), [RFC 3046](https://www.rfc-editor.org/rfc/rfc3046), [RFC 1542](https://www.rfc-editor.org/rfc/rfc1542) |
+| [IPv4 (encaminhamento e endereçamento)](ipv4.md) | nativo | disponível | [RFC 791](https://www.rfc-editor.org/rfc/rfc791), [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), [RFC 3704](https://www.rfc-editor.org/rfc/rfc3704), [RFC 2644](https://www.rfc-editor.org/rfc/rfc2644), [RFC 3021](https://www.rfc-editor.org/rfc/rfc3021), [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890) |
 | [ICMP (ping e traceroute)](icmp.md) | nativo | disponível | [RFC 792](https://www.rfc-editor.org/rfc/rfc792), [RFC 1191](https://www.rfc-editor.org/rfc/rfc1191), [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), [RFC 2923](https://www.rfc-editor.org/rfc/rfc2923), [RFC 4821](https://www.rfc-editor.org/rfc/rfc4821) |
 | [BGP (sessões e seleção de caminho)](bgp.md) | nativo | disponível | [RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), [RFC 6811](https://www.rfc-editor.org/rfc/rfc6811), [RFC 7908](https://www.rfc-editor.org/rfc/rfc7908), [RFC 9319](https://www.rfc-editor.org/rfc/rfc9319), [RFC 9582](https://www.rfc-editor.org/rfc/rfc9582), [RFC 8212](https://www.rfc-editor.org/rfc/rfc8212) |
 | [MPLS (LDP e L3VPN)](mpls.md) | nativo | disponível | [RFC 3031](https://www.rfc-editor.org/rfc/rfc3031), [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036), [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364), [RFC 4381](https://www.rfc-editor.org/rfc/rfc4381) |
@@ -41,7 +42,7 @@ Roteamento, endereçamento automático, diagnóstico e redes de operadora, em di
 
 ## Camada de transporte e segurança
 
-TCP e UDP passo a passo e o laboratório defensivo com ataques, mitigações e resposta a incidentes.
+TCP e UDP em simuladores separados e o laboratório defensivo com ataques, mitigações e resposta a incidentes.
 
 | Simulador | Motor | Situação | RFCs e padrões |
 | --- | --- | --- | --- |

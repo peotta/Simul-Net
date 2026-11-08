@@ -270,6 +270,7 @@ export const GLOSSARIO: Sigla[] = [
   // ---- ICMP ----
   { sigla: 'DF', expansao: 'Don\'t Fragment', pt: 'não fragmentar', serve: 'flag do cabeçalho IPv4 que proíbe a fragmentação do pacote; é a base do PMTUD', escopo: ['icmp'] },
   { sigla: 'MF', expansao: 'More Fragments', pt: 'mais fragmentos', serve: 'flag do cabeçalho IPv4 que indica que ainda há fragmentos depois deste', escopo: ['icmp'] },
+  { sigla: 'uRPF', expansao: 'Unicast Reverse Path Forwarding', pt: 'encaminhamento por caminho reverso unicast', serve: 'confere, pela tabela de rotas, se a origem de um pacote é plausível na interface de chegada, para barrar endereços de origem forjados (RFC 3704)', escopo: ['ipv4'] },
   { sigla: 'PMTU', expansao: 'Path MTU', pt: 'MTU do caminho', serve: 'menor MTU entre os enlaces do caminho; limita o tamanho do pacote sem fragmentar' },
   { sigla: 'WAN', expansao: 'Wide Area Network', pt: 'rede de longa distância', serve: 'rede que liga locais distantes, como as filiais de uma empresa, em geral por operadoras' },
   { sigla: 'PLPMTUD', expansao: 'Packetization Layer Path MTU Discovery', pt: 'descoberta da MTU do caminho pela camada de empacotamento', serve: 'descobre a MTU do caminho pela própria camada que monta os dados, sem depender das mensagens ICMP (RFC 4821)' },

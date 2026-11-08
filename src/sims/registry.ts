@@ -102,6 +102,17 @@ export const SIMS: SimMeta[] = [
     engine: 'nativo',
   },
   {
+    id: 'ipv4',
+    category: 'camada-de-rede',
+    title: 'IPv4 (encaminhamento e endereçamento)',
+    summary: 'Como o host e o roteador decidem: máscara e gateway, prefixo mais específico, rota padrão, distância administrativa e métrica, TTL e loops, rotas ausentes e blackhole, uRPF contra origem forjada, broadcast, /31 e blocos de uso especial.',
+    topics: ['Prefixo mais específico', 'Máscara, gateway e ARP', 'TTL, loops e falhas de rota', 'uRPF e endereços especiais'],
+    rfcs: ['RFC 791', 'RFC 1122', 'RFC 1812', 'RFC 3704', 'RFC 2644', 'RFC 3021', 'RFC 6890'],
+    status: 'available',
+    engine: 'nativo',
+    novo: true,
+  },
+  {
     id: 'icmp',
     category: 'camada-de-rede',
     title: 'ICMP (ping e traceroute)',
@@ -362,7 +373,6 @@ export const SIMS: SimMeta[] = [
     topics: ['Autenticação EAP: EAP-TLS, PEAP e EAP-MD5', 'EAP sobre EAPOL e sobre RADIUS', 'Estado da porta controlada', 'Falhas: recusa, servidor inalcançável, segredo diferente e sem suplicante', 'Reautenticação, logoff e segundo dispositivo na porta', 'Riscos: sem autenticação mútua e PEAP sem validar o servidor'],
     rfcs: ['RFC 3748', 'RFC 2865', 'RFC 3579', 'RFC 5216', 'RFC 9190', 'RFC 5080', 'IEEE 802.1X'],
     status: 'available',
-    novo: true,
     engine: 'nativo',
   },
 ];

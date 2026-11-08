@@ -23,6 +23,7 @@ import { mplsProtocol } from '../../src/sims/mpls/protocol';
 import { bgpProtocol } from '../../src/sims/bgp/protocol';
 import { tcpProtocol } from '../../src/sims/tcp/protocol';
 import { udpProtocol } from '../../src/sims/udp/protocol';
+import { ipv4Protocol } from '../../src/sims/ipv4/protocol';
 import { ataquesProtocol } from '../../src/sims/ataques-tcp-udp/protocol';
 import { osiProtocol } from '../../src/sims/osi/protocol';
 import { ospfProtocol } from '../../src/sims/ospf/protocol';
@@ -94,6 +95,7 @@ const SIMS: [string, ProtocolDef][] = [
   ['ataques-tcp-udp', ataquesProtocol],
   ['osi', osiProtocol],
   ['udp', udpProtocol],
+  ['ipv4', ipv4Protocol],
 ];
 
 describe.each(SIMS)('impressões digitais: %s', (name, def) => {
