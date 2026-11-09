@@ -67,6 +67,7 @@ O ARP não existe no IPv6. Quem resolve o MAC de um vizinho é o **Neighbor Disc
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant A as Host A
   participant G as Grupo do nó solicitado
   participant B as Host B
@@ -89,6 +90,7 @@ sequenceDiagram
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant A as Host A
   participant R as Roteador
   A->>A: forma fe80:: com o identificador de interface
@@ -124,7 +126,7 @@ flowchart TD
   ND -- "não" --> X3["Envia ICMPv6 1/3 à origem<br/>endereço inalcançável"]
 \`\`\`
 
-*Esquema 5 (decisão do roteador).* Os avisos do ICMPv6 (RFC 4443) distinguem as falhas: **1/0** é falta de rota, **1/3** é um endereço da rede conectada que não responde no enlace (o Neighbor Discovery falhou), e **3/0** é o Hop Limit esgotado. Também não há erro ICMPv6 sobre outro erro ICMPv6, e o aviso leva o máximo do pacote original sem passar do MTU mínimo de 1280 bytes (seção 2.4).
+*Esquema 5 (decisão do roteador).* Os avisos do ICMPv6 (RFC 4443) distinguem as falhas: **1/0** é falta de rota, **1/3** é um endereço da rede conectada que não responde no enlace (o Neighbor Discovery falhou), e **3/0** é o Hop Limit esgotado. Também não há erro ICMPv6 sobre outro erro ICMPv6, e o aviso leva o máximo do pacote original sem passar do MTU mínimo do IPv6, 1280 bytes (seção 2.4; RFC 8200, seção 5).
 
 ### O cabeçalho fixo de 40 bytes
 

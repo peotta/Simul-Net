@@ -76,7 +76,7 @@ const enderecos: TabDef = {
     const iid = iidOf(P.iid);
     const dst = R.dst as string;
     let h = '<h3>Anatomia do endereço de enlace local do host A</h3><table class="sc-msgs"><tbody>';
-    h += row('MAC', MAC.a) + row('Identificador de interface', P.iid === 'eui64' ? 'EUI-64 modificado: ' + groups6(iid).slice(4).map((x) => x.toString(16).padStart(4, '0')).join(':') : 'temporário: ' + groups6(iid).slice(4).map((x) => x.toString(16).padStart(4, '0')).join(':') + ' (não deriva do MAC)') + row('Endereço de enlace local', R.ll) + row('Forma completa', full6(parse6(R.ll)));
+    h += row('MAC', MAC.a) + row('Identificador de interface', P.iid === 'eui64' ? 'EUI-64 modificado: ' + groups6(iid).slice(4).map((x) => x.toString(16).padStart(4, '0')).join(':') : 'temporário: ' + groups6(iid).slice(4).map((x) => x.toString(16).padStart(4, '0')).join(':') + ' (aleatório, não revela o MAC)') + row('Endereço de enlace local', R.ll) + row('Forma completa', full6(parse6(R.ll)));
     h += '</tbody></table>';
     if (P.iid === 'eui64') {
       const b = MAC.a.split(':');

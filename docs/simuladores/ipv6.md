@@ -82,6 +82,7 @@ O ARP não existe no IPv6. Quem resolve o MAC de um vizinho é o **Neighbor Disc
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Host A
   participant G as Grupo do nó solicitado
   participant B as Host B
@@ -104,6 +105,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Host A
   participant R as Roteador
   A->>A: forma fe80:: com o identificador de interface
@@ -139,7 +141,7 @@ flowchart TD
   ND -- "não" --> X3["Envia ICMPv6 1/3 à origem<br/>endereço inalcançável"]
 ```
 
-*Esquema 5 (decisão do roteador).* Os avisos do ICMPv6 ([RFC 4443](https://www.rfc-editor.org/rfc/rfc4443)) distinguem as falhas: **1/0** é falta de rota, **1/3** é um endereço da rede conectada que não responde no enlace (o Neighbor Discovery falhou), e **3/0** é o Hop Limit esgotado. Também não há erro ICMPv6 sobre outro erro ICMPv6, e o aviso leva o máximo do pacote original sem passar do MTU mínimo de 1280 bytes (seção 2.4).
+*Esquema 5 (decisão do roteador).* Os avisos do ICMPv6 ([RFC 4443](https://www.rfc-editor.org/rfc/rfc4443)) distinguem as falhas: **1/0** é falta de rota, **1/3** é um endereço da rede conectada que não responde no enlace (o Neighbor Discovery falhou), e **3/0** é o Hop Limit esgotado. Também não há erro ICMPv6 sobre outro erro ICMPv6, e o aviso leva o máximo do pacote original sem passar do MTU mínimo do IPv6, 1280 bytes (seção 2.4; [RFC 8200](https://www.rfc-editor.org/rfc/rfc8200), seção 5).
 
 ### 2.9 O cabeçalho fixo de 40 bytes
 
@@ -314,10 +316,10 @@ Cenário, Captura, Mensagem, Tabela de rotas (modos: Encaminhamento), Endereços
 
 ### 6.6 Host A
 
-- **Identificador de interface**. Valores: EUI-64 modificado, derivado do MAC; Temporário, não derivado do MAC ([RFC 8981](https://www.rfc-editor.org/rfc/rfc8981)). Padrão: EUI-64 modificado, derivado do MAC. Modos: Endereçamento e SLAAC.
+- **Identificador de interface**. Valores: EUI-64 modificado, derivado do MAC; Temporário, aleatório ([RFC 8981](https://www.rfc-editor.org/rfc/rfc8981)). Padrão: EUI-64 modificado, derivado do MAC. Modos: Endereçamento e SLAAC.
   - Os 64 bits finais do endereço do host.
   - **EUI-64:** deriva do MAC, inserindo ff:fe no meio e invertendo o bit U/L ([RFC 4291](https://www.rfc-editor.org/rfc/rfc4291), apêndice A). É estável, mas permite rastrear o dispositivo por onde ele passa.
-  - **Temporário:** um valor que não deriva do MAC e que muda com o tempo ([RFC 8981](https://www.rfc-editor.org/rfc/rfc8981)), o que protege a privacidade.
+  - **Temporário:** um valor aleatório que não revela o MAC e que muda com o tempo ([RFC 8981](https://www.rfc-editor.org/rfc/rfc8981)), o que protege a privacidade.
 
 ### 6.7 Roteador
 
@@ -452,9 +454,9 @@ sequenceDiagram
 
 **Configuração aplicada:** Destino do ping = srv; Identificador de interface = priv; O roteador envia Router Advertisement = sim; Comprimento do prefixo anunciado = 64; Flag A (autoconfiguração) ligada no prefixo = sim; Duplicidade do endereço global = ok
 
-O identificador de interface não deriva do MAC: é um valor temporário ([RFC 8981](https://www.rfc-editor.org/rfc/rfc8981)). O processo é o mesmo, mas o endereço **não revela o fabricante nem o MAC**, e muda com o tempo, o que dificulta rastrear o dispositivo.
+O identificador de interface é um valor temporário e aleatório ([RFC 8981](https://www.rfc-editor.org/rfc/rfc8981)), que não revela o MAC. O processo é o mesmo, mas o endereço **não revela o fabricante nem o MAC**, e muda com o tempo, o que dificulta rastrear o dispositivo.
 
-**Conceito.** Com EUI-64, o identificador (e o endereço) revela o MAC e é o mesmo em toda rede por onde o dispositivo passa. Com o identificador temporário da [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981), o endereço não deriva do MAC e é trocado de tempos em tempos, o que dificulta rastrear o dispositivo.
+**Conceito.** Com EUI-64, o identificador (e o endereço) revela o MAC e é o mesmo em toda rede por onde o dispositivo passa. Com o identificador temporário da [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981), o endereço não revela o MAC e é trocado de tempos em tempos, o que dificulta rastrear o dispositivo.
 
 **O que observar**
 
@@ -1275,14 +1277,14 @@ O IPv6 ([RFC 8200](https://www.rfc-editor.org/rfc/rfc8200)) usa endereços de 12
 
 ### 8.3 Encaminhamento
 
-A decisão é a do IPv4: entre as rotas cujo prefixo contém o destino, vence a de maior comprimento; a rota padrão é ::/0. Sem nenhuma rota, o roteador descarta e envia ICMPv6 1/0 ([RFC 4443](https://www.rfc-editor.org/rfc/rfc4443), seção 3.1). Cada roteador decrementa o Hop Limit; ao chegar a zero, o pacote é descartado com ICMPv6 3/0 (seção 3.3). Não se gera erro ICMPv6 sobre outro erro, e o erro leva o máximo do pacote original sem passar do MTU mínimo de 1280 bytes (seção 2.4).
+A decisão é a do IPv4: entre as rotas cujo prefixo contém o destino, vence a de maior comprimento; a rota padrão é ::/0. Sem nenhuma rota, o roteador descarta e envia ICMPv6 1/0 ([RFC 4443](https://www.rfc-editor.org/rfc/rfc4443), seção 3.1). Cada roteador decrementa o Hop Limit; ao chegar a zero, o pacote é descartado com ICMPv6 3/0 (seção 3.3). Não se gera erro ICMPv6 sobre outro erro, e o erro leva o máximo do pacote original sem passar do MTU mínimo do IPv6, 1280 bytes (seção 2.4; [RFC 8200](https://www.rfc-editor.org/rfc/rfc8200), seção 5).
 
 ### 8.4 Neighbor Discovery
 
 - **NS e NA** (tipos 135 e 136) resolvem o MAC de um vizinho. O NS vai ao endereço de nó solicitado do alvo, e o MAC de destino é 33:33 mais os 32 bits finais ([RFC 2464](https://www.rfc-editor.org/rfc/rfc2464)).
 - **RS e RA** (tipos 133 e 134): o host pede, e o roteador anuncia prefixo, flags L e A, tempo de vida como roteador padrão e MTU ([RFC 4861](https://www.rfc-editor.org/rfc/rfc4861), seção 4).
 - Todas as mensagens saem com Hop Limit 255: um valor menor indicaria que vieram de fora do enlace (seção 7.1).
-- Sem resposta ao NS, o roteador desiste e envia ICMPv6 1/3, endereço inalcançável ([RFC 4443](https://www.rfc-editor.org/rfc/rfc4443), seção 3.1).
+- Sem resposta ao NS, o roteador desiste e envia ICMPv6 1/3, endereço inalcançável: são até 3 Neighbor Solicitation com intervalo de 1 s ([RFC 4861](https://www.rfc-editor.org/rfc/rfc4861), seções 7.2.2 e 10; [RFC 4443](https://www.rfc-editor.org/rfc/rfc4443), seção 3.1).
 
 ### 8.5 Autoconfiguração (SLAAC) e DAD
 
@@ -1293,7 +1295,7 @@ A decisão é a do IPv4: entre as rotas cujo prefixo contém o destino, vence a 
 
 ### 8.6 Limitações do simulador
 
-As rotas são estáticas e não há protocolo de roteamento em execução. Não há cabeçalhos de extensão, fragmentação, Path MTU Discovery, DHCPv6, Redirect, NUD (detecção de inalcançabilidade de vizinho), Router Advertisement periódico, nem as demais opções do ND. A DAD usa uma só tentativa, e os temporizadores são os padrões do [RFC 4861](https://www.rfc-editor.org/rfc/rfc4861), seção 10, mas simplificados. A tabela de vizinhos dos roteadores intermediários é suposta preenchida, e o endereço temporário do modo privado é um valor fixo de exemplo. Os endereços são de documentação ([RFC 3849](https://www.rfc-editor.org/rfc/rfc3849)) e locais únicos ([RFC 4193](https://www.rfc-editor.org/rfc/rfc4193)). Os tempos são didáticos.
+As rotas são estáticas e não há protocolo de roteamento em execução. Não há cabeçalhos de extensão, fragmentação, Path MTU Discovery, DHCPv6, Redirect, NUD (detecção de inalcançabilidade de vizinho), Router Advertisement periódico, nem as demais opções do ND. A DAD usa uma só tentativa, e os temporizadores são os padrões do [RFC 4861](https://www.rfc-editor.org/rfc/rfc4861), seção 10, mas simplificados. A tabela de vizinhos dos roteadores intermediários é suposta preenchida, e o endereço temporário do modo privado é um valor fixo de exemplo, usado também no endereço de enlace local (a [RFC 8981](https://www.rfc-editor.org/rfc/rfc8981) trata dos endereços globais). A DAD de um endereço de enlace local duplicado, que pode desativar o IP da interface ([RFC 4862](https://www.rfc-editor.org/rfc/rfc4862), seção 5.4.5), não é simulada. Os endereços são de documentação ([RFC 3849](https://www.rfc-editor.org/rfc/rfc3849)) e locais únicos ([RFC 4193](https://www.rfc-editor.org/rfc/rfc4193)). Os tempos são didáticos.
 
 
 ## 9. Glossário

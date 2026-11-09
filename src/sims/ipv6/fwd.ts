@@ -113,7 +113,7 @@ function fieldsOf(p: Pkt, plen: number): Field[] {
     ['Tipo e código', p.icmp[0] + '/' + p.icmp[1], ICMP_NAME[p.icmp.join('/')] || ''],
     ['Checksum', 'calculado sobre o pseudocabeçalho', 'cobre as origens e destinos IPv6, pois o IPv6 não tem checksum de cabeçalho (RFC 4443, seção 2.3)'],
   ];
-  if (p.type === 'err') f.push(['Conteúdo', 'o máximo do pacote original', 'sem passar do MTU mínimo de 1280 bytes (RFC 4443, seção 2.4)']);
+  if (p.type === 'err') f.push(['Conteúdo', 'o máximo do pacote original', 'sem passar do MTU mínimo do IPv6, 1280 bytes (RFC 4443, seção 2.4; RFC 8200, seção 5)']);
   return f;
 }
 

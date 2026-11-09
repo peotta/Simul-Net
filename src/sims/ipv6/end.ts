@@ -28,7 +28,7 @@ export const B_IP = '2001:db8:10:1::20';
 export const B_LL = linkLocalOf(eui64(MAC.b));
 export const S_IP = '2001:db8:20:2::50';
 export const ULA_IP = 'fd12:3456:789a:1::50';
-/** Identificador temporário de exemplo (RFC 8981): não deriva do MAC. */
+/** Identificador temporário de exemplo (RFC 8981): aleatório, não revela o MAC. */
 export const PRIV_IID = 0x8b3a41c2f09d1e77n;
 const ALL_NODES = 'ff02::1';
 const ALL_ROUTERS = 'ff02::2';
@@ -110,7 +110,7 @@ function run(P: EndParams): Trace {
   tr.mile(0, 'Enlace local', 'DAD');
   tr.phase('Endereço de enlace local e DAD', 'dad1');
   ev(0, 'a', 'A interface sobe: o host forma ' + A_LL + ' (fe80::/10 com o identificador de interface ' + iidText(iid) + ')', '');
-  tr.lg(0, 'Host A: endereço de enlace local ' + A_LL + ', formado com ' + (P.iid === 'eui64' ? 'o EUI-64 modificado do MAC ' + MAC.a + ' (insere ff:fe e inverte o bit U/L, RFC 4291, apêndice A).' : 'um identificador temporário, que não deriva do MAC (RFC 8981).'), 'sys');
+  tr.lg(0, 'Host A: endereço de enlace local ' + A_LL + ', formado com ' + (P.iid === 'eui64' ? 'o EUI-64 modificado do MAC ' + MAC.a + ' (insere ff:fe e inverte o bit U/L, RFC 4291, apêndice A).' : 'um identificador temporário e aleatório, que não revela o MAC (RFC 8981).'), 'sys');
   tr.t = 0.5;
   const dadNs = (target: string, why: string): void => {
     const sol = solicited6(target);
