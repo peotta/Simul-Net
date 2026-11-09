@@ -14,6 +14,7 @@ O IP entrega datagramas sem garantia: eles podem se perder, chegar fora de ordem
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant S as Servidor
   C->>S: SYN, seq = x

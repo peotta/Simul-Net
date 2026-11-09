@@ -32,6 +32,7 @@ flowchart TB
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant N as Navegador
   participant S as Servidor
   N->>S: HEADERS fluxo 1: GET /app.js

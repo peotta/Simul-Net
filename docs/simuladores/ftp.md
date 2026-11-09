@@ -27,6 +27,7 @@ O FTP (*File Transfer Protocol*, [RFC 959](https://www.rfc-editor.org/rfc/rfc959
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant S as Servidor
   C->>S: conexão de controle: porta 21

@@ -28,6 +28,7 @@ As redes se comunicam por endereços IP, mas as pessoas usam **nomes**. O DNS (*
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant R as Resolvedor recursivo
   participant Z as Servidor raiz

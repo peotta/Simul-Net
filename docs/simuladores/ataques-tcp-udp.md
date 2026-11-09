@@ -41,6 +41,7 @@ O TCP mantém **estado** para cada conexão ([RFC 9293](https://www.rfc-editor.o
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Origem do ataque
   participant S as Servidor
   A->>S: SYN, com origens variadas ou forjadas

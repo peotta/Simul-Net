@@ -84,6 +84,7 @@ O RSTP troca a espera por um **acordo entre vizinhos**: uma porta designada prop
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Ponte A, porta designada
   participant B as Ponte B
   A->>B: BPDU com proposta

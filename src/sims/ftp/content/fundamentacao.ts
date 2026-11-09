@@ -9,6 +9,7 @@ O FTP (*File Transfer Protocol*, RFC 959) transfere arquivos entre um cliente e 
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant S as Servidor
   C->>S: conexão de controle: porta 21

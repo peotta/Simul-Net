@@ -57,6 +57,7 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente interno
   participant F as Firewall com estado
   participant S as Servidor externo

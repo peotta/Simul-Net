@@ -11,6 +11,7 @@ O endereço é **emprestado** por um tempo (*lease*) e precisa ser renovado: qua
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente, sem IP
   participant S as Servidor DHCP
   C->>S: DISCOVER, broadcast: 0.0.0.0 para 255.255.255.255

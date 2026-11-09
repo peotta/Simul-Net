@@ -11,6 +11,7 @@ O BGP-4 (*Border Gateway Protocol*, RFC 4271) é o protocolo que troca alcançab
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant A as Roteador do AS 65001
   participant B as Roteador do AS 65002
   A->>B: TCP, porta 179

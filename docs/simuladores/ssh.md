@@ -38,6 +38,7 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant S as Servidor
   C->>S: versão: SSH-2.0 e o software

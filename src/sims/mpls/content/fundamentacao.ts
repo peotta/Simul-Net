@@ -39,6 +39,7 @@ Alguns valores são reservados (RFC 3032): 0 é o *IPv4 Explicit NULL*, 1 é o *
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant A as LSR vizinho A
   participant B as LSR vizinho B
   A->>B: Hello (UDP 646, multicast do enlace)

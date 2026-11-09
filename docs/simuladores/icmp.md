@@ -28,6 +28,7 @@ O ICMP **informa**, mas não corrige: a decisão de tentar de novo, mudar de rot
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as PC-A
   participant R as Roteador
   participant S as Servidor

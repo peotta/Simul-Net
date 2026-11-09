@@ -28,6 +28,7 @@ O BGP-4 (*Border Gateway Protocol*, [RFC 4271](https://www.rfc-editor.org/rfc/rf
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Roteador do AS 65001
   participant B as Roteador do AS 65002
   A->>B: TCP, porta 179

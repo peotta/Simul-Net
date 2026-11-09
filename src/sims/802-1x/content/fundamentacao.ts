@@ -36,6 +36,7 @@ stateDiagram-v2
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant S as Suplicante
   participant A as Autenticador
   participant R as Servidor RADIUS

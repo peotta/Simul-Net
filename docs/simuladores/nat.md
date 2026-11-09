@@ -26,6 +26,7 @@ O IPv4 tem **32 bits**, o que dá cerca de 4,3 bilhões de endereços, insuficie
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant H as Host interno, 192.168.1.10
   participant N as Roteador NAT, público 203.0.113.1
   participant S as Servidor externo, 198.51.100.9

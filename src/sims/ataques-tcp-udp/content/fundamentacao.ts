@@ -26,6 +26,7 @@ O TCP mantém **estado** para cada conexão (RFC 9293), e isso tem um custo que 
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant A as Origem do ataque
   participant S as Servidor
   A->>S: SYN, com origens variadas ou forjadas

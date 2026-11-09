@@ -15,6 +15,7 @@ O TLS roda sobre o TCP. O HTTP/3 usa o QUIC, que integra o TLS 1.3 sobre UDP (ve
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant S as Servidor
   C->>S: ClientHello: versões, cifras, key_share, SNI, ALPN

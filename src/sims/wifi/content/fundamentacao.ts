@@ -20,6 +20,7 @@ Em uma rede cabeada, cada enlace é um meio dedicado. Em uma rede sem fio, **tod
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant C as Cliente
   participant A as AP
   A->>C: Beacon, periódico: SSID, taxas, capacidades
@@ -68,6 +69,7 @@ flowchart TD
 
 \`\`\`mermaid
 sequenceDiagram
+  autonumber
   participant A as Estação A
   participant P as AP
   participant B as Estação B

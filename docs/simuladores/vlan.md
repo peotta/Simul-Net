@@ -72,6 +72,7 @@ No tronco, a **VLAN nativa** é a única cujos quadros viajam **sem tag**. Ela e
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Host da VLAN 10
   participant SW as Switch
   participant R as Roteador, tronco

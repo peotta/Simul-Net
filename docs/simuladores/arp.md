@@ -28,6 +28,7 @@ Para falar com um destino de **outra** rede, o host não resolve o MAC do destin
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as Host A
   participant L as Rede local (broadcast)
   participant B as Host B
@@ -61,6 +62,7 @@ No pedido, o MAC do alvo é o que se procura, por isso fica vazio. Na resposta, 
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant N as Host novo
   participant R as Rede local
   participant D as Dono atual do IP

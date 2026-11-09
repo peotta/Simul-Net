@@ -27,6 +27,7 @@ O RIP (*Routing Information Protocol*, versão 2, [RFC 2453](https://www.rfc-edi
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as R1
   participant B as R2
   participant C as R3

@@ -57,6 +57,7 @@ Alguns valores são reservados ([RFC 3032](https://www.rfc-editor.org/rfc/rfc303
 
 ```mermaid
 sequenceDiagram
+  autonumber
   participant A as LSR vizinho A
   participant B as LSR vizinho B
   A->>B: Hello (UDP 646, multicast do enlace)
