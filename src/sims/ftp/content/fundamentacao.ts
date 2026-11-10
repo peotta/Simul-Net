@@ -5,6 +5,14 @@ export const fundamentacao: string = `
 
 O FTP (*File Transfer Protocol*, RFC 959) transfere arquivos entre um cliente e um servidor. É um dos protocolos mais antigos da internet, e tem duas características marcantes: usa **dois canais** (um de controle e um de dados) e trafega usuário, senha, comandos e arquivos **em texto puro**. Por isso existem duas alternativas seguras, o **FTPS** e o **SFTP**, que o simulador compara.
 
+**O que você aprende com este simulador.**
+
+- Explicar os dois canais do FTP (controle e dados) e por que o protocolo trafega em claro.
+- Ler os comandos e as respostas numéricas do canal de controle.
+- Distinguir o modo ativo do passivo e prever o que acontece com NAT e firewall.
+- Comparar o FTP, o FTPS (explícito e implícito) e o SFTP.
+- Reconhecer os riscos (credenciais em claro, bounce) e as defesas, no nível defensivo.
+
 ### O diagrama dos dois canais
 
 \`\`\`mermaid
@@ -26,6 +34,33 @@ sequenceDiagram
 \`\`\`
 
 *Esquema 1 (controle e dados no modo passivo).* O canal de **controle** (porta 21) leva os comandos e as respostas numéricas durante toda a sessão. Cada **transferência** (um arquivo ou uma listagem) usa um **canal de dados** separado, aberto só para ela. A organização dos canais está na RFC 959, seção 3.2, e os comandos de transferência, na seção 4.1.
+
+### Comandos e respostas do canal de controle
+
+O canal de controle é um diálogo de **texto**: o cliente envia um comando (quatro letras, em geral) e o servidor responde com um **código de três dígitos** e uma mensagem ([RFC 959](https://www.rfc-editor.org/rfc/rfc959), seções 4 e 5).
+
+| Comando | Função |
+| --- | --- |
+| USER e PASS | identificam o usuário e enviam a senha |
+| TYPE | escolhe a representação: A (texto) ou I (binário) |
+| PASV e EPSV | pedem ao servidor que abra uma porta de dados (modo passivo) |
+| PORT e EPRT | informam o endereço e a porta do cliente (modo ativo) |
+| LIST e RETR | listam um diretório e baixam um arquivo |
+| STOR | envia um arquivo ao servidor |
+| AUTH TLS, PBSZ e PROT | iniciam o TLS e escolhem a proteção do canal de dados (FTPS) |
+| QUIT | encerra a sessão |
+
+O **primeiro dígito** do código diz o resultado, e o segundo, a categoria:
+
+| Primeiro dígito | Significado | Exemplo |
+| --- | --- | --- |
+| 1 | positiva preliminar: a ação começou, e outra resposta virá | 150 abrindo a conexão de dados |
+| 2 | positiva e concluída | 220 pronto, 230 autenticado, 226 transferência concluída, 227 modo passivo |
+| 3 | positiva intermediária: falta informação | 331 usuário aceito, falta a senha |
+| 4 | negativa temporária: pode tentar de novo | 425 não foi possível abrir a conexão de dados |
+| 5 | negativa permanente | 530 não autenticado, 550 arquivo indisponível |
+
+No modo passivo, a resposta **227** traz o endereço e a porta no formato (h1,h2,h3,h4,p1,p2): a porta é **p1 vezes 256 mais p2**. Por exemplo, (192,0,2,10,195,80) indica o endereço 192.0.2.10 e a porta 195 vezes 256 mais 80, ou seja, 50000. É esse texto, em claro, que um *helper* de firewall precisa ler para abrir a porta de dados.
 
 ### Modo ativo e modo passivo
 
@@ -69,13 +104,15 @@ flowchart TD
 
 *Esquema 3 (riscos e defesas).* A RFC 2577 reúne as considerações de segurança do FTP (o ataque de *bounce* com o PORT, a adivinhação de senha e o vazamento de nomes de usuário). A recomendação geral é **trocar o FTP por SFTP ou FTPS** sempre que possível, e nunca expor credenciais em claro.
 
-### Como ler o diagrama do simulador
+### O que cada modo e aba do simulador mostram
 
 - **Diagrama de sequência:** os comandos e as respostas do canal de controle, com o canal de dados aparecendo separado.
 - **Aba Conexões e portas:** as portas usadas em cada canal e quem abriu cada conexão.
 - **Aba O que o observador vê:** o que um intermediário lê em cada protocolo (em claro ou cifrado).
 - **Aba Comparação:** FTP, FTPS e SFTP lado a lado.
 - **Modos:** *FTP* (ativo e passivo), *FTPS* (explícito e implícito), *SFTP* e *Comparação*.
+
+Para os modos de dados, use "Passivo atrás de NAT", "Ativo sem NAT", "Ativo atrás de NAT (falha)" e "Ativo com helper de FTP". Para as operações, use "Listar diretório (LIST)", "Enviar arquivo (STOR)", "Senha incorreta (530)" e "Acesso anônimo". Para o FTPS, use "FTPS explícito (AUTH TLS)", "FTPS implícito (porta 990)" e "PROT C: dados em claro". Para o SFTP, use "Download (get)" e "Chave pública". Para comparar, use "Download nos três", "Upload nos três" e "Listagem nos três".
 
 ### Limites do modelo e do diagrama
 

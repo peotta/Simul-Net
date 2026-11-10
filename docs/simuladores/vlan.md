@@ -26,26 +26,41 @@ Em uma rede local sem divisão, todos os dispositivos formam **um só domínio d
 
 Dispositivos de VLANs diferentes só se comunicam **por um roteador** (ou por um switch de camada 3), o que permite aplicar regras de segurança entre eles.
 
-### 2.2 O diagrama da tag 802.1Q
+**O que você aprende com este simulador.**
+
+- Explicar como a VLAN divide uma rede física em domínios de broadcast independentes.
+- Ler a tag 802.1Q campo a campo e saber onde ela fica no quadro.
+- Distinguir portas de acesso e de tronco e o papel da VLAN nativa.
+- Acompanhar o roteamento entre VLANs com um roteador em um único cabo.
+- Reconhecer o VLAN hopping e as defesas de configuração.
+
+### 2.2 A tag 802.1Q no quadro
+
+A tag é inserida entre o MAC de origem e o campo Tipo. O desenho mostra o quadro com tag, em linhas de 32 bits, na ordem de transmissão (IEEE 802.1Q).
 
 ```mermaid
-flowchart LR
-  subgraph SEM["Quadro sem tag"]
-    S1["Destino"] --> S2["Origem"] --> S3["Tipo"] --> S4["Dados"]
-  end
-  subgraph COM["Quadro com tag 802.1Q"]
-    C1["Destino"] --> C2["Origem"] --> C3["TPID 0x8100<br/>PCP, DEI, VID"] --> C4["Tipo"] --> C5["Dados"]
-  end
+packet-beta
+  0-47: "MAC de destino"
+  48-95: "MAC de origem"
+  96-111: "TPID (0x8100)"
+  112-114: "PCP"
+  115: "DEI"
+  116-127: "VID (VLAN)"
+  128-143: "Tipo (EtherType)"
+  144-175: "Dados (46 a 1500 bytes)"
+  176-207: "FCS"
 ```
 
-*Esquema 1 (a tag entre a origem e o tipo).* A tag soma **4 bytes** e ocupa o lugar logo depois do MAC de origem. O quadro com tag pode chegar a 1522 bytes.
+*Esquema 1 (o quadro com a tag 802.1Q).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O quadro sem tag tem Destino, Origem, Tipo e Dados. A tag soma **4 bytes** (TPID e TCI) e ocupa o lugar logo depois do MAC de origem, e o Tipo original segue depois dela. O campo de dados é condensado no desenho. O quadro com tag pode chegar a 1522 bytes, e o FCS é recalculado quando a tag é inserida ou removida.
 
-| Campo da tag | Tamanho | Função |
-| --- | --- | --- |
-| TPID | 16 bits | vale 0x8100 e identifica o quadro como marcado |
-| PCP | 3 bits | prioridade do quadro (classe de serviço) |
-| DEI | 1 bit | elegibilidade para descarte em caso de congestionamento |
-| VID | 12 bits | identificador da VLAN: 1 a 4094 em uso; 0 indica só prioridade, e 4095 é reservado |
+| Campo da tag | Posição (bits) | Tamanho | Função |
+| --- | --- | --- | --- |
+| TPID | 96 a 111 | 16 bits | vale 0x8100 e identifica o quadro como marcado (ocupa o lugar do Tipo) |
+| PCP | 112 a 114 | 3 bits | prioridade do quadro (classe de serviço) |
+| DEI | 115 | 1 bit | elegibilidade para descarte em caso de congestionamento |
+| VID | 116 a 127 | 12 bits | identificador da VLAN: 1 a 4094 em uso; 0 indica só prioridade, e 4095 é reservado |
+
+Os três últimos campos formam o **TCI** (*Tag Control Information*), de 16 bits.
 
 ### 2.3 Portas de acesso e portas de tronco
 
@@ -97,12 +112,15 @@ A VLAN é uma separação **lógica**, e a segurança dela depende da configura�
 
 Outras boas práticas: limitar as VLANs permitidas em cada tronco, desativar as portas não usadas e não usar a VLAN 1 para dados.
 
-### 2.7 Como ler o diagrama do simulador
+### 2.7 O que cada modo e aba do simulador mostram
 
 - **Topologia:** dois switches ligados por um **tronco**, hosts nas VLANs 10 e 20 e um roteador. A legenda de cores mostra quadro sem tag, quadro com tag 802.1Q e quadro descartado ou ação indevida.
+- **Diagrama de sequência:** cada seta é um quadro, e o tronco mostra quando ele leva a tag e quando não leva.
 - **Aba Portas:** o modo de cada porta (acesso ou tronco), a VLAN e as VLANs permitidas.
 - **Aba Roteador:** a tabela do roteador, com uma rede por VLAN.
 - **Modos:** *Marcação 802.1Q*, *Segmentação*, *Roteamento entre VLANs*, *VLAN nativa* e *VLAN hopping*.
+
+Para a tag, use "O frame ganha a tag no tronco", "A VLAN nativa não leva tag" e "VLAN fora da lista do tronco". Para o isolamento, use "Mesma VLAN em dois switches", "O broadcast fica na VLAN" e "Entre VLANs não há caminho". Para o roteamento, use "A para B pelo roteador" e, para as falhas, "Falta a subinterface da VLAN 20" e "Tronco do R1 sem a VLAN 20". Para a VLAN nativa, use "Mesma nativa nas duas pontas" e "Divergência: o frame muda de VLAN". Para o risco e a defesa, use "Porta dinâmica aceita virar tronco", "Defesa: porta fixa em acesso", "Nativa igual à VLAN do invasor" e "Defesa: nativa em VLAN sem uso".
 
 ### 2.8 Limites do modelo e do diagrama
 
@@ -1341,6 +1359,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **RTT** | Round-Trip Time, tempo de ida e volta | mede o tempo entre enviar um pacote e receber a resposta; base dos temporizadores e da latência |
 | **STP** | Spanning Tree Protocol, protocolo de árvore de abrangência | evita laços em redes comutadas, bloqueando enlaces redundantes até que sejam necessários |
 | **SVI** | Switch Virtual Interface, interface virtual do switch | interface de camada 3 de um switch para uma VLAN, que faz o roteamento entre VLANs |
+| **TCI** | Tag Control Information, informação de controle da etiqueta | os 16 bits da etiqueta 802.1Q que reúnem o PCP, o DEI e o VID |
 | **TPID** | Tag Protocol Identifier, identificador de protocolo da etiqueta | campo de 16 bits da etiqueta 802.1Q; vale 0x8100 e indica que o frame tem etiqueta |
 | **TTL** | Time To Live, tempo de vida | limita quantos saltos um pacote pode dar; cada roteador o reduz de 1, e ao chegar a zero o pacote é descartado |
 | **VID** | VLAN Identifier, identificador de VLAN | número de 12 bits da etiqueta 802.1Q que diz a qual VLAN o frame pertence |

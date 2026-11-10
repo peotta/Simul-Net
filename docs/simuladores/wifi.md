@@ -23,6 +23,14 @@ Como uma rede local sem fio funciona: varredura passiva e ativa, autenticação 
 
 Em uma rede cabeada, cada enlace é um meio dedicado. Em uma rede sem fio, **todos compartilham o ar**: ninguém consegue ouvir e falar ao mesmo tempo no mesmo canal, o sinal chega com intensidades diferentes e as mensagens se perdem por interferência. O **IEEE 802.11** (Wi-Fi é a marca da Wi-Fi Alliance) define a camada de enlace (MAC) e a camada física dessas redes. Este simulador trata da **operação da camada MAC**: descobrir e entrar em uma rede, disputar o meio, trocar de AP, economizar energia e escolher canais.
 
+**O que você aprende com este simulador.**
+
+- Explicar por que o meio sem fio exige evitar a colisão (CSMA/CA) em vez de detectá-la.
+- Acompanhar a descoberta, a autenticação e a associação de um cliente a um AP.
+- Ler o cabeçalho do quadro 802.11 e o significado dos endereços conforme os bits To DS e From DS.
+- Entender o backoff, o NAV, o RTS/CTS e o problema do terminal escondido.
+- Interpretar o roaming, a economia de energia e a escolha de canais sem sobreposição.
+
 ### 2.2 Os atores
 
 | Termo | Significado |
@@ -63,7 +71,58 @@ Os quadros 802.11 são de três tipos:
 | Controle | RTS, CTS, ACK, PS-Poll | coordenar o acesso ao meio; são curtos e sem corpo |
 | Dados | Data, Null | carregar os dados e sinalizar o modo de energia |
 
-### 2.4 O acesso ao meio: CSMA/CA
+### 2.4 O quadro 802.11
+
+Os quadros 802.11 têm um cabeçalho MAC próprio, diferente do Ethernet. O desenho mostra o quadro de dados, em linhas de 32 bits, na ordem de transmissão (IEEE 802.11).
+
+```mermaid
+packet-beta
+  0-1: "Versão"
+  2-3: "Tipo"
+  4-7: "Subtipo"
+  8: "To DS"
+  9: "From DS"
+  10: "More Frag"
+  11: "Retry"
+  12: "Pwr Mgt"
+  13: "More Data"
+  14: "Protected"
+  15: "Order"
+  16-31: "Duração ou ID"
+  32-79: "Endereço 1 (receptor)"
+  80-127: "Endereço 2 (transmissor)"
+  128-175: "Endereço 3"
+  176-191: "Controle de sequência"
+  192-223: "Corpo do quadro (variável)"
+  224-255: "FCS"
+```
+
+*Esquema 2 (o quadro de dados 802.11).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O corpo do quadro é **condensado** no desenho, e há campos opcionais que dependem do tipo: o Endereço 4 (só quando To DS e From DS valem 1, em um enlace entre APs), o controle de QoS (nos quadros de dados com QoS) e o controle HT. A tabela abaixo descreve os campos do desenho.
+
+| Campo | Tamanho | Função |
+| --- | --- | --- |
+| Controle do quadro | 2 bytes | versão, tipo (gerência, controle ou dados), subtipo e os oito bits de sinalização |
+| To DS e From DS | 1 bit cada | dizem se o quadro vai para o sistema de distribuição ou vem dele, e definem o papel de cada endereço |
+| Retry | 1 bit | indica que o quadro é uma retransmissão |
+| Pwr Mgt | 1 bit | o cliente avisa que vai entrar em modo de economia de energia |
+| More Data | 1 bit | o AP avisa que há mais quadros guardados para o cliente |
+| Protected | 1 bit | o corpo do quadro está cifrado |
+| Duração ou ID | 2 bytes | o tempo que o meio ficará reservado (base do NAV), ou o AID no PS-Poll |
+| Endereços 1, 2 e 3 | 6 bytes cada | o significado depende de To DS e From DS |
+| Controle de sequência | 2 bytes | número do quadro e do fragmento, para detectar duplicatas |
+| FCS | 4 bytes | verificação do quadro, um CRC de 32 bits |
+
+O papel de cada endereço muda com os bits To DS e From DS:
+
+| Sentido | To DS | From DS | Endereço 1 | Endereço 2 | Endereço 3 |
+| --- | --- | --- | --- | --- | --- |
+| Cliente para o AP | 1 | 0 | BSSID (o AP) | origem (o cliente) | destino final |
+| AP para o cliente | 0 | 1 | destino (o cliente) | BSSID (o AP) | origem original |
+| Gerência (Beacon, Probe, Association) | 0 | 0 | destino | origem | BSSID |
+
+Por isso o quadro **leva três endereços**: o terceiro é o dispositivo do outro lado do AP, na rede cabeada, que o Ethernet não precisa. Os quadros de controle são curtos: o ACK e o CTS têm só o controle do quadro, a duração, o endereço do receptor e o FCS (14 bytes), e o RTS acrescenta o endereço do transmissor (20 bytes).
+
+### 2.5 O acesso ao meio: CSMA/CA
 
 Como o rádio não detecta colisão enquanto transmite, o Wi-Fi **evita** a colisão (CSMA/CA, *Carrier Sense Multiple Access with Collision Avoidance*), em vez de detectá-la, como a Ethernet antiga.
 
@@ -81,9 +140,9 @@ flowchart TD
   K -- "não" --> R["Colisão ou perda: dobra a janela<br/>e tenta de novo"]
 ```
 
-*Esquema 2 (disputa do meio).* Antes de transmitir, a estação ouve o meio por um intervalo (**DIFS**) e depois espera um **backoff** aleatório. O **SIFS**, mais curto, é o intervalo antes de uma resposta (como o ACK), o que garante a prioridade da resposta sobre os novos quadros. Cada quadro de dados precisa de um **ACK**: sem ele, o emissor assume que houve perda e **dobra** a janela do sorteio.
+*Esquema 3 (disputa do meio).* Antes de transmitir, a estação ouve o meio por um intervalo (**DIFS**) e depois espera um **backoff** aleatório. O **SIFS**, mais curto, é o intervalo antes de uma resposta (como o ACK), o que garante a prioridade da resposta sobre os novos quadros. Cada quadro de dados precisa de um **ACK**: sem ele, o emissor assume que houve perda e **dobra** a janela do sorteio.
 
-### 2.5 Terminal escondido e RTS/CTS
+### 2.6 Terminal escondido e RTS/CTS
 
 ```mermaid
 sequenceDiagram
@@ -98,14 +157,14 @@ sequenceDiagram
   P->>A: ACK
 ```
 
-*Esquema 3 (reserva do meio).* Duas estações podem não se ouvir, mas ambas ouvem o AP: é o problema do **terminal escondido**. O **RTS** pede a reserva e o **CTS**, que o AP envia, é ouvido por todos: quem o ouve acerta o seu **NAV** (*Network Allocation Vector*, um temporizador de silêncio virtual) e espera. O custo são dois quadros extras por transmissão.
+*Esquema 4 (reserva do meio).* Duas estações podem não se ouvir, mas ambas ouvem o AP: é o problema do **terminal escondido**. O **RTS** pede a reserva e o **CTS**, que o AP envia, é ouvido por todos: quem o ouve acerta o seu **NAV** (*Network Allocation Vector*, um temporizador de silêncio virtual) e espera. O custo são dois quadros extras por transmissão.
 
-### 2.6 Roaming e economia de energia
+### 2.7 Roaming e economia de energia
 
 - **Roaming:** quando o sinal do AP cai, o cliente procura outro AP **com o mesmo SSID** e envia uma **Reassociation** a ele. O AP novo e o antigo trocam informações pela rede cabeada. O tempo de troca é o que o usuário sente como corte em uma chamada.
 - **Economia de energia:** o cliente avisa que vai dormir com um quadro Null (bit de gerência de energia). O AP **guarda** os quadros que chegam e indica nos Beacons (no mapa de tráfego) que há dados. O cliente acorda, consulta (**PS-Poll**) e recebe os quadros guardados.
 
-### 2.7 Os canais
+### 2.8 Os canais
 
 ```mermaid
 flowchart LR
@@ -118,18 +177,21 @@ flowchart LR
   C6 -. "sem sobreposição" .- C11
 ```
 
-*Esquema 4 (canais sem sobreposição em 2,4 GHz).* Em 2,4 GHz, os canais adjacentes se sobrepõem. Os canais **1, 6 e 11** são o conjunto que não se sobrepõe, e por isso são os preferidos. Dois APs no mesmo canal (ou em canais sobrepostos) **dividem o tempo de ar**: cada um ouve o outro e adia a transmissão, e o desempenho cai.
+*Esquema 5 (canais sem sobreposição em 2,4 GHz).* Em 2,4 GHz, os canais adjacentes se sobrepõem. Os canais **1, 6 e 11** são o conjunto que não se sobrepõe, e por isso são os preferidos. Dois APs no mesmo canal (ou em canais sobrepostos) **dividem o tempo de ar**: cada um ouve o outro e adia a transmissão, e o desempenho cai.
 
-### 2.8 Como ler o diagrama do simulador
+### 2.9 O que cada modo e aba do simulador mostram
 
 - **Topologia:** clientes, pontos de acesso e a rede cabeada. A legenda distingue gerência (beacon, probe, autenticação, associação), controle (ACK, RTS, CTS, PS-Poll), dados e Ethernet, o handshake de chaves (EAPOL-Key) e colisão, quadro perdido ou descartado.
+- **Diagrama de sequência:** cada seta é um quadro 802.11, com o tipo e a duração no ar.
 - **Aba Estados:** o estado do cliente (sem autenticar, autenticado, associado) a cada instante.
 - **Aba Temporização:** SIFS, DIFS, slot, backoff e a duração de cada quadro.
 - **Aba Canais:** a ocupação e a sobreposição dos canais.
 - **Aba Energia:** o ciclo de sono e vigília do cliente e os quadros guardados no AP.
 - **Modos:** *Descoberta e associação*, *Acesso ao meio*, *Roaming e energia* e *Canais*.
 
-### 2.9 Limites do modelo e do diagrama
+Para a entrada na rede, use "Varredura passiva e rede aberta", "Varredura ativa com Probe Request" e "Rede com SSID oculto". Para o acesso ao meio, use "Esperar, sortear o backoff, transmitir e receber o ACK" e "O ACK se perde e o frame é repetido". Para as colisões, use "Dois clientes escolhem o mesmo slot" e "A mesma colisão, agora com RTS/CTS". Para o terminal escondido, use "Nó oculto sem RTS/CTS" e "Nó oculto com RTS/CTS". Para o roaming, use "O cliente se afasta e troca de AP" e "Cliente preso ao AP distante". Para a energia, use "Cliente que acorda a cada beacon". Para os canais, use "Canais 1 e 6: independentes", "Mesmo canal: as redes dividem o tempo" e "Canais 1 e 3: sobrepostos".
+
+### 2.10 Limites do modelo e do diagrama
 
 - É **um BSS por vez** (ou duas redes vizinhas, no modo Canais), um fluxo por cliente e taxas fixas: 54 Mb/s nos dados e 6 Mb/s nos quadros de controle e de gerência. Não há agregação, fragmentação, QoS (EDCA) nem camada física detalhada.
 - Os tempos usam os valores do OFDM em 5 GHz (SIFS de 16 µs e slot de 9 µs) em todos os cenários, inclusive nos de 2,4 GHz, onde o SIFS é de 10 µs. O foco são as **proporções**.
@@ -1625,6 +1687,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **BSS** | Basic Service Set, conjunto básico de serviço | um AP e os clientes associados a ele; é a célula básica de uma rede Wi-Fi |
 | **BSSID** | Basic Service Set Identifier, identificador do conjunto básico de serviço | endereço MAC do AP, que identifica o BSS nos frames e distingue APs com o mesmo SSID |
 | **BTM** | BSS Transition Management, gerenciamento de transição de BSS | recurso do 802.11v em que o AP sugere ao cliente trocar de AP, por exemplo por carga ou sinal fraco |
+| **CRC** | Cyclic Redundancy Check, verificação de redundância cíclica | código que detecta erros de transmissão, como o do FCS dos frames Ethernet e 802.11 |
 | **CRC-32** | Cyclic Redundancy Check de 32 bits | código de 32 bits usado como FCS no fim dos frames 802.11 e Ethernet |
 | **CSMA/CA** | Carrier Sense Multiple Access with Collision Avoidance, acesso múltiplo com escuta de portadora e prevenção de colisão | método do Wi-Fi para disputar o meio: escuta o canal, espera um tempo aleatório e confirma cada frame com ACK, porque o rádio não detecta colisões |
 | **CTS** | Clear to Send, liberado para enviar | frame de controle com que o AP autoriza o envio e faz os demais clientes esperarem |

@@ -7,6 +7,14 @@ A internet é um conjunto de milhares de redes administradas de forma independen
 
 O BGP-4 (*Border Gateway Protocol*, RFC 4271) é o protocolo que troca alcançabilidade entre AS. Ele é de **vetor de caminho**: cada rota carrega a lista dos AS que atravessou (o atributo AS_PATH), e essa lista dá a cada roteador informação para decidir e para evitar laços.
 
+**O que você aprende com este simulador.**
+
+- Explicar por que o roteamento entre sistemas autônomos é decidido por política, e não só por distância.
+- Acompanhar a sessão BGP (TCP 179, OPEN, KEEPALIVE) e o hold timer.
+- Ler o cabeçalho BGP, o OPEN e a estrutura do UPDATE e dos atributos.
+- Aplicar o processo de decisão (LOCAL_PREF, AS_PATH, ORIGIN, MED) e as ferramentas de política.
+- Reconhecer a regra valley-free e os riscos de confiança (sequestro, vazamento, flapping) com as defesas (RPKI e ROV).
+
 ### O diagrama da sessão
 
 \`\`\`mermaid
@@ -36,6 +44,43 @@ sequenceDiagram
 
 Se o **hold timer** vence sem ouvir nada do vizinho, a sessão cai e todas as rotas aprendidas dele são retiradas. A RFC sugere um hold time de 90 s e KEEPALIVE a cada um terço desse valor (seções 4.4 e 10); fabricantes usam outros padrões.
 
+### Os formatos: cabeçalho, OPEN e UPDATE
+
+Toda mensagem BGP começa com um cabeçalho de 19 bytes. O desenho mostra o cabeçalho, em linhas de 32 bits, na ordem de transmissão ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), seção 4.1).
+
+\`\`\`mermaid
+packet-beta
+  0-127: "Marcador (16 bytes, todos em 1)"
+  128-143: "Tamanho da mensagem"
+  144-151: "Tipo (1 a 4)"
+\`\`\`
+
+*Esquema 2 (o cabeçalho BGP).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O **marcador** tem 16 bytes com todos os bits em 1 (na versão 4 sem autenticação) e serve para o receptor se sincronizar no fluxo TCP. O **tamanho** vai de 19 (o KEEPALIVE, que é só o cabeçalho) a 4096 bytes. O **tipo** é 1 OPEN, 2 UPDATE, 3 NOTIFICATION e 4 KEEPALIVE.
+
+O corpo da mensagem **OPEN** vem logo depois do cabeçalho (RFC 4271, seção 4.2):
+
+\`\`\`mermaid
+packet-beta
+  0-7: "Versão (4)"
+  8-23: "Meu AS"
+  24-39: "Hold Time"
+  40-71: "BGP Identifier"
+  72-79: "Tamanho dos parâmetros"
+  80-111: "Parâmetros opcionais (variável)"
+\`\`\`
+
+*Esquema 3 (o corpo do OPEN).* O **Meu AS** tem 16 bits: para um AS de 32 bits, o campo leva o valor 23456 (AS_TRANS) e o número real viaja em uma capacidade negociada nos parâmetros opcionais (RFC 6793). O **Hold Time** proposto vale zero ou pelo menos 3 s, e a sessão usa o menor dos dois valores propostos. O **BGP Identifier** é um número de 32 bits, no formato de um endereço IPv4, que identifica o roteador e é o desempate final da decisão.
+
+O corpo do **UPDATE** tem três partes, nesta ordem (RFC 4271, seção 4.3):
+
+| Parte | O que carrega |
+| --- | --- |
+| Rotas retiradas | prefixos que deixam de ser alcançáveis por este vizinho |
+| Atributos de caminho | os atributos que valem para todos os prefixos anunciados na mensagem |
+| NLRI | a lista dos prefixos anunciados (*Network Layer Reachability Information*) |
+
+Cada atributo tem um formato de **tipo, tamanho e valor**: um byte de flags (opcional, transitivo, parcial e tamanho estendido), um byte de código do tipo (1 ORIGIN, 2 AS_PATH, 3 NEXT_HOP, 4 MED e 5 LOCAL_PREF), o tamanho e o valor. Por isso um UPDATE anuncia vários prefixos com **um único conjunto de atributos**, e a retirada e o anúncio podem vir na mesma mensagem.
+
 ### Os atributos que a rota carrega
 
 | Atributo | Função | Seção |
@@ -61,7 +106,7 @@ flowchart TD
   I --> D["7. Menor BGP Identifier: desempate final"]
 \`\`\`
 
-*Esquema 2 (processo de decisão).* O BGP escolhe **um** melhor caminho por prefixo, instala e repassa só esse. A ordem acima segue a RFC 4271, seção 9.1: o grau de preferência (LOCAL_PREF, seção 9.1.1) e depois os desempates da seção 9.1.2.2. Rotas com laço de AS_PATH são excluídas antes. Implementações acrescentam critérios próprios, como "rota originada localmente" nos fabricantes.
+*Esquema 4 (processo de decisão).* O BGP escolhe **um** melhor caminho por prefixo, instala e repassa só esse. A ordem acima segue a RFC 4271, seção 9.1: o grau de preferência (LOCAL_PREF, seção 9.1.1) e depois os desempates da seção 9.1.2.2. Rotas com laço de AS_PATH são excluídas antes. Implementações acrescentam critérios próprios, como "rota originada localmente" nos fabricantes.
 
 Duas ferramentas de política seguem desse processo:
 
@@ -79,7 +124,7 @@ flowchart TD
   M -- "rotas de peers e de provedores" --> O["Anuncia só aos clientes"]
 \`\`\`
 
-*Esquema 3 (regra valley-free).* Entre AS, as relações são de **cliente e provedor** (o cliente paga) e de **peering** (troca de tráfego entre as redes e seus clientes, em geral sem pagamento). A regra de exportação conhecida como *valley-free* (modelo de Gao e Rexford) é: rotas de clientes e rotas próprias vão a todos; rotas de peers e de provedores vão **só aos clientes**. Assim, nenhum AS oferece trânsito gratuito entre dois provedores ou dois peers.
+*Esquema 5 (regra valley-free).* Entre AS, as relações são de **cliente e provedor** (o cliente paga) e de **peering** (troca de tráfego entre as redes e seus clientes, em geral sem pagamento). A regra de exportação conhecida como *valley-free* (modelo de Gao e Rexford) é: rotas de clientes e rotas próprias vão a todos; rotas de peers e de provedores vão **só aos clientes**. Assim, nenhum AS oferece trânsito gratuito entre dois provedores ou dois peers.
 
 ### Quando a política falha: segurança do roteamento
 
@@ -93,7 +138,7 @@ O BGP foi desenhado na base da **confiança**: o protocolo aceita o que o vizinh
 
 A **RPKI** liga cada prefixo ao AS autorizado a originá-lo por meio de um ROA (RFC 9582), e o ROV (*Route Origin Validation*, RFC 6811) usa isso para marcar anúncios como válidos, inválidos ou desconhecidos. A RFC 9319 trata do cuidado com o campo *maxLength* dos ROAs.
 
-### Como ler o diagrama do simulador
+### O que cada modo e aba do simulador mostram
 
 - **Topologia:** seis sistemas autônomos e as **relações comerciais** entre eles (cliente, provedor e peer).
 - **Diagrama de sequência e legenda de cores:** TCP (porta 179), OPEN e KEEPALIVE, UPDATE, retirada ou NOTIFICATION e tráfego de dados.
@@ -101,6 +146,8 @@ A **RPKI** liga cada prefixo ao AS autorizado a originá-lo por meio de um ROA (
 - **Aba Tabela BGP:** as rotas de cada AS, com os atributos e a marca do melhor caminho.
 - **Aba Comandos:** a saída dos comandos de consulta do roteador escolhido, no formato do Cisco IOS.
 - **Modos:** *Sessões* (abertura e hold timer), *Rotas e política* (propagação, LOCAL_PREF, prepend, falhas) e *Segurança e defesa* (sequestro, ROV, vazamento e *flapping*).
+
+Para a sessão, use "Estabelecimento da sessão" e "Hold timer". Para a propagação, use "Propagação do anúncio" e "Exportação entre provedores e peers". Para a seleção de caminho, use "AS_PATH mais curto", "Desempate por router ID", "LOCAL_PREF (saída)" e "AS-path prepend (entrada)". Para as falhas, use "Falha de enlace" e "Retirada do prefixo". Para os riscos e as defesas, use "Sequestro de prefixo", "Defesa: filtro de prefixos", "Defesa: RPKI / ROV", "Vazamento de rota" e "Flapping de rota".
 
 ### Limites do modelo e do diagrama
 

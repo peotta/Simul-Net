@@ -11,6 +11,14 @@ Três ideias sustentam o modelo:
 - **Protocolo entre pares:** a camada N de um sistema conversa com a camada N do outro, por meio de um cabeçalho próprio que viaja junto com os dados. O cabeçalho é o "idioma" da conversa entre as duas camadas.
 - **Encapsulamento:** para enviar, cada camada trata o que recebeu da camada de cima como carga útil e acrescenta o seu cabeçalho (a Ethernet também acrescenta um trailer, o FCS). Para receber, o caminho é o inverso: cada camada confere, retira o seu cabeçalho e entrega o conteúdo à camada de cima.
 
+**O que você aprende com este simulador.**
+
+- Nomear as sete camadas, a unidade de dados de cada uma (PDU) e o identificador que a distingue.
+- Explicar o serviço, o protocolo entre pares e o encapsulamento, da aplicação até os bits.
+- Localizar cada cabeçalho (Ethernet, IPv4, TCP) no quadro em trânsito e o que ele identifica na camada seguinte.
+- Dizer até que camada cada dispositivo (switch, roteador, host) sobe a pilha, e o que muda a cada salto.
+- Relacionar o modelo OSI à pilha TCP/IP e reconhecer os limites do modelo.
+
 ### O diagrama das sete camadas
 
 \`\`\`mermaid
@@ -43,7 +51,7 @@ Os livros costumam agrupar as camadas em dois blocos, o que ajuda a lembrar quem
 - **Camada 4 (transporte):** é fim a fim, também só nas pontas: os equipamentos do caminho, como o switch e o roteador comuns, não leem o segmento.
 - **Camadas 1 a 3 (camadas de rede):** levam os bits de um ponto a outro e existem também nos equipamentos do caminho.
 
-### Como ler o diagrama do simulador
+### O que cada modo e aba do simulador mostram
 
 O palco do simulador desenha o diagrama das sete camadas **quatro vezes**, uma para cada dispositivo do caminho, e mostra a unidade de dados em movimento entre elas.
 
@@ -53,8 +61,11 @@ O palco do simulador desenha o diagrama das sete camadas **quatro vezes**, uma p
 - **O nome acima da PDU:** muda conforme a camada em que ela está: dados, segmento, pacote, quadro e bits. No cabo, o nome é "bits" e aparecem o preâmbulo (\`10101010\`), o SFD (\`10101011\`) e os primeiros bits do quadro.
 - **A camada em ação:** a caixa em destaque, com borda âmbar, é a camada que está trabalhando naquele passo. O botão **Passo** avança de camada em camada, e a PDU desliza até a próxima.
 - **Cabos:** ligam as bases das pilhas. Entre o cliente e o switch é a LAN, entre o switch e o roteador é a LAN ou o tronco 802.1Q (quando a opção de VLAN está ligada), e entre o roteador e o servidor é a WAN.
+- **Abas:** *Bytes do quadro* mostra os bytes do quadro em trânsito, e *Salto a salto* mostra o que muda e o que não muda em cada dispositivo do caminho.
 
 O trajeto de ida segue sempre o mesmo padrão: desce a pilha do cliente (7, 6 e 5, 4, 3, 2, 1), atravessa o cabo, sobe até a camada 2 no switch e desce de novo, sobe até a camada 3 no roteador e desce de novo, atravessa o cabo e sobe a pilha inteira no servidor. A resposta faz o caminho inverso.
+
+Para a descida e a subida pela pilha, use o cenário "Requisição e resposta HTTP". Para ver o que a etiqueta de VLAN acrescenta ao quadro e a quem ela serve, use "Com etiqueta 802.1Q no tronco".
 
 ### Encapsulamento e desencapsulamento
 
@@ -79,6 +90,39 @@ A segunda vista do palco, **encapsulamento aninhado**, mostra a mesma ideia como
 
 Cada cabeçalho carrega o **identificador da camada seguinte**. É assim que, na subida, a camada 2 sabe que o conteúdo é IPv4, a camada 3 sabe que é TCP e a camada 4 sabe a qual processo entregar.
 
+### O quadro completo, campo a campo
+
+O desenho mostra o quadro que o simulador leva do cliente ao servidor: o cabeçalho Ethernet (camada 2), o cabeçalho IPv4 (camada 3), o cabeçalho TCP (camada 4) e o início dos dados HTTP (camadas 5 a 7), com o FCS no fim. Os cabeçalhos aparecem sem opções e sem a etiqueta 802.1Q, e a posição de cada campo é a real, contada a partir do primeiro bit do quadro.
+
+\`\`\`mermaid
+packet-beta
+  0-47: "L2 MAC de destino"
+  48-95: "L2 MAC de origem"
+  96-111: "L2 Tipo (0x0800)"
+  112-119: "L3 Versão e IHL"
+  120-127: "L3 DSCP e ECN"
+  128-143: "L3 Tamanho total"
+  144-159: "L3 Identificação"
+  160-175: "L3 Flags e deslocamento"
+  176-183: "L3 TTL"
+  184-191: "L3 Protocolo (6)"
+  192-207: "L3 Checksum do cabeçalho"
+  208-239: "L3 IP de origem"
+  240-271: "L3 IP de destino"
+  272-287: "L4 Porta de origem"
+  288-303: "L4 Porta de destino"
+  304-335: "L4 Número de sequência"
+  336-367: "L4 Número de confirmação"
+  368-383: "L4 Deslocamento e flags"
+  384-399: "L4 Janela"
+  400-415: "L4 Checksum"
+  416-431: "L4 Ponteiro urgente"
+  432-463: "L5-7 Dados HTTP (condensado)"
+  464-495: "L2 FCS"
+\`\`\`
+
+*Esquema 3 (o quadro completo, camada por camada).* O prefixo de cada campo indica a camada dona (L2 enlace, L3 rede, L4 transporte, L5-7 dados). Os dados HTTP aparecem **condensados**: ocupam o tamanho da mensagem. Repare que cada cabeçalho carrega o identificador da camada seguinte: o **Tipo** (0x0800) diz que o conteúdo é IPv4, o **Protocolo** (6) diz que é TCP, e a **porta de destino** aponta o processo que recebe os dados. O preâmbulo e o SFD, de 8 bytes, vêm antes do quadro e não aparecem no desenho. Os campos desses cabeçalhos estão detalhados nos simuladores de IPv4, de TCP e de switching.
+
 ### O que cada dispositivo faz com as camadas
 
 \`\`\`mermaid
@@ -88,7 +132,7 @@ flowchart LR
   R -- "quadro novo" --> S["Servidor: camadas 1 a 7"]
 \`\`\`
 
-*Esquema 3 (dispositivos e camadas).* Cada dispositivo só sobe a pilha até a camada de que precisa para decidir.
+*Esquema 4 (dispositivos e camadas).* Cada dispositivo só sobe a pilha até a camada de que precisa para decidir.
 
 | Dispositivo | Camadas | O que lê | O que altera |
 | --- | --- | --- | --- |

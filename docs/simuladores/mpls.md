@@ -25,6 +25,14 @@ No encaminhamento IP comum, **cada roteador** examina o endereço de destino e p
 
 Hoje o ganho não é a velocidade da consulta, e sim a **flexibilidade**: o MPLS permite engenharia de tráfego, recuperação rápida de falhas e, principalmente, **VPNs de camada 3** sobre uma infraestrutura compartilhada, porque o núcleo não precisa conhecer as rotas dos clientes.
 
+**O que você aprende com este simulador.**
+
+- Explicar a diferença entre o encaminhamento IP salto a salto e o encaminhamento por rótulo.
+- Ler a entrada da pilha de rótulos (rótulo, TC, S e TTL) e onde ela fica no quadro.
+- Acompanhar o LDP, a LIB e a LFIB e as operações push, swap e pop.
+- Entender o PHP, o Explicit NULL e os modelos de TTL Uniform e Pipe no traceroute.
+- Explicar a L3VPN, com a VRF, o RD, o RT, o MP-BGP e os dois rótulos.
+
 ### 2.2 O diagrama do caminho rotulado
 
 ```mermaid
@@ -42,7 +50,21 @@ As operações são três: **push** (impor um rótulo, na entrada), **swap** (tr
 
 ### 2.3 O cabeçalho de rótulo
 
-O rótulo fica **entre** o cabeçalho de enlace e o cabeçalho IP ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032), seção 2.1). Cada entrada da pilha tem 32 bits.
+O rótulo fica **entre** o cabeçalho de enlace e o cabeçalho IP ([RFC 3032](https://www.rfc-editor.org/rfc/rfc3032), seção 2.1). O desenho mostra um quadro Ethernet com uma entrada de rótulo, em linhas de 32 bits, na ordem de transmissão.
+
+```mermaid
+packet-beta
+  0-47: "MAC de destino"
+  48-95: "MAC de origem"
+  96-111: "Tipo (0x8847)"
+  112-131: "Rótulo"
+  132-134: "TC"
+  135: "S"
+  136-143: "TTL"
+  144-175: "Pacote IP (cabeçalho e dados)"
+```
+
+*Esquema 2 (uma entrada de rótulo em um quadro Ethernet).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O Tipo 0x8847 indica unicast MPLS (0x8848, multicast), e o pacote IP aparece condensado no desenho. Cada entrada da pilha tem 32 bits, e o pacote pode levar **várias** entradas, uma depois da outra: o bit S vale 1 só na última.
 
 | Campo | Tamanho | Função |
 | --- | --- | --- |
@@ -70,7 +92,7 @@ sequenceDiagram
   B->>A: Label Mapping: FEC 10.0.0.0/24, rótulo 200
 ```
 
-*Esquema 2 (descoberta, sessão e mapeamento de rótulos).* O LDP (*Label Distribution Protocol*, [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036)) começa com **Hello** por UDP (descoberta básica, seção 2.4.1), abre uma **sessão TCP** (seção 2.5) e então os vizinhos trocam **Label Mapping**: cada mensagem associa uma FEC a um rótulo (seção 3.5.7).
+*Esquema 3 (descoberta, sessão e mapeamento de rótulos).* O LDP (*Label Distribution Protocol*, [RFC 5036](https://www.rfc-editor.org/rfc/rfc5036)) começa com **Hello** por UDP (descoberta básica, seção 2.4.1), abre uma **sessão TCP** (seção 2.5) e então os vizinhos trocam **Label Mapping**: cada mensagem associa uma FEC a um rótulo (seção 3.5.7).
 
 - A **FEC** (*Forwarding Equivalence Class*) é o conjunto de pacotes tratados do mesmo modo, por exemplo todos os destinos de um prefixo.
 - O modo típico é o **Downstream Unsolicited** (o vizinho anuncia sem esperar pedido) com **controle independente** e **retenção liberal** ([RFC 5036](https://www.rfc-editor.org/rfc/rfc5036), seção 2.6).
@@ -87,7 +109,7 @@ flowchart TD
   Q -- "sem entrada" --> D["Descarta"]
 ```
 
-*Esquema 3 (decisão de um LSR).* A consulta é só pelo rótulo de entrada, e o resultado diz a ação e o próximo salto. Na entrada da rede, o PE faz o oposto: consulta o **IP** e faz o **push**.
+*Esquema 4 (decisão de um LSR).* A consulta é só pelo rótulo de entrada, e o resultado diz a ação e o próximo salto. Na entrada da rede, o PE faz o oposto: consulta o **IP** e faz o **push**.
 
 ### 2.6 PHP: quem remove o último rótulo
 
@@ -113,16 +135,19 @@ flowchart LR
   PE1 -. "MP-BGP: rotas VPNv4 com RD, RT e rótulo de VPN" .-> PE2
 ```
 
-*Esquema 4 (VPN de camada 3, [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364)).* Cada PE mantém uma tabela de roteamento por cliente, a **VRF** (seção 3). O **RD** (*Route Distinguisher*, seção 4.1) torna únicos prefixos iguais de clientes diferentes, e o **RT** (*Route Target*, seção 4.3.1) decide em quais VRFs a rota entra. Os PEs trocam as rotas dos clientes por **MP-BGP**. O pacote leva **dois rótulos**: o de **transporte** (externo), que leva o pacote de um PE ao outro, e o de **VPN** (interno), que o egresso usa para escolher a VRF e o destino do cliente (seções 4.3.2 e 5).
+*Esquema 5 (VPN de camada 3, [RFC 4364](https://www.rfc-editor.org/rfc/rfc4364)).* Cada PE mantém uma tabela de roteamento por cliente, a **VRF** (seção 3). O **RD** (*Route Distinguisher*, seção 4.1) torna únicos prefixos iguais de clientes diferentes, e o **RT** (*Route Target*, seção 4.3.1) decide em quais VRFs a rota entra. Os PEs trocam as rotas dos clientes por **MP-BGP**. O pacote leva **dois rótulos**: o de **transporte** (externo), que leva o pacote de um PE ao outro, e o de **VPN** (interno), que o egresso usa para escolher a VRF e o destino do cliente (seções 4.3.2 e 5).
 
 Como os roteadores P olham só o rótulo de transporte, eles **não precisam conhecer as rotas dos clientes**: é essa a propriedade que torna a VPN escalável.
 
-### 2.9 Como ler o diagrama do simulador
+### 2.9 O que cada modo e aba do simulador mostram
 
 - **Topologia:** um núcleo MPLS com **2 PE e 4 P** e um host atrás de cada PE. A legenda de cores distingue pacote de dados ou Hello, sessão LDP ou Echo Reply, Label Mapping, MP-BGP e ICMP de erro ou falha.
+- **Diagrama de sequência:** cada seta é um pacote com o rótulo (ou a pilha de rótulos) que ele leva naquele trecho.
 - **Aba LIB / LFIB:** as tabelas do roteador escolhido, no instante atual: rótulo de entrada, ação e rótulo de saída.
 - **Aba Terminal:** a saída dos comandos de consulta ao MPLS, como o usuário a veria.
 - **Modos:** *LDP e LSP* (Hello, sessão, mapeamento e tabelas), *Plano de dados* (ping com push, swap e pop, e L3VPN), *TTL e traceroute* (modelos Uniform e Pipe) e *Falha de enlace* (a recuperação pelo rótulo já guardado na LIB).
+
+Para o plano de controle, use "Montagem do LSP". Para as operações, use "Push, swap e pop" e, para o que acontece sem o LDP, "Ping antes do LDP". Para o rótulo do egresso, use "explicit-null" e "Sem PHP". Para o TTL, use "TTL Uniform" e "TTL Pipe". Para a VPN, use "L3VPN: MP-BGP e rótulos VPN", "L3VPN: pilha de dois rótulos" e "L3VPN sem LDP: o PE descarta". Para a recuperação, use "Falha de enlace".
 
 ### 2.10 Limites do modelo e do diagrama
 

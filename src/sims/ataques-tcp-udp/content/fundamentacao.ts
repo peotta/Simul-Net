@@ -6,6 +6,14 @@ export const fundamentacao: string = `
 
 Os protocolos de transporte foram desenhados em uma internet de **confiança**: o TCP mantém **estado** em cada ponta, e o UDP aceita datagramas sem verificar a origem. Essas propriedades, úteis para o desempenho, são o que os ataques de **negação de serviço** e de **abuso de estado** exploram. O simulador mostra, em um **ambiente didático isolado** (sem tráfego real), o **efeito** de cada ataque, **por que** ele funciona e **qual defesa** o neutraliza. Os cenários ficam no nível defensivo: aviso, efeito e defesa.
 
+**O que você aprende com este simulador.**
+
+- Explicar por que o TCP (que mantém estado) e o UDP (que não verifica a origem) são alvos de abuso.
+- Relacionar cada ataque ao campo do cabeçalho ou ao comportamento do protocolo que ele explora.
+- Aplicar a defesa em profundidade e calcular a chance total de neutralização das camadas.
+- Distinguir a defesa na origem, no serviço e na vítima (BCP 38, limite de taxa, mitigação upstream).
+- Ler a telemetria e a avaliação: carga, serviço legítimo e falsos positivos.
+
 ### O diagrama de um ataque e das camadas de defesa
 
 \`\`\`mermaid
@@ -19,6 +27,24 @@ flowchart LR
 \`\`\`
 
 *Esquema 1 (defesa em profundidade).* Cada pacote atravessa os controles ativos **em camadas**, e é barrado se **algum** o neutraliza. A **eficácia** de um controle é a chance de ele neutralizar um pacote sozinho. Como as camadas são tratadas como independentes, a chance total de neutralização é **1 menos o produto de (1 menos a eficácia de cada controle)**, e **não** a soma das porcentagens. O **serviço legítimo** mede quantas requisições do cliente foram atendidas: ele cai quando o servidor satura, e também quando um controle gera **falsos positivos**.
+
+### O que cada ataque explora
+
+Cada ataque se apoia em um campo do cabeçalho ou em um comportamento do protocolo, descritos nos simuladores de TCP, UDP, ICMP e DNS. A tabela liga o ataque ao que o torna possível, **no nível defensivo**.
+
+| Ataque | O que ele explora | Por que o receptor não distingue | Onde ver o fundamento |
+| --- | --- | --- | --- |
+| SYN flood | a flag SYN e a reserva de estado | o servidor guarda estado antes de ver o ACK final | simulador de TCP |
+| RST injection | a flag RST e o número de sequência | o segmento é aceito se o número cai na janela de recepção | simulador de TCP |
+| Session hijacking | números de sequência e de confirmação | quem vê o tráfego conhece os números esperados | simulador de TCP |
+| ACK e port scan | a resposta de cada porta (RST ou silêncio) | a resposta revela se a porta existe e se há filtro | simuladores de TCP e de firewall |
+| Slowloris e varredura lenta | conexões abertas e quase paradas | cada conexão ocupa recursos pelo tempo que o cliente quiser | simulador de TCP |
+| UDP flood e DDoS | a ausência de conexão e de estado | não há handshake que limite a taxa | simulador de UDP |
+| Amplification e spoofing | o endereço de origem não autenticado e a resposta maior que a consulta | o UDP não prova quem enviou | simuladores de UDP e de DNS |
+| UDP port scan | o ICMP de porta inalcançável (tipo 3, código 3) ou o silêncio | a resposta ICMP revela a porta fechada | simuladores de UDP e de ICMP |
+| DNS water torture | nomes aleatórios que não existem (NXDOMAIN) | o resolvedor repassa cada consulta ao servidor autoritativo | simulador de DNS |
+
+Por isso as defesas se organizam pela **origem do problema**: validar a origem (BCP 38), limitar o estado reservado (SYN cookies), limitar a taxa de respostas e absorver o volume upstream.
 
 ### Ataques ao TCP: abuso de estado
 
@@ -63,14 +89,17 @@ flowchart TD
 | Reflexão e amplificação | origem falsificada e resposta maior que a consulta | BCP 38, serviços não abertos, limite de taxa |
 | Botnet distribuído (DDoS) | muitas origens reais, sem um endereço que se possa bloquear | mitigação upstream e capacidade (e não bloqueio de endereços) |
 
-### Como ler o diagrama do simulador
+### O que cada modo e aba do simulador mostram
 
 - **Topologia:** onde cada controle atua e por onde passa cada pacote. A legenda distingue ataque, neutralizado, resposta, legítimo e legítimo descartado.
+- **Diagrama de sequência:** cada seta é um pacote do ataque, da defesa ou do cliente legítimo, e os controles aparecem barrando em camadas.
 - **Aba Efeito dos controles:** quanto cada controle neutralizou, no instante atual.
 - **Aba Configuração de referência:** trechos **ilustrativos** de configuração dos controles.
 - **Aba Avaliação:** o balanço do cenário: carga, serviço legítimo, falsos positivos e os custos das defesas.
 - **Telemetria:** vale sempre **ataque rumo à vítima = neutralizados + chegaram à vítima**. Na reflexão, as requisições enviadas aos refletores aparecem **à parte**, porque não vão para a vítima, e cada uma não barrada vira várias respostas que contam como ataque rumo à vítima. A **carga** é a fração da capacidade do servidor e para em 100%: quando a demanda passa disso, o excedente aparece como requisições legítimas descartadas.
 - **Modos:** *Ataques TCP* e *Ataques UDP*.
+
+Os cenários TCP são *TCP SYN flood*, *TCP RST injection*, *TCP session hijacking*, *TCP ACK / port scan*, *TCP Slowloris (conexões lentas)* e *TCP varredura lenta (low and slow)*. Os cenários UDP são *UDP flood*, *UDP DDoS distribuído (botnet)*, *UDP amplification*, *UDP spoofing / reflection*, *UDP port scan* e *UDP DNS water torture*. Para cada um, ligue as defesas indicadas como essenciais, e compare a carga, o serviço legítimo e os falsos positivos na aba Avaliação.
 
 ### Limites do modelo e do diagrama
 

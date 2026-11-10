@@ -7,6 +7,14 @@ O IP não avisa quando algo dá errado: um roteador sem rota simplesmente descar
 
 O ICMP **informa**, mas não corrige: a decisão de tentar de novo, mudar de rota ou desistir é de quem recebe o aviso.
 
+**O que você aprende com este simulador.**
+
+- Explicar o papel do ICMP como canal de aviso do IP e por que ele informa sem corrigir.
+- Ler o formato da mensagem ICMP (tipo, código, checksum) e o que o erro carrega do pacote original.
+- Distinguir eco, tempo excedido e destino inalcançável, com os códigos mais comuns.
+- Entender como ping, traceroute e PMTUD se apoiam em mensagens ICMP.
+- Reconhecer o que o filtro de ICMP mal planejado quebra, e como observar um scan UDP no nível defensivo.
+
 ### O diagrama das mensagens
 
 \`\`\`mermaid
@@ -27,17 +35,38 @@ sequenceDiagram
 
 ### Formato e tipos de mensagem
 
-Toda mensagem ICMP começa com **tipo** (1 byte), **código** (1 byte) e **checksum** (2 bytes, que cobre toda a mensagem). O restante depende do tipo (RFC 792).
+Toda mensagem ICMP viaja dentro de um datagrama IP (protocolo 1) e começa com **tipo** (1 byte), **código** (1 byte) e **checksum** (2 bytes, que cobre toda a mensagem). O restante depende do tipo ([RFC 792](https://www.rfc-editor.org/rfc/rfc792)).
+
+\`\`\`mermaid
+packet-beta
+  0-7: "Tipo"
+  8-15: "Código"
+  16-31: "Checksum"
+  32-63: "Resto do cabeçalho (depende do tipo)"
+  64-95: "Dados (depende do tipo)"
+\`\`\`
+
+*Esquema 2 (formato geral da mensagem ICMP).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O tipo diz a família da mensagem, e o código refina o motivo. O significado do "resto do cabeçalho" muda com o tipo: no eco, são o identificador e o número de sequência; no destino inalcançável com código 4, os 16 bits finais levam o MTU do próximo salto (RFC 1191); no Redirect, o endereço do roteador melhor; no tempo excedido, o campo não é usado.
+
+\`\`\`mermaid
+packet-beta
+  0-7: "Tipo (8 ou 0)"
+  8-15: "Código (0)"
+  16-31: "Checksum"
+  32-47: "Identificador"
+  48-63: "Número de sequência"
+  64-95: "Dados do eco"
+\`\`\`
+
+*Esquema 3 (Echo Request e Echo Reply).* O eco leva um **identificador** e um **número de sequência**, que o ping usa para casar cada resposta com o pedido que a originou; o Echo Reply devolve os mesmos valores e os mesmos dados. As mensagens de erro, ao contrário, carregam o **cabeçalho IP original mais os 8 primeiros bytes** dos dados do datagrama que as provocou (RFC 792). Com isso, quem recebe o aviso identifica a conexão ou o processo afetado, pois as portas do TCP e do UDP estão nesses 8 bytes.
 
 | Tipo | Mensagem | Códigos principais |
 | --- | --- | --- |
 | 0 | Echo Reply (resposta de eco) | 0 |
 | 8 | Echo (pedido de eco) | 0 |
-| 3 | Destination Unreachable (destino inalcançável) | 0 rede, 1 host, 2 protocolo, 3 porta, 4 fragmentação necessária com DF ligado |
+| 3 | Destination Unreachable (destino inalcançável) | 0 rede, 1 host, 2 protocolo, 3 porta, 4 fragmentação necessária com DF ligado, 13 proibido por filtro administrativo (RFC 1812) |
 | 11 | Time Exceeded (tempo excedido) | 0 TTL esgotado em trânsito, 1 tempo de remontagem excedido |
 | 5 | Redirect | 0 rede, 1 host |
-
-As mensagens de erro carregam o **cabeçalho IP original mais os 8 primeiros bytes** dos dados do datagrama que as provocou (RFC 792). Com isso, quem recebe o aviso identifica a conexão ou o processo afetado, pois as portas do TCP e do UDP estão nesses 8 bytes.
 
 Duas regras evitam tempestades de avisos: **não se envia ICMP de erro sobre outro ICMP de erro**, e só se avisa sobre o **primeiro fragmento** de um datagrama fragmentado (RFC 792). A RFC 1812 acrescenta que os roteadores devem limitar a taxa dos erros que geram.
 
@@ -51,16 +80,18 @@ flowchart TD
   D["PMTUD: DF ligado"] --> R4["Roteador responde tipo 3, código 4:<br/>o pacote não cabe no enlace"]
 \`\`\`
 
-*Esquema 2 (ferramentas e a mensagem em que se apoiam).* O **ping** usa o par eco. O **traceroute** envia pacotes com TTL crescente e lê o endereço de cada roteador que responde com tempo excedido: é uma técnica, e não um protocolo próprio. O **PMTUD** (*Path MTU Discovery*, RFC 1191) usa o aviso de código 4 para descobrir o maior pacote que cabe no caminho; os problemas práticos de filtrar esse aviso estão na RFC 2923.
+*Esquema 4 (ferramentas e a mensagem em que se apoiam).* O **ping** usa o par eco. O **traceroute** envia pacotes com TTL crescente e lê o endereço de cada roteador que responde com tempo excedido: é uma técnica, e não um protocolo próprio. O **PMTUD** (*Path MTU Discovery*, RFC 1191) usa o aviso de código 4 para descobrir o maior pacote que cabe no caminho; os problemas práticos de filtrar esse aviso estão na RFC 2923.
 
 Isso explica um erro comum de projeto: **bloquear todo o ICMP** quebra o PMTUD e o traceroute. O correto é filtrar pelo tipo, e não descartar tudo.
 
-### Como ler o diagrama do simulador
+### O que cada modo e aba do simulador mostram
 
 - **Topologia:** o PC-A, três roteadores e o servidor. O destaque mostra por onde o pacote passa, e onde ele é descartado.
 - **Diagrama de sequência:** as setas são os pacotes e as mensagens ICMP de volta, com o TTL em cada salto.
-- **Abas:** *Terminal* mostra a saída do comando como o usuário a veria, *Comando* explica cada parte do comando usado, e *Rotas* mostra as tabelas dos roteadores.
+- **Abas:** *Terminal* mostra a saída do comando como o usuário a veria, *Comando* explica cada parte do comando usado, e *Rotas* mostra as tabelas dos roteadores. Na aba Mensagem, o cabeçalho de cada mensagem é aberto campo a campo.
 - **Modos:** *Ping*, *Traceroute e tracert* e *Scan UDP (hping3)*. O scan é mostrado só no nível defensivo: o que o administrador observa e como se proteger.
+
+Para o eco e o tempo excedido, use "Echo (ping)" e "TTL expirado". Para o caminho salto a salto, use "traceroute (UDP)" e "tracert (Windows)". Para os avisos de destino inalcançável, use "Rede inalcançável", "Host inalcançável" e "Porta inalcançável". Para o MTU, use "Fragmentação" e "PMTUD (DF)". Para o que o filtro quebra, use "Proibido (3/13)", "Filtro silencioso", "Buraco negro PMTUD" e "Loop de roteamento".
 
 ### Limites do modelo e do diagrama
 

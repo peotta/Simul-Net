@@ -23,6 +23,14 @@ O IPv4 tem endereços de 32 bits, cerca de 4,3 bilhões, e a internet os esgotou
 
 O serviço continua sendo de **melhor esforço**, como no IPv4: o IP não garante entrega, ordem nem ausência de duplicatas. Cada roteador decide sozinho, olhando só o destino e a própria tabela de rotas.
 
+**O que você aprende com este simulador.**
+
+- Explicar o que o IPv6 muda em relação ao IPv4 (endereço, cabeçalho, fragmentação, broadcast).
+- Ler e compactar um endereço IPv6 e separar o prefixo do identificador de interface.
+- Reconhecer os tipos de endereço (enlace local, ULA, global, multicast) e o alcance de cada um.
+- Acompanhar o SLAAC, a detecção de duplicidade (DAD) e o Neighbor Discovery no lugar do ARP.
+- Ler o cabeçalho de 40 bytes campo a campo e prever a decisão de encaminhamento e os erros ICMPv6.
+
 ### 2.2 O que muda em relação ao IPv4
 
 | Assunto | IPv4 | IPv6 |
@@ -145,16 +153,60 @@ flowchart TD
 
 ### 2.9 O cabeçalho fixo de 40 bytes
 
+O cabeçalho IPv6 tem tamanho fixo. O desenho mostra os campos em linhas de 32 bits, na ordem de transmissão ([RFC 8200](https://www.rfc-editor.org/rfc/rfc8200), seção 3).
+
 ```mermaid
-flowchart LR
-  A["Versão, classe de tráfego e rótulo de fluxo<br/>4 bytes"] --> B["Comprimento da carga e próximo cabeçalho<br/>3 bytes"] --> C["Hop Limit<br/>1 byte"] --> D["Origem<br/>16 bytes"] --> E["Destino<br/>16 bytes"]
+packet-beta
+  0-3: "Versão (6)"
+  4-11: "Classe de tráfego"
+  12-31: "Rótulo de fluxo"
+  32-47: "Comprimento da carga"
+  48-55: "Próximo cabeçalho"
+  56-63: "Hop Limit"
+  64-191: "Endereço de origem (128 bits)"
+  192-319: "Endereço de destino (128 bits)"
 ```
 
-*Esquema 6 (os campos do cabeçalho).* O cabeçalho tem tamanho fixo, o que facilita o trabalho dos roteadores, e não tem checksum: a integridade fica com o protocolo de cima. O checksum do ICMPv6 inclui as origens e destinos IPv6 em um pseudocabeçalho ([RFC 8200](https://www.rfc-editor.org/rfc/rfc8200), seção 8.1; [RFC 4443](https://www.rfc-editor.org/rfc/rfc4443), seção 2.3). Opções, quando existem, vão em **cabeçalhos de extensão** depois deste.
+*Esquema 6 (o cabeçalho IPv6).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. São 40 bytes no total, sem opções e **sem checksum**: a integridade fica com o protocolo de cima, e o checksum do ICMPv6, do TCP e do UDP inclui as origens e destinos IPv6 em um pseudocabeçalho ([RFC 8200](https://www.rfc-editor.org/rfc/rfc8200), seção 8.1; [RFC 4443](https://www.rfc-editor.org/rfc/rfc4443), seção 2.3). A tabela abaixo descreve todos os campos, em ordem.
 
-### 2.10 Como o simulador mostra essas ideias
+| Campo | Posição (bits) | Tamanho | Função |
+| --- | --- | --- | --- |
+| Versão | 0 a 3 | 4 bits | sempre 6 |
+| Classe de tráfego | 4 a 11 | 8 bits | prioridade e marcação de congestionamento (6 bits de DSCP e 2 de ECN, [RFC 2474](https://www.rfc-editor.org/rfc/rfc2474) e [RFC 3168](https://www.rfc-editor.org/rfc/rfc3168)) |
+| Rótulo de fluxo | 12 a 31 | 20 bits | identifica pacotes de um mesmo fluxo, para tratamento igual ([RFC 6437](https://www.rfc-editor.org/rfc/rfc6437)); zero quando não usado |
+| Comprimento da carga | 32 a 47 | 16 bits | bytes depois deste cabeçalho, incluindo os cabeçalhos de extensão |
+| Próximo cabeçalho | 48 a 55 | 8 bits | tipo do que vem a seguir: um cabeçalho de extensão ou o protocolo de cima |
+| Hop Limit | 56 a 63 | 8 bits | limite de saltos, decrementado por cada roteador; com zero, o pacote é descartado |
+| Endereço de origem | 64 a 191 | 128 bits | quem enviou |
+| Endereço de destino | 192 a 319 | 128 bits | para quem vai |
 
-O simulador tem dois modos. O **Endereçamento e SLAAC** mostra como o host A forma o endereço de enlace local, o testa por DAD, pede o RA, forma o endereço global e usa o resultado para falar com um vizinho, com o roteador, com o grupo multicast ou com um endereço sem rota. O **Encaminhamento** leva um ping por quatro roteadores com tabelas estáticas e mostra a escolha do prefixo mais específico, o Neighbor Discovery no lugar do ARP, o Hop Limit e os avisos ICMPv6. As limitações estão na aba Referência.
+O campo **Próximo cabeçalho** usa os mesmos números de protocolo do IPv4. Os mais comuns são estes:
+
+| Valor | O que vem a seguir |
+| --- | --- |
+| 6 | TCP |
+| 17 | UDP |
+| 58 | ICMPv6 |
+| 0 | cabeçalho de extensão Hop-by-Hop (opções lidas por todos os roteadores do caminho) |
+| 43 | cabeçalho de extensão de roteamento |
+| 44 | cabeçalho de extensão de fragmento (a fragmentação é feita só pela origem) |
+| 60 | cabeçalho de extensão de opções de destino |
+| 59 | nada: não há cabeçalho depois deste |
+
+As opções, quando existem, vão em **cabeçalhos de extensão** entre este cabeçalho e o protocolo de cima, encadeados pelo campo Próximo cabeçalho ([RFC 8200](https://www.rfc-editor.org/rfc/rfc8200), seção 4). Os roteadores só leem o cabeçalho de extensão Hop-by-Hop.
+
+### 2.10 O que cada modo e aba do simulador mostram
+
+- **Topologia:** o PC-A, os roteadores e os servidores, com o destaque do caminho do pacote e do ponto em que ele é descartado.
+- **Diagrama de sequência:** cada seta é uma mensagem (NS, NA, RS, RA ou o pacote de dados), com o Hop Limit em cada salto.
+- **Aba Tabela de rotas:** as rotas estáticas de cada roteador, com a conectada (C) ou estática (S) de cada uma.
+- **Aba Endereços:** a anatomia do endereço de enlace local do host A, com o MAC e o identificador de interface (modo Endereçamento e SLAAC).
+- **Aba Cabeçalho IPv6:** os campos do cabeçalho do pacote selecionado, com os 40 bytes.
+- **Modos:** *Endereçamento e SLAAC* mostra como o host forma e testa os endereços e o que faz com cada tipo de destino. *Encaminhamento* leva um ping por quatro roteadores com tabelas estáticas.
+
+Para treinar a escolha do prefixo mais específico, use "Dois candidatos: vence o /48" e "Três candidatos: vence o /64". Para ver as falhas de rota e os avisos ICMPv6, use "Sem rota no R3 (ICMPv6 1/0)", "Neighbor Discovery sem resposta (1/3)" e "Hop Limit expira no R3". Para o SLAAC, use "SLAAC com EUI-64 e ping ao vizinho" e, para o que dá errado, "Sem Router Advertisement", "Flag A desligada", "Prefixo /80 anunciado" e "Endereço duplicado (DAD)". Para os endereços especiais, use "Enlace local sem roteador", "Multicast de todos os nós (ff02::1)" e "Endereço local único (ULA)".
+
+As limitações estão na aba Referência: o modelo não inclui cabeçalhos de extensão, fragmentação, Path MTU Discovery, DHCPv6, Redirect nem a detecção de inalcançabilidade de vizinho (NUD).
 
 ## 3. Como ler os diagramas
 
@@ -1308,6 +1360,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **BGP** | Border Gateway Protocol, protocolo de roteador de borda | troca rotas entre sistemas autônomos e sustenta o roteamento entre operadoras na Internet |
 | **DAD** | Duplicate Address Detection, detecção de endereço duplicado | teste que o host faz antes de usar um endereço IPv6: um Neighbor Solicitation com origem :: e, se alguém responder, o endereço não é atribuído |
 | **DHCP** | Dynamic Host Configuration Protocol, protocolo de configuração dinâmica de hosts | entrega ao cliente endereço IP, máscara, gateway e DNS, por empréstimo (lease) |
+| **ECN** | Explicit Congestion Notification, notificação explícita de congestionamento | os roteadores marcam os pacotes quando há congestionamento, e o TCP reduz a taxa sem precisar de perda |
 | **EUI-64** | Extended Unique Identifier de 64 bits, identificador único estendido de 64 bits | identificador de interface formado a partir do MAC, com ff:fe no meio e o bit U/L invertido; revela o MAC, por isso há alternativas temporárias |
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
 | **IP** | Internet Protocol, protocolo de internet | endereça e encaminha pacotes entre redes, de origem a destino |
@@ -1319,7 +1372,9 @@ Significado e finalidade das siglas usadas neste documento.
 | **RFC** | Request for Comments, pedido de comentários | documento numerado do IETF que define ou descreve um protocolo da Internet; cada documento do projeto cita as RFCs com link para o RFC Editor |
 | **RS** | Router Solicitation, solicitação de roteador | mensagem ICMPv6 (tipo 133) com que o host pede um Router Advertisement sem esperar o próximo envio periódico |
 | **SLAAC** | Stateless Address Autoconfiguration, autoconfiguração de endereço sem estado | o host forma o próprio endereço IPv6 global com o prefixo anunciado pelo roteador e um identificador de interface, sem servidor de endereços |
+| **TCP** | Transmission Control Protocol, protocolo de controle de transmissão | entrega dados de forma ordenada e confiável, com conexão, confirmação e controle de congestionamento |
 | **TTL** | Time To Live, tempo de vida | limita quantos saltos um pacote pode dar; cada roteador o reduz de 1, e ao chegar a zero o pacote é descartado |
+| **UDP** | User Datagram Protocol | entrega datagramas sem conexão nem confirmação, com baixo custo; usado em consultas curtas e em tempo real |
 | **ULA** | Unique Local Address, endereço local único | bloco fc00::/7 de uso privado no IPv6, sem rota na internet, equivalente ao [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) do IPv4 |
 
 

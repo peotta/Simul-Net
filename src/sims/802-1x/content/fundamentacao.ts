@@ -5,6 +5,14 @@ export const fundamentacao: string = `
 
 Em uma rede cabeada ou Wi-Fi, qualquer dispositivo que se conecte a uma porta já estaria "dentro". O **IEEE 802.1X** é o **controle de acesso à rede baseado em porta**: a porta de um switch (ou de um ponto de acesso) fica **fechada** para dados e só os libera depois de o dispositivo se **autenticar**. A autenticação em si é feita pelo **EAP** (*Extensible Authentication Protocol*, RFC 3748), e o servidor costuma falar **RADIUS** (RFC 2865).
 
+**O que você aprende com este simulador.**
+
+- Explicar o controle de acesso baseado em porta e os três papéis (suplicante, autenticador e servidor).
+- Acompanhar o diálogo do EAPOL ao Access-Accept e o estado da porta controlada.
+- Ler os formatos do EAPOL, do pacote EAP e do pacote RADIUS e como o EAP viaja nas duas camadas.
+- Comparar os métodos EAP (EAP-TLS, túnel com senha e EAP-MD5) e o que cada um prova.
+- Reconhecer os riscos (método fraco, segredo compartilhado, dispositivo sem suplicante) e as defesas.
+
 ### Os três papéis
 
 \`\`\`mermaid
@@ -63,6 +71,37 @@ sequenceDiagram
 
 Os códigos do EAP são Request (1), Response (2), Success (3) e Failure (4) (RFC 3748, seção 4). Os códigos do RADIUS são Access-Request (1), Access-Accept (2), Access-Reject (3) e Access-Challenge (11) (RFC 2865, seção 4).
 
+### Os formatos: EAPOL, EAP e RADIUS
+
+O 802.1X usa três formatos encaixados. O **EAPOL** é o quadro que leva o EAP no enlace, entre o suplicante e o autenticador (EtherType 0x888E, em geral para o endereço de grupo 01:80:C2:00:00:03). Dentro dele vai o **pacote EAP**.
+
+\`\`\`mermaid
+packet-beta
+  0-7: "Versão EAPOL"
+  8-15: "Tipo do pacote EAPOL"
+  16-31: "Tamanho do corpo"
+  32-39: "Código EAP"
+  40-47: "Identificador"
+  48-63: "Tamanho do pacote EAP"
+  64-71: "Tipo do método"
+  72-95: "Dados do método"
+\`\`\`
+
+*Esquema 4 (EAPOL e o pacote EAP que ele carrega).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. As duas primeiras linhas são o cabeçalho EAPOL: versão, tipo (0 para um pacote EAP, 1 para Start, 2 para Logoff e 3 para Key) e o tamanho do corpo. O corpo é o pacote EAP, com o código (1 Request, 2 Response, 3 Success e 4 Failure), o identificador que casa cada Response com o seu Request, o tamanho e, nos Request e Response, o **tipo do método** (1 Identity, 3 Nak, 4 MD5-Challenge e 13 EAP-TLS) seguido dos dados dele (RFC 3748, seção 4). Success e Failure não têm tipo nem dados.
+
+Entre o autenticador e o servidor, o EAP viaja dentro do RADIUS:
+
+\`\`\`mermaid
+packet-beta
+  0-7: "Código RADIUS"
+  8-15: "Identificador"
+  16-31: "Tamanho"
+  32-159: "Authenticator (16 bytes)"
+  160-191: "Atributos (variável)"
+\`\`\`
+
+*Esquema 5 (o pacote RADIUS).* O pacote tem o código (1 Access-Request, 2 Access-Accept, 3 Access-Reject e 11 Access-Challenge), um identificador, o tamanho, o campo **Authenticator** de 16 bytes e uma lista de atributos (RFC 2865, seção 3). Os atributos têm o formato tipo, tamanho e valor. O pacote EAP vai no atributo **EAP-Message** (tipo 79), e o atributo **Message-Authenticator** (tipo 80) protege a integridade do pacote com o segredo compartilhado (RFC 3579). O campo Authenticator do Access-Request é um número aleatório de 16 bytes, usado também para esconder atributos como a senha.
+
 ### Os métodos EAP
 
 O 802.1X **não escolhe** o método: o EAP é um arcabouço, e o método define como a identidade é provada.
@@ -85,15 +124,18 @@ flowchart TD
   D --> D1["Defesa: política à parte,<br/>por exemplo VLAN restrita"]
 \`\`\`
 
-*Esquema 4 (riscos e defesas, no nível defensivo).* O servidor RADIUS e o autenticador compartilham um **segredo** que protege a integridade das mensagens e esconde alguns atributos. A RFC 5080 reúne problemas comuns de implementação do RADIUS.
+*Esquema 6 (riscos e defesas, no nível defensivo).* O servidor RADIUS e o autenticador compartilham um **segredo** que protege a integridade das mensagens e esconde alguns atributos. A RFC 5080 reúne problemas comuns de implementação do RADIUS.
 
-### Como ler o diagrama do simulador
+### O que cada modo e aba do simulador mostram
 
 - **Topologia:** o suplicante, o switch autenticador, o servidor RADIUS e a rede protegida. A legenda de cores distingue EAPOL, RADIUS e dados, o que está dentro do túnel TLS, Accept ou Success, e Reject ou falha.
+- **Diagrama de sequência:** cada seta é um quadro EAPOL ou um pacote RADIUS, e a porta controlada muda de estado quando o Access-Accept chega.
 - **Aba Porta:** o estado da porta controlada, no instante atual.
 - **Aba RADIUS:** os pacotes RADIUS trocados e seus atributos.
 - **Aba Métodos EAP:** uma comparação dos métodos.
 - **Modos:** *Autenticação*, *Falhas* (credencial inválida e outras), *Porta e sessão* (reautenticação e término) e *Riscos e defesas*.
+
+Para os métodos, use "EAP-TLS: certificados nos dois lados", "PEAP: certificado no servidor, senha no cliente" e "EAP-MD5: só desafio e resposta". Para as falhas, use "Senha incorreta (PEAP)", "Certificado do cliente expirado (EAP-TLS)", "Servidor RADIUS inalcançável", "Segredo compartilhado diferente" e "Dispositivo sem suplicante". Para a sessão, use "Reautenticação sem cortar a sessão" e "EAPOL-Logoff fecha a porta". Para os riscos e as defesas, use "EAP-MD5 aceita um autenticador falso", "Defesa: EAP-TLS com autenticação mútua", "PEAP sem validar o certificado do servidor" e "Defesa: validar a CA e o nome do servidor".
 
 ### Limites do modelo e do diagrama
 

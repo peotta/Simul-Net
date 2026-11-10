@@ -393,6 +393,7 @@ export const GLOSSARIO: Sigla[] = [
   { sigla: 'PCP', expansao: 'Priority Code Point', pt: 'ponto de código de prioridade', serve: 'três bits da etiqueta 802.1Q que dão a prioridade do frame (classe de serviço)', escopo: ['vlan'] },
   { sigla: 'DEI', expansao: 'Drop Eligible Indicator', pt: 'indicador de descarte permitido', serve: 'bit da etiqueta 802.1Q que marca o frame como descartável em caso de congestionamento', escopo: ['vlan'] },
   { sigla: 'VID', expansao: 'VLAN Identifier', pt: 'identificador de VLAN', serve: 'número de 12 bits da etiqueta 802.1Q que diz a qual VLAN o frame pertence', escopo: ['vlan'] },
+  { sigla: 'TCI', expansao: 'Tag Control Information', pt: 'informação de controle da etiqueta', serve: 'os 16 bits da etiqueta 802.1Q que reúnem o PCP, o DEI e o VID', escopo: ['vlan', 'switching'] },
   { sigla: 'PVID', expansao: 'Port VLAN ID', pt: 'VLAN padrão da porta', serve: 'VLAN que a porta atribui aos frames sem etiqueta que recebe; na porta de tronco é a VLAN nativa', escopo: ['vlan'] },
   { sigla: 'SVI', expansao: 'Switch Virtual Interface', pt: 'interface virtual do switch', serve: 'interface de camada 3 de um switch para uma VLAN, que faz o roteamento entre VLANs', escopo: ['vlan'] },
   { sigla: 'GVRP/MVRP', expansao: 'GARP VLAN Registration Protocol / Multiple VLAN Registration Protocol', serve: 'protocolos que anunciam e registram as VLANs entre switches; o MVRP substitui o GVRP', escopo: ['vlan'] },
@@ -413,7 +414,7 @@ export const NAO_SIGLAS = new Set([
   // identificadores de enlaces nos simuladores de OSPF e RIP
   'L1', 'L3', 'L5', 'L6', 'L7', 'L8',
   // nomes de mensagens e de estados dos protocolos: ficam para um glossário de mensagens
-  'INIT', 'OPEN', 'READ', 'KEXINIT', 'NEWKEYS', 'REFUSED', 'DHCPDECLINE',
+  'C2', 'INIT', 'OPEN', 'READ', 'KEXINIT', 'NEWKEYS', 'REFUSED', 'DHCPDECLINE',
   // nomes de equipamentos e de fluxos de exemplo
   'PC1', 'PC2', 'SRV1', 'SRV2', 'WEB', 'SW', 'DHCP-1', 'DHCP-2', 'SW3', 'SW1-SW3', 'SW2-SW3', 'PE1', 'PE2', 'P1', 'P2', 'P3', 'P4', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9',
   'PREROUTING', 'POSTROUTING', 'REQ-1', 'REQ-4', 'REQ-5', 'REQ-8', 'REQ-9', 'AS64496', 'AS64500', 'AS64501', 'AS64510', 'AS64511', 'AS64666',
