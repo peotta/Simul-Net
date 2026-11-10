@@ -14,7 +14,7 @@ export const ipv4Protocol: ProtocolDef = {
   id: 'ipv4',
   label: 'IPv4',
   stateTitle: 'Estado da decisão',
-  rfcs: [[791, 'IPv4'], [1122, 'Requisitos de hosts'], [1812, 'Requisitos de roteadores'], [1071, 'Checksum'], [1918, 'Endereços privados'], [2644, 'Broadcast dirigido'], [3021, 'Prefixo /31'], [3704, 'uRPF'], [2827, 'BCP 38'], [3927, 'Link-local'], [5737, 'Documentação'], [6598, 'CGNAT'], [6890, 'Uso especial'], [919, 'Broadcast limitado']],
+  rfcs: [[791, 'IPv4'], [1122, 'Requisitos de hosts'], [1812, 'Requisitos de roteadores'], [1071, 'Checksum'], [1918, 'Endereços privados'], [4632, 'CIDR'], [2474, 'DSCP'], [3168, 'ECN'], [2644, 'Broadcast dirigido'], [3021, 'Prefixo /31'], [3704, 'uRPF'], [2827, 'BCP 38'], [3927, 'Link-local'], [5737, 'Documentação'], [6598, 'CGNAT'], [6890, 'Uso especial'], [919, 'Broadcast limitado']],
   subs: [
     { key: 'fwd', label: 'Encaminhamento', default: 'f-lpm16' },
     { key: 'end', label: 'Endereçamento', default: 'e-local' },

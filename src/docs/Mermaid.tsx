@@ -1,9 +1,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 
+// Contêiner do diagrama de bits: largura total, com o desenho centralizado.
+const SVG_FULL = 'mx-auto w-full [&>svg]:mx-auto [&>svg]:block';
+
 const btn = 'rounded-lg border border-line bg-surface px-3 py-1.5 text-base font-semibold hover:bg-surface2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
 
 // Janela com o diagrama em tela cheia, com zoom (nativo <dialog>: Esc fecha, foco preso, sem servidor).
-function Ampliado({ svg, label, onClose }: { svg: string; label: string; onClose: () => void }) {
+function Ampliado({ svg, label, full, onClose }: { svg: string; label: string; full: boolean; onClose: () => void }) {
   const dlg = useRef<HTMLDialogElement>(null);
   const area = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
@@ -45,7 +48,7 @@ function Ampliado({ svg, label, onClose }: { svg: string; label: string; onClose
           </button>
         </div>
         <div ref={area} className="flex-1 overflow-auto p-4">
-          <div style={{ zoom }} className="mx-auto w-fit" dangerouslySetInnerHTML={{ __html: svg }} />
+          <div style={{ zoom }} className={full ? SVG_FULL : 'mx-auto w-fit'} dangerouslySetInnerHTML={{ __html: svg }} />
         </div>
       </div>
     </dialog>
@@ -54,6 +57,8 @@ function Ampliado({ svg, label, onClose }: { svg: string; label: string; onClose
 
 // Acima desta altura (px), o diagrama é "longo": a barra de rolagem horizontal também aparece no topo.
 const TALL = 600;
+
+const isPacket = (code: string) => /(^|\n)\s*packet(-beta)?(\s|$)/.test(code);
 
 const isDark = () => document.documentElement.classList.contains('dark');
 
@@ -70,6 +75,9 @@ async function draw(id: string, code: string, dark: boolean): Promise<string> {
     fontFamily: 'inherit',
     // Tamanho natural do diagrama: o texto mantém o tamanho legível e, se o desenho for mais largo que a página, o contêiner rola na horizontal.
     flowchart: { useMaxWidth: false },
+    // Diagrama de bits: ocupa a largura disponível (até o tamanho natural) e encolhe se a janela for estreita, sem barra de rolagem.
+    packet: { useMaxWidth: true, bitWidth: 28 },
+    state: { useMaxWidth: false },
     sequence: { useMaxWidth: false, wrap: false, noteFontSize: 15, messageFontSize: 15, actorFontSize: 16 },
   });
   const { svg } = await mermaid.render(id, code);
@@ -152,9 +160,9 @@ export function Mermaid({ code, label }: { code: string; label: string }) {
           </button>
         </div>
       )}
-      {open && svg && <Ampliado svg={svg} label={label} onClose={() => setOpen(false)} />}
+      {open && svg && <Ampliado svg={svg} label={label} full={isPacket(code)} onClose={() => setOpen(false)} />}
       <figure ref={body} role="img" aria-label={label} onScroll={() => sync(body.current, top.current)} className="m-0 overflow-x-auto p-4">
-        {svg ? <div className="mx-auto w-fit" dangerouslySetInnerHTML={{ __html: svg }} /> : <p role="status" className="text-base text-muted">Desenhando o diagrama…</p>}
+        {svg ? <div className={isPacket(code) ? SVG_FULL : 'mx-auto w-fit'} dangerouslySetInnerHTML={{ __html: svg }} /> : <p role="status" className="text-base text-muted">Desenhando o diagrama…</p>}
       </figure>
     </div>
   );

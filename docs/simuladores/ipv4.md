@@ -1,12 +1,12 @@
 # IPv4 (encaminhamento e endereçamento)
 
-Como o host e o roteador decidem: máscara e gateway, prefixo mais específico, rota padrão, distância administrativa e métrica, TTL e loops, rotas ausentes e blackhole, uRPF contra origem forjada, broadcast, /31 e blocos de uso especial.
+Endereçamento e encaminhamento: máscara, CIDR e VLSM, endereços públicos e privados, cabeçalho IPv4, e como o host e o roteador decidem: gateway, prefixo mais específico, rota padrão, distância administrativa e métrica, TTL e loops, rotas ausentes e blackhole, uRPF contra origem forjada, broadcast, /31 e blocos de uso especial.
 
 - **Categoria:** Roteamento e serviços de rede
 - **Motor:** nativo (TypeScript puro, apresentado pela bancada genérica)
 - **Código-fonte:** `src/sims/ipv4/`
-- **RFCs e padrões:** [RFC 791](https://www.rfc-editor.org/rfc/rfc791) (IPv4), [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122) (Requisitos de hosts), [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812) (Requisitos de roteadores), [RFC 1071](https://www.rfc-editor.org/rfc/rfc1071) (Checksum), [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) (Endereços privados), [RFC 2644](https://www.rfc-editor.org/rfc/rfc2644) (Broadcast dirigido), [RFC 3021](https://www.rfc-editor.org/rfc/rfc3021) (Prefixo /31), [RFC 3704](https://www.rfc-editor.org/rfc/rfc3704) (uRPF), [RFC 2827](https://www.rfc-editor.org/rfc/rfc2827) ([BCP 38](https://www.rfc-editor.org/info/bcp38)), [RFC 3927](https://www.rfc-editor.org/rfc/rfc3927) (Link-local), [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737) (Documentação), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) (CGNAT), [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890) (Uso especial), [RFC 919](https://www.rfc-editor.org/rfc/rfc919) (Broadcast limitado)
-- **Tópicos:** Prefixo mais específico; Máscara, gateway e ARP; TTL, loops e falhas de rota; uRPF e endereços especiais
+- **RFCs e padrões:** [RFC 791](https://www.rfc-editor.org/rfc/rfc791) (IPv4), [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122) (Requisitos de hosts), [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812) (Requisitos de roteadores), [RFC 1071](https://www.rfc-editor.org/rfc/rfc1071) (Checksum), [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) (Endereços privados), [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632) (CIDR), [RFC 2474](https://www.rfc-editor.org/rfc/rfc2474) (DSCP), [RFC 3168](https://www.rfc-editor.org/rfc/rfc3168) (ECN), [RFC 2644](https://www.rfc-editor.org/rfc/rfc2644) (Broadcast dirigido), [RFC 3021](https://www.rfc-editor.org/rfc/rfc3021) (Prefixo /31), [RFC 3704](https://www.rfc-editor.org/rfc/rfc3704) (uRPF), [RFC 2827](https://www.rfc-editor.org/rfc/rfc2827) ([BCP 38](https://www.rfc-editor.org/info/bcp38)), [RFC 3927](https://www.rfc-editor.org/rfc/rfc3927) (Link-local), [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737) (Documentação), [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) (CGNAT), [RFC 6890](https://www.rfc-editor.org/rfc/rfc6890) (Uso especial), [RFC 919](https://www.rfc-editor.org/rfc/rfc919) (Broadcast limitado)
+- **Tópicos:** Prefixo mais específico; Máscara, CIDR e VLSM; Cabeçalho IPv4; Gateway e ARP; TTL, loops e falhas de rota; uRPF e endereços especiais
 
 ## 1. Modos
 
@@ -22,6 +22,14 @@ Como o host e o roteador decidem: máscara e gateway, prefixo mais específico, 
 Uma internet é um conjunto de redes diferentes ligadas por roteadores. O IPv4 (*Internet Protocol* versão 4, [RFC 791](https://www.rfc-editor.org/rfc/rfc791)) dá a cada interface um **endereço lógico de 32 bits** e define como um **datagrama** viaja de uma origem a um destino atravessando várias redes. Ele está na camada 3 do modelo OSI (camada Internet do TCP/IP).
 
 O serviço é de **melhor esforço**: o IP não garante entrega, ordem nem ausência de duplicatas. Cada roteador decide sozinho, olhando só o endereço de destino e a própria tabela de rotas. Confiabilidade e ordem ficam para as camadas de cima (por exemplo, o TCP).
+
+**O que você aprende com este simulador.**
+
+- Calcular a rede, o broadcast e os hosts de um endereço a partir da máscara, e distinguir endereços públicos, privados e especiais.
+- Entender o CIDR e o VLSM, que substituíram as classes de endereço.
+- Ler o cabeçalho IPv4 campo a campo.
+- Prever as duas decisões do caminho: a do **host** (entrega direta ou gateway) e a do **roteador** (prefixo mais específico, TTL e erros ICMP).
+
 
 ### 2.2 O diagrama da viagem de um datagrama
 
@@ -50,7 +58,135 @@ Um endereço IPv4 tem duas partes: a **rede** (os bits mais à esquerda) e o **h
 
 Em enlaces ponto a ponto, o prefixo /31 usa os dois endereços como hosts, sem rede nem broadcast ([RFC 3021](https://www.rfc-editor.org/rfc/rfc3021), seção 2.1).
 
-### 2.4 A decisão do host: entrega direta ou gateway
+**A máscara de rede.** A máscara tem 32 bits, como o endereço: os bits 1 marcam a parte de rede e os bits 0, a parte de host. Em 192.168.10.10/24, a máscara é 11111111.11111111.11111111.00000000 (255.255.255.0): 24 bits de rede e 8 de host. Dois hosts estão na mesma rede quando o E lógico (AND) do endereço de cada um com a máscara dá o mesmo resultado.
+
+```mermaid
+%%{init: {"packet": {"bitWidth": 22}}}%%
+packet-beta
+  0-23: "Rede: 24 bits (192.168.10)"
+  24-31: "Host: 8 bits (.10)"
+```
+
+*Esquema 2 (rede e host em um /24).* Os 32 bits do endereço 192.168.10.10/24, numerados de 0 a 31 da esquerda para a direita: os 24 primeiros identificam a rede, e os 8 últimos, o host dentro dela. Mudar o prefixo desloca essa divisa.
+
+**Um exemplo com prefixo que não é múltiplo de 8.** Em 192.168.10.77/26, a máscara é 255.255.255.192, e só o último octeto muda o resultado:
+
+| Passo | Último octeto | Binário |
+| --- | --- | --- |
+| Endereço | 77 | 01001101 |
+| Máscara | 192 | 11000000 |
+| E lógico (rede) | 64 | 01000000 |
+| Bits de host em 1 (broadcast) | 127 | 01111111 |
+
+A rede é 192.168.10.64/26, o broadcast é 192.168.10.127 e os hosts utilizáveis vão de 192.168.10.65 a 192.168.10.126 (62 hosts, pois 2 elevado a 6 menos 2). Os blocos /26 começam em múltiplos de 64: .0, .64, .128 e .192. A aba **Endereços** do simulador faz esse mesmo cálculo em binário, e os cenários "Máscara larga demais" e "Sub-redes sobrepostas" mostram o que acontece quando a máscara está errada.
+
+### 2.4 Endereços públicos, privados e classes
+
+Um endereço **público** é único na internet, é alocado pelos registros regionais (no Brasil, o Registro.br, que atua sob a LACNIC) e é roteável globalmente. Um endereço **privado** ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)) pode ser repetido em qualquer rede interna, não é roteado na internet e precisa de NAT para sair (veja o simulador de NAT).
+
+**As classes de endereço (histórico).** Até 1993, o primeiro octeto definia a classe, e a classe fixava o tamanho da rede. O modelo foi substituído pelo CIDR, e os roteadores atuais **não usam classes**. A divisão ainda aparece em provas, em equipamentos antigos e na [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918).
+
+| Classe | Bits iniciais | Primeiro octeto | Máscara padrão | Hosts por rede | Bloco privado ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)) | Uso |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | 0 | 1 a 126 | /8 | 16.777.214 | 10.0.0.0/8 | redes muito grandes |
+| B | 10 | 128 a 191 | /16 | 65.534 | 172.16.0.0/12 (16 redes /16) | redes médias |
+| C | 110 | 192 a 223 | /24 | 254 | 192.168.0.0/16 (256 redes /24) | redes pequenas |
+| D | 1110 | 224 a 239 | não se aplica | não se aplica | nenhum | multicast ([RFC 5771](https://www.rfc-editor.org/rfc/rfc5771)) |
+| E | 1111 | 240 a 255 | não se aplica | não se aplica | nenhum | reservada ([RFC 1112](https://www.rfc-editor.org/rfc/rfc1112), seção 4) |
+
+Os blocos 0.0.0.0/8 ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.2.1.3) e 127.0.0.0/8 (loopback) pertencem à faixa da classe A, mas não são endereços de host comuns. Qualquer endereço fora dos blocos privados e dos blocos especiais da seção "Blocos de endereço especiais", logo adiante, é público.
+
+### 2.5 CIDR e VLSM
+
+**CIDR.** O CIDR (*Classless Inter-Domain Routing*, [RFC 4632](https://www.rfc-editor.org/rfc/rfc4632), que substituiu a [RFC 1519](https://www.rfc-editor.org/rfc/rfc1519)) descarta as classes: o prefixo pode ter qualquer comprimento de 0 a 32 bits, escrito como /n. Isso permite entregar blocos do tamanho certo e **agregar** rotas: 192.168.0.0/24 e 192.168.1.0/24 viram uma só rota, 192.168.0.0/23, que a tabela de rotas guarda em uma única entrada.
+
+**VLSM.** O VLSM (*Variable Length Subnet Masking*) divide um bloco em sub-redes de **tamanhos diferentes**, cada uma com a máscara que o seu número de hosts exige, sem desperdiçar endereços. A regra é alocar das maiores para as menores. Exemplo com 192.168.10.0/24:
+
+```mermaid
+flowchart TD
+  B["192.168.10.0/24<br/>256 endereços"] --> A["LAN A: 192.168.10.0/25<br/>126 hosts"]
+  B --> R["192.168.10.128/25<br/>128 endereços"]
+  R --> LB["LAN B: 192.168.10.128/26<br/>62 hosts"]
+  R --> R2["192.168.10.192/26<br/>64 endereços"]
+  R2 --> LC["LAN C: 192.168.10.192/27<br/>30 hosts"]
+  R2 --> R3["192.168.10.224/27<br/>32 endereços"]
+  R3 --> PP["Enlace R1-R2: 192.168.10.224/30<br/>2 hosts"]
+  R3 --> L["192.168.10.228 a .255<br/>livres"]
+```
+
+*Esquema 3 (VLSM aplicado a um /24).* Cada divisão parte ao meio o bloco que sobrou e reserva uma metade. Os endereços abaixo mostram o plano resultante.
+
+| Sub-rede | Prefixo | Máscara | Hosts utilizáveis | Faixa (rede a broadcast) |
+| --- | --- | --- | --- | --- |
+| LAN A (até 100 hosts) | /25 | 255.255.255.128 | 126 | 192.168.10.0 a 192.168.10.127 |
+| LAN B (até 50 hosts) | /26 | 255.255.255.192 | 62 | 192.168.10.128 a 192.168.10.191 |
+| LAN C (até 20 hosts) | /27 | 255.255.255.224 | 30 | 192.168.10.192 a 192.168.10.223 |
+| Enlace R1-R2 | /30 | 255.255.255.252 | 2 | 192.168.10.224 a 192.168.10.227 |
+
+Sem VLSM, com uma máscara única de /25 em todas as sub-redes, o /24 só comportaria duas sub-redes, e o enlace entre roteadores consumiria um bloco de 128 endereços para usar apenas 2.
+
+O erro mais comum no VLSM é desenhar sub-redes que se sobrepõem. O cenário "Sub-redes sobrepostas" mostra o efeito, e o cenário "Enlace ponto a ponto /31" mostra o menor bloco possível para um enlace entre roteadores ([RFC 3021](https://www.rfc-editor.org/rfc/rfc3021), seção 2.1).
+
+### 2.6 Blocos de endereço especiais
+
+| Bloco | Uso | Definido em |
+| --- | --- | --- |
+| 10.0.0.0/8, 172.16.0.0/12 e 192.168.0.0/16 | uso privado, não roteado na internet | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) |
+| 100.64.0.0/10 | espaço compartilhado do NAT de operadora | [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) |
+| 127.0.0.0/8 | loopback, nunca sai do host (não simulado: nenhum pacote chega à rede) | [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.2.1.3 |
+| 169.254.0.0/16 | link-local, nunca é encaminhado | [RFC 3927](https://www.rfc-editor.org/rfc/rfc3927) |
+| 192.0.2.0/24, 198.51.100.0/24 e 203.0.113.0/24 | documentação e exemplos | [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737) |
+| 255.255.255.255 | broadcast limitado, nunca é encaminhado | [RFC 919](https://www.rfc-editor.org/rfc/rfc919) |
+
+A lista completa e atual está no registro de endereços de uso especial ([RFC 6890](https://www.rfc-editor.org/rfc/rfc6890)).
+
+### 2.7 O cabeçalho IPv4
+
+Um **datagrama** é o cabeçalho IPv4 seguido da carga útil (o segmento TCP, o datagrama UDP, a mensagem ICMP). O desenho mostra o cabeçalho de 20 bytes (160 bits) em linhas de 32 bits, na ordem de transmissão ([RFC 791](https://www.rfc-editor.org/rfc/rfc791), seção 3.1).
+
+```mermaid
+packet-beta
+  0-3: "Versão"
+  4-7: "IHL"
+  8-13: "DSCP"
+  14-15: "ECN"
+  16-31: "Comprimento total"
+  32-47: "Identificação"
+  48-50: "Flags"
+  51-63: "Deslocamento do fragmento"
+  64-71: "TTL"
+  72-79: "Protocolo"
+  80-95: "Checksum do cabeçalho"
+  96-127: "Endereço de origem"
+  128-159: "Endereço de destino"
+  160-191: "Opções e preenchimento (só se IHL maior que 5)"
+  192-223: "Dados (carga útil)"
+```
+
+*Esquema 4 (o datagrama IPv4).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. As cinco primeiras linhas formam o cabeçalho fixo de 20 bytes; as opções, quando existem, ocupam até 40 bytes a mais (o IHL chega a 15, ou 60 bytes); depois vem a carga útil. A tabela abaixo descreve todos os campos, em ordem.
+
+| Campo | Posição (bits) | Tamanho | Função |
+| --- | --- | --- | --- |
+| Versão | 0 a 3 | 4 bits | vale 4 |
+| IHL (*Internet Header Length*) | 4 a 7 | 4 bits | tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
+| DSCP | 8 a 13 | 6 bits | classe de serviço ([RFC 2474](https://www.rfc-editor.org/rfc/rfc2474)), antigo Tipo de Serviço |
+| ECN | 14 a 15 | 2 bits | sinalização explícita de congestionamento ([RFC 3168](https://www.rfc-editor.org/rfc/rfc3168)) |
+| Comprimento total | 16 a 31 | 16 bits | cabeçalho mais dados, em bytes (no máximo 65.535) |
+| Identificação | 32 a 47 | 16 bits | agrupa os fragmentos de um mesmo datagrama ([RFC 791](https://www.rfc-editor.org/rfc/rfc791); [RFC 6864](https://www.rfc-editor.org/rfc/rfc6864)) |
+| Flags | 48 a 50 | 3 bits | bit 0 reservado (0), bit 1 DF (não fragmentar), bit 2 MF (há mais fragmentos) |
+| Deslocamento do fragmento | 51 a 63 | 13 bits | posição do fragmento no datagrama original, em unidades de 8 bytes |
+| TTL (*Time to Live*) | 64 a 71 | 8 bits | limite de saltos, decrementado em cada roteador |
+| Protocolo | 72 a 79 | 8 bits | camada de cima (1 ICMP, 6 TCP, 17 UDP; lista no registro "Protocol Numbers" da IANA) |
+| Checksum do cabeçalho | 80 a 95 | 16 bits | soma de verificação só do cabeçalho ([RFC 1071](https://www.rfc-editor.org/rfc/rfc1071)), recalculada a cada salto |
+| Endereço de origem | 96 a 127 | 32 bits | quem enviou |
+| Endereço de destino | 128 a 159 | 32 bits | para quem vai |
+| Opções e preenchimento | 160 em diante | 0 a 40 bytes | extensões raras (por exemplo, registro de rota); o preenchimento alinha o cabeçalho a 32 bits |
+
+A fragmentação (Identificação, Flags e Deslocamento) não é simulada aqui; ela aparece no simulador de ICMP, na mensagem "fragmentação necessária".
+
+A aba **Cabeçalho IPv4** do simulador mostra esses campos com os valores do pacote em trânsito.
+
+### 2.8 A decisão do host: entrega direta ou gateway
 
 ```mermaid
 flowchart TD
@@ -61,11 +197,11 @@ flowchart TD
   G -- "não" --> E["Rede inalcançável no próprio host:<br/>nada é enviado"]
 ```
 
-*Esquema 2 (decisão do host).* O host compara o destino com a própria rede ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.3.1.1; [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.2). Se o destino é de outra rede, o quadro vai ao **gateway**, com o MAC do gateway e o IP do destino final. O gateway precisa estar na sub-rede do host, porque é alcançado por ARP.
+*Esquema 5 (decisão do host).* O host compara o destino com a própria rede ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 3.3.1.1; [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.2). Se o destino é de outra rede, o quadro vai ao **gateway**, com o MAC do gateway e o IP do destino final. O gateway precisa estar na sub-rede do host, porque é alcançado por ARP.
 
 Por isso um erro de máscara ou de gateway no host não aparece como erro de roteamento: aparece como falta de resposta.
 
-### 2.5 A decisão do roteador: o prefixo mais específico
+### 2.9 A decisão do roteador: o prefixo mais específico
 
 ```mermaid
 flowchart TD
@@ -79,27 +215,11 @@ flowchart TD
   D2 --> F["Decrementa o TTL, recalcula o checksum<br/>e encaminha ao próximo salto"]
 ```
 
-*Esquema 3 (decisão do roteador).* Cada roteador consulta só a própria tabela. A rota de maior prefixo vence ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.3), qualquer que seja a ordem em que as rotas foram escritas. A rota padrão (0.0.0.0/0) tem o menor prefixo e só vence quando nada mais casa. O TTL e o ICMP 11/0 seguem a [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.3.1.
+*Esquema 6 (decisão do roteador).* Cada roteador consulta só a própria tabela. A rota de maior prefixo vence ([RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.2.4.3), qualquer que seja a ordem em que as rotas foram escritas. A rota padrão (0.0.0.0/0) tem o menor prefixo e só vence quando nada mais casa. O TTL e o ICMP 11/0 seguem a [RFC 1812](https://www.rfc-editor.org/rfc/rfc1812), seção 5.3.1.
 
 Exemplo: com as rotas 10.2.0.0/16 e 10.2.5.0/24, o destino 10.2.5.20 casa com as duas, e vence a /24.
 
-### 2.6 O cabeçalho IPv4
-
-| Campo | Tamanho | Função |
-| --- | --- | --- |
-| Versão | 4 bits | vale 4 |
-| IHL | 4 bits | tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
-| DSCP e ECN | 8 bits | prioridade e sinalização de congestionamento (antigo Tipo de Serviço) |
-| Comprimento total | 16 bits | cabeçalho mais dados, em bytes |
-| Identificação, flags e deslocamento | 32 bits | usados na fragmentação (não simulada aqui) |
-| TTL | 8 bits | limite de saltos, decrementado em cada roteador |
-| Protocolo | 8 bits | camada de cima (1 ICMP, 6 TCP, 17 UDP) |
-| Checksum do cabeçalho | 16 bits | soma de verificação só do cabeçalho ([RFC 1071](https://www.rfc-editor.org/rfc/rfc1071)) |
-| Endereço de origem e de destino | 32 bits cada | quem enviou e para quem vai |
-
-A aba **Cabeçalho IPv4** do simulador mostra esses campos com os valores do pacote em trânsito.
-
-### 2.7 Como ler o diagrama do simulador
+### 2.10 O que cada modo e aba do simulador mostram
 
 O simulador tem dois modos, e cada um mostra uma das decisões.
 
@@ -109,24 +229,16 @@ O simulador tem dois modos, e cada um mostra uma das decisões.
 
 O ping é só a **sonda**: serve para mostrar o caminho e os erros, e os tempos são didáticos.
 
-### 2.8 Blocos de endereço especiais
+Para treinar o endereçamento, use o modo **Endereçamento** e os cenários "Máscara larga demais", "Sub-redes sobrepostas" e "Enlace ponto a ponto /31". Para treinar o encaminhamento, use o modo **Encaminhamento** e os cenários de prefixo mais específico, de TTL e de uRPF.
 
-| Bloco | Uso | Definido em |
-| --- | --- | --- |
-| 10.0.0.0/8, 172.16.0.0/12 e 192.168.0.0/16 | uso privado | [RFC 1918](https://www.rfc-editor.org/rfc/rfc1918) |
-| 100.64.0.0/10 | espaço compartilhado do NAT de operadora | [RFC 6598](https://www.rfc-editor.org/rfc/rfc6598) |
-| 169.254.0.0/16 | link-local, nunca é encaminhado | [RFC 3927](https://www.rfc-editor.org/rfc/rfc3927) |
-| 192.0.2.0/24, 198.51.100.0/24 e 203.0.113.0/24 | documentação e exemplos | [RFC 5737](https://www.rfc-editor.org/rfc/rfc5737) |
-| 255.255.255.255 | broadcast limitado, nunca é encaminhado | [RFC 919](https://www.rfc-editor.org/rfc/rfc919) |
+### 2.11 Limites do modelo e do diagrama
 
-A lista completa e atual está no registro de endereços de uso especial ([RFC 6890](https://www.rfc-editor.org/rfc/rfc6890)).
-
-### 2.9 Limites do modelo e do diagrama
-
-- O simulador usa **rotas estáticas**. As entradas "OSPF" são apenas rotas de outra origem, sem o protocolo em execução (veja os simuladores de OSPF, RIP e BGP).
-- Não há fragmentação (veja o simulador de ICMP), ECMP, multicast, opções IP nem IPv6.
-- A distância administrativa segue convenções de fabricantes, e não de RFC.
-- O diagrama mostra **um** pacote por vez. Em redes reais, os roteadores encaminham milhares de datagramas por segundo, cada um decidido de forma independente.
+- As rotas são **estáticas**. As entradas "OSPF" são apenas rotas de outra origem, sem o protocolo em execução (veja os simuladores de OSPF, RIP, BGP e IS-IS).
+- Não há ECMP, roteamento por política, multicast, opções IP, fragmentação (veja o simulador de ICMP para a fragmentação e o PMTUD) nem IPv6.
+- As tabelas ARP já estão preenchidas, exceto no primeiro salto do host A.
+- A distância administrativa e as métricas seguem convenções de fabricantes, e não de RFC. No uRPF flexível, a rota padrão vale como qualquer outra rota.
+- O ping é só a sonda: os tempos são didáticos e não há tráfego real. O diagrama mostra **um** pacote por vez; em redes reais, cada roteador decide milhares de datagramas por segundo, cada um de forma independente.
+- Os endereços usados são de uso privado ([RFC 1918](https://www.rfc-editor.org/rfc/rfc1918)) e de documentação ([RFC 5737](https://www.rfc-editor.org/rfc/rfc5737)).
 
 ## 3. Como ler os diagramas
 
@@ -1765,13 +1877,19 @@ Significado e finalidade das siglas usadas neste documento.
 | **BCP** | Best Current Practice, melhor prática atual | série de RFCs com práticas recomendadas de operação, como a [BCP 38](https://www.rfc-editor.org/info/bcp38) (filtragem de endereços de origem forjados) |
 | **BGP** | Border Gateway Protocol, protocolo de roteador de borda | troca rotas entre sistemas autônomos e sustenta o roteamento entre operadoras na Internet |
 | **CGNAT** | Carrier-Grade NAT | NAT em grande escala feito pela operadora, que compartilha um endereço público entre muitos clientes |
+| **CIDR** | Classless Inter-Domain Routing, roteamento entre domínios sem classes | endereçamento por prefixo de qualquer comprimento (/n), que substituiu as classes A, B e C e permite agregar rotas ([RFC 4632](https://www.rfc-editor.org/rfc/rfc4632)) |
+| **DF** | Don't Fragment, não fragmentar | flag do cabeçalho IPv4 que proíbe a fragmentação do pacote; é a base do PMTUD |
 | **DHCP** | Dynamic Host Configuration Protocol, protocolo de configuração dinâmica de hosts | entrega ao cliente endereço IP, máscara, gateway e DNS, por empréstimo (lease) |
+| **DSCP** | Differentiated Services Code Point, ponto de código de serviços diferenciados | campo de 6 bits do cabeçalho IPv4 que classifica o tráfego para dar prioridade ([RFC 2474](https://www.rfc-editor.org/rfc/rfc2474)) |
 | **ECN** | Explicit Congestion Notification, notificação explícita de congestionamento | os roteadores marcam os pacotes quando há congestionamento, e o TCP reduz a taxa sem precisar de perda |
+| **IANA** | Internet Assigned Numbers Authority | mantém os registros de números e nomes usados nos protocolos, como portas, tipos de mensagem e números de sistema autônomo |
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
 | **IHL** | Internet Header Length, comprimento do cabeçalho IP | campo do cabeçalho IPv4 com o tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
 | **IP** | Internet Protocol, protocolo de internet | endereça e encaminha pacotes entre redes, de origem a destino |
+| **LACNIC** | Latin America and Caribbean Network Information Centre | registro regional de internet da América Latina e do Caribe; no Brasil, o Registro.br atua sob ele |
 | **LAN** | Local Area Network, rede local | rede de alcance restrito, como a de um prédio ou laboratório, ligada por switches ou por Wi-Fi |
 | **MAC** | Media Access Control | camada de enlace que controla o acesso ao meio; também nomeia o endereço físico de 48 bits de uma interface |
+| **MF** | More Fragments, mais fragmentos | flag do cabeçalho IPv4 que indica que ainda há fragmentos depois deste |
 | **NAT** | Network Address Translation, tradução de endereços de rede | troca endereços e portas dos pacotes, para que uma rede privada compartilhe poucos endereços públicos |
 | **OSPF** | Open Shortest Path First | protocolo de roteamento interno que calcula o menor caminho a partir do mapa completo da rede |
 | **PMTUD** | Path MTU Discovery, descoberta da MTU do caminho | descobre o maior pacote que passa pelo caminho sem fragmentar, usando mensagens ICMP |
@@ -1781,6 +1899,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **TCP/IP** | Transmission Control Protocol e Internet Protocol | refere-se à pilha de protocolos da Internet, nomeada pelos seus dois protocolos mais conhecidos |
 | **TTL** | Time To Live, tempo de vida | limita quantos saltos um pacote pode dar; cada roteador o reduz de 1, e ao chegar a zero o pacote é descartado |
 | **UDP** | User Datagram Protocol | entrega datagramas sem conexão nem confirmação, com baixo custo; usado em consultas curtas e em tempo real |
+| **VLSM** | Variable Length Subnet Masking, máscaras de sub-rede de comprimento variável | divide um bloco em sub-redes de tamanhos diferentes, cada uma com a máscara que o seu número de hosts exige |
 
 
 ---

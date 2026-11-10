@@ -91,7 +91,13 @@ const components: Components = {
     const code = textOf(children).replace(/\n$/, '');
     if (/language-mermaid/.test(className ?? '')) {
       const sequence = /^\s*sequenceDiagram/.test(code);
-      return <Mermaid code={code} label={sequence ? 'Diagrama de sequência da figura. O equivalente em texto é a tabela de etapas logo abaixo.' : 'Diagrama de topologia da rede da figura.'} />;
+      const packet = /(^|\n)\s*packet(-beta)?(\s|$)/.test(code);
+      const label = sequence
+        ? 'Diagrama de sequência da figura. O equivalente em texto é a tabela de etapas logo abaixo.'
+        : packet
+          ? 'Diagrama de campos em bits da figura. O equivalente em texto é a legenda logo abaixo, com a tabela de campos quando houver.'
+          : 'Diagrama de topologia da rede da figura.';
+      return <Mermaid code={code} label={label} />;
     }
     if (className || code.includes('\n')) return <pre className="my-4 overflow-x-auto rounded-xl border border-line bg-surface2 p-4 font-mono text-base">{code}</pre>;
     return <code className="rounded bg-surface2 px-1 font-mono text-[0.95em]">{children}</code>;

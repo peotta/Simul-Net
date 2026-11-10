@@ -27,6 +27,15 @@ O IP entrega datagramas sem garantia: eles podem se perder, chegar fora de ordem
 - **Controle de fluxo:** o receptor diz quanto espaço tem (janela anunciada, *rwnd*).
 - **Controle de congestionamento:** o emissor limita o próprio ritmo conforme a rede aguenta (janela de congestionamento, *cwnd*).
 
+**O que você aprende com este simulador.**
+
+- Explicar como o TCP abre e encerra uma conexão e o que são os números de sequência e de confirmação.
+- Ler o cabeçalho TCP campo a campo, com as flags e as opções.
+- Distinguir o controle de fluxo (rwnd) do controle de congestionamento (cwnd, slow start e congestion avoidance).
+- Reconhecer como o TCP recupera perdas: timeout (RTO), fast retransmit e SACK.
+- Comparar o TCP com o UDP na mesma rede.
+
+
 ### 2.2 O diagrama da conexão
 
 ```mermaid
@@ -76,20 +85,75 @@ O estado **TIME-WAIT** mantém a conexão por um tempo (2 vezes o MSL, *Maximum 
 
 ### 2.4 O cabeçalho TCP
 
-| Campo | Tamanho | Função |
+O segmento TCP é o cabeçalho seguido dos dados da aplicação. O desenho mostra o cabeçalho de 20 bytes (160 bits), sem opções, em linhas de 32 bits, na ordem de transmissão ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.1).
+
+```mermaid
+packet-beta
+  0-15: "Porta de origem"
+  16-31: "Porta de destino"
+  32-63: "Número de sequência"
+  64-95: "Número de confirmação"
+  96-99: "Desloc."
+  100-103: "Rsrv"
+  104: "C"
+  105: "E"
+  106: "U"
+  107: "A"
+  108: "P"
+  109: "R"
+  110: "S"
+  111: "F"
+  112-127: "Janela"
+  128-143: "Checksum"
+  144-159: "Ponteiro urgente"
+  160-191: "Opções e preenchimento (se o deslocamento for maior que 5)"
+  192-223: "Dados (carga útil)"
+```
+
+*Esquema 3 (o segmento TCP).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. As cinco primeiras linhas formam o cabeçalho fixo de 20 bytes; as opções, quando existem, ocupam até 40 bytes a mais (o deslocamento de dados chega a 15, ou 60 bytes). Os oito quadradinhos da quarta linha são as flags, uma por bit: C (CWR), E (ECE), U (URG), A (ACK), P (PSH), R (RST), S (SYN) e F (FIN). A tabela abaixo descreve todos os campos, em ordem.
+
+| Campo | Posição (bits) | Tamanho | Função |
+| --- | --- | --- | --- |
+| Porta de origem | 0 a 15 | 16 bits | identifica o processo que envia |
+| Porta de destino | 16 a 31 | 16 bits | identifica o processo que recebe |
+| Número de sequência | 32 a 63 | 32 bits | posição, no fluxo, do primeiro byte do segmento (no SYN, o ISN) |
+| Número de confirmação | 64 a 95 | 32 bits | próximo byte esperado, válido quando o bit ACK está ligado |
+| Deslocamento de dados | 96 a 99 | 4 bits | tamanho do cabeçalho em palavras de 32 bits (mínimo 5, ou 20 bytes) |
+| Reservado | 100 a 103 | 4 bits | zero |
+| Flags | 104 a 111 | 8 bits | CWR, ECE, URG, ACK, PSH, RST, SYN e FIN (veja a tabela seguinte) |
+| Janela | 112 a 127 | 16 bits | espaço livre no receptor (rwnd), em bytes |
+| Checksum | 128 a 143 | 16 bits | cobre cabeçalho, dados e um pseudocabeçalho com os endereços IP |
+| Ponteiro urgente | 144 a 159 | 16 bits | posição do dado urgente, válido com URG (uso desaconselhado, [RFC 6093](https://www.rfc-editor.org/rfc/rfc6093)) |
+| Opções e preenchimento | 160 em diante | 0 a 40 bytes | extensões negociadas, como o MSS e o SACK |
+
+| Flag | Nome | Quando está ligada |
 | --- | --- | --- |
-| Porta de origem e de destino | 16 bits cada | identificam os processos |
-| Número de sequência | 32 bits | posição, no fluxo, do primeiro byte do segmento |
-| Número de confirmação | 32 bits | próximo byte esperado, quando o bit ACK está ligado |
-| Deslocamento de dados | 4 bits | tamanho do cabeçalho em palavras de 32 bits |
-| Flags | 8 bits | CWR, ECE, URG, ACK, PSH, RST, SYN e FIN |
-| Janela | 16 bits | espaço livre no receptor (rwnd) |
-| Checksum | 16 bits | cobre cabeçalho, dados e um pseudocabeçalho com os endereços IP |
-| Ponteiro urgente e opções | variável | por exemplo, SACK ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)) |
+| SYN | Synchronize | abre a conexão e sincroniza os números de sequência; consome 1 número |
+| ACK | Acknowledgment | o campo de confirmação é válido; fica ligada em quase todos os segmentos depois do SYN inicial |
+| FIN | Finish | o remetente não tem mais dados a enviar; consome 1 número |
+| RST | Reset | derruba a conexão de imediato, por exemplo ao receber segmento de uma conexão que não existe |
+| PSH | Push | pede que o receptor entregue os dados à aplicação sem esperar encher o buffer |
+| URG | Urgent | o ponteiro urgente é válido |
+| ECE | ECN-Echo | o receptor avisa que a rede marcou congestionamento ([RFC 3168](https://www.rfc-editor.org/rfc/rfc3168)) |
+| CWR | Congestion Window Reduced | o emissor avisa que já reduziu a janela em resposta ao ECE ([RFC 3168](https://www.rfc-editor.org/rfc/rfc3168)) |
 
-O cabeçalho tem 20 bytes quando não há opções ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.1).
+As opções mais comuns, todas negociadas no SYN, são estas:
 
-### 2.5 Janelas: quanto o emissor pode enviar
+| Tipo (kind) | Opção | Função |
+| --- | --- | --- |
+| 2 | MSS | maior segmento que o remetente aceita receber (veja a próxima seção) |
+| 3 | Window Scale | multiplica a janela por uma potência de 2, para passar do limite de 65.535 bytes ([RFC 7323](https://www.rfc-editor.org/rfc/rfc7323)) |
+| 4 | SACK Permitted | informa que o remetente entende confirmações seletivas ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)) |
+| 5 | SACK | leva os blocos recebidos fora de ordem ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)) |
+| 8 | Timestamps | mede o RTT e protege contra números de sequência repetidos ([RFC 7323](https://www.rfc-editor.org/rfc/rfc7323)) |
+
+### 2.5 Do fluxo de bytes ao segmento: o MSS
+
+A aplicação escreve um fluxo de bytes, e o TCP o corta em **segmentos**. O tamanho máximo da parte de dados é o **MSS** (*Maximum Segment Size*), que cada lado anuncia no SYN. Em uma rede Ethernet com MTU de 1500 bytes, o MSS é 1500 menos 20 (cabeçalho IPv4) menos 20 (cabeçalho TCP), ou seja, **1460 bytes** ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.7.1). Um arquivo de 1 MiB (1.048.576 bytes), por exemplo, vira 719 segmentos.
+
+O MSS evita a fragmentação no IP: o segmento já sai do tamanho que cabe no enlace. Quando o caminho tem uma MTU menor, o PMTUD (veja o simulador de ICMP) ajusta o tamanho.
+
+### 2.6 Janelas: quanto o emissor pode enviar
 
 ```mermaid
 flowchart LR
@@ -98,12 +162,12 @@ flowchart LR
   M --> E["Bytes em voo<br/>sem confirmação"]
 ```
 
-*Esquema 3 (janela efetiva).* O emissor mantém em voo, no máximo, o **menor** entre a janela de congestionamento (cwnd) e a janela anunciada pelo receptor (rwnd).
+*Esquema 4 (janela efetiva).* O emissor mantém em voo, no máximo, o **menor** entre a janela de congestionamento (cwnd) e a janela anunciada pelo receptor (rwnd).
 
 - A **rwnd** protege o receptor (controle de fluxo, [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293), seção 3.8.6).
 - A **cwnd** protege a rede (controle de congestionamento, [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681)).
 
-### 2.6 O controle de congestionamento
+### 2.7 O controle de congestionamento
 
 ```mermaid
 flowchart TD
@@ -115,7 +179,7 @@ flowchart TD
   FR --> CA
 ```
 
-*Esquema 4 (fases do controle de congestionamento).* Segue a [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681): o *slow start* cresce depressa até o limiar (*ssthresh*), e depois a *congestion avoidance* cresce devagar. Uma perda é lida como sinal de congestionamento, e a janela é reduzida.
+*Esquema 5 (fases do controle de congestionamento).* Segue a [RFC 5681](https://www.rfc-editor.org/rfc/rfc5681): o *slow start* cresce depressa até o limiar (*ssthresh*), e depois a *congestion avoidance* cresce devagar. Uma perda é lida como sinal de congestionamento, e a janela é reduzida.
 
 Dois sinais de perda têm custos muito diferentes:
 
@@ -126,14 +190,16 @@ Dois sinais de perda têm custos muito diferentes:
 
 O prazo de retransmissão (RTO) é calculado a partir do RTT medido ([RFC 6298](https://www.rfc-editor.org/rfc/rfc6298), que a [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) adota na seção 3.8.1). Com **SACK** ([RFC 2018](https://www.rfc-editor.org/rfc/rfc2018)), o receptor informa também os blocos recebidos fora de ordem, e o emissor reenvia só o que falta.
 
-### 2.7 Como ler o diagrama do simulador
+### 2.8 O que cada modo e aba do simulador mostram
 
 - **Diagrama de sequência:** cada seta é um segmento. A seta com X é um segmento perdido. No modo de download, cada seta representa uma **rodada** (uma janela inteira), para o desenho caber na tela.
 - **Estado da conexão (painel lateral):** mostra o estado TCP de cada ponta, e a cwnd, o ssthresh e o RTO no instante atual.
 - **Modos:** *TCP: conexão* mostra abertura, crescimento da janela, perdas e encerramento. *TCP: download* mostra um arquivo grande, com a fila do roteador e a vazão. *Comparação TCP x UDP* envia a mesma carga pelos dois protocolos na mesma rede.
 - **O relógio:** o tempo avança com o botão Passo ou com a reprodução, e os painéis acompanham o instante atual.
 
-### 2.8 Limites do modelo e do diagrama
+Para treinar a abertura e o encerramento, use o cenário "Handshake e encerramento". Para ver o crescimento da janela, use "Slow start". Para comparar as formas de recuperar perdas, use "Fast retransmit", "Timeout (RTO)", "Várias perdas sem SACK" e "Várias perdas com SACK". Para o controle de fluxo, use "Janela do receptor".
+
+### 2.9 Limites do modelo e do diagrama
 
 - O simulador mostra o **caminho típico** da máquina de estados e do controle de congestionamento. Ele não simula CUBIC, BBR, *Nagle*, ACK atrasado nem reinício por RST.
 - Os tempos, os tamanhos e a fila do roteador são **didáticos**: servem para comparar comportamentos, e não para prever o desempenho de uma rede real.
@@ -1874,9 +1940,11 @@ Significado e finalidade das siglas usadas neste documento.
 | --- | --- | --- |
 | **ACK** | Acknowledgment, confirmação | flag que confirma o recebimento de dados anteriores |
 | **BBR** | Bottleneck Bandwidth and Round-trip propagation time | controle de congestionamento que estima a banda e o RTT do caminho, em vez de reagir só à perda de pacotes |
+| **CWR** | Congestion Window Reduced, janela de congestionamento reduzida | flag do TCP com que o emissor avisa que já reduziu a janela em resposta ao ECE ([RFC 3168](https://www.rfc-editor.org/rfc/rfc3168)) |
 | **DHCP** | Dynamic Host Configuration Protocol, protocolo de configuração dinâmica de hosts | entrega ao cliente endereço IP, máscara, gateway e DNS, por empréstimo (lease) |
 | **DNS** | Domain Name System, sistema de nomes de domínio | traduz nomes (www.exemplo.org) em endereços IP e guarda outros registros do domínio |
 | **DSACK** | Duplicate SACK, SACK de duplicata | extensão do SACK em que o receptor avisa que recebeu dados em duplicidade |
+| **ECE** | ECN-Echo | flag do TCP com que o receptor avisa que a rede marcou congestionamento ([RFC 3168](https://www.rfc-editor.org/rfc/rfc3168)) |
 | **ECN** | Explicit Congestion Notification, notificação explícita de congestionamento | os roteadores marcam os pacotes quando há congestionamento, e o TCP reduz a taxa sem precisar de perda |
 | **FACK** | Forward Acknowledgment, confirmação adiante | algoritmo antigo de recuperação de perdas que usa o SACK para estimar os dados em trânsito |
 | **FIN** | Finish | flag do TCP que encerra a conexão de forma ordenada |
@@ -1890,8 +1958,10 @@ Significado e finalidade das siglas usadas neste documento.
 | **ISN** | Initial Sequence Number, número de sequência inicial | primeiro número de sequência de uma conexão TCP, escolhido de forma imprevisível |
 | **MSL** | Maximum Segment Lifetime, tempo máximo de vida do segmento | tempo máximo que um segmento pode existir na rede; define a espera do estado TIME-WAIT |
 | **MSS** | Maximum Segment Size, tamanho máximo de segmento | maior quantidade de dados que o TCP aceita por segmento; negociada no SYN |
+| **MTU** | Maximum Transmission Unit, unidade máxima de transmissão | maior pacote que um enlace transporta sem fragmentar |
 | **NTP** | Network Time Protocol | sincroniza o relógio dos equipamentos com uma fonte de tempo confiável |
 | **PMTUD** | Path MTU Discovery, descoberta da MTU do caminho | descobre o maior pacote que passa pelo caminho sem fragmentar, usando mensagens ICMP |
+| **PSH** | Push | flag do TCP que pede ao receptor que entregue os dados à aplicação sem esperar encher o buffer |
 | **QUIC** | nome do protocolo, que não é uma sigla oficial | transporte sobre UDP com criptografia embutida e múltiplos fluxos independentes; base do HTTP/3 |
 | **RACK** | Recent Acknowledgment, confirmação recente | detecta perdas pelo tempo de chegada dos ACKs, no lugar de contar ACKs duplicados |
 | **RFC** | Request for Comments, pedido de comentários | documento numerado do IETF que define ou descreve um protocolo da Internet; cada documento do projeto cita as RFCs com link para o RFC Editor |
@@ -1912,6 +1982,7 @@ Significado e finalidade das siglas usadas neste documento.
 | **TLP** | Tail Loss Probe, sonda de perda na cauda | envia um segmento de teste quando o ACK demora, para recuperar perdas no fim da transmissão sem esperar o RTO |
 | **TLS** | Transport Layer Security, segurança da camada de transporte | estabelece um canal cifrado e autenticado entre dois pontos, a base do HTTPS |
 | **UDP** | User Datagram Protocol | entrega datagramas sem conexão nem confirmação, com baixo custo; usado em consultas curtas e em tempo real |
+| **URG** | Urgent | flag do TCP que indica que o ponteiro urgente é válido (uso desaconselhado, [RFC 6093](https://www.rfc-editor.org/rfc/rfc6093)) |
 
 
 ---

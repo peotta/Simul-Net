@@ -6,7 +6,7 @@ Resolução de endereços na rede local: requisição em broadcast e resposta un
 - **Motor:** nativo (TypeScript puro, apresentado pela bancada genérica)
 - **Código-fonte:** `src/sims/arp/`
 - **RFCs e padrões:** [RFC 826](https://www.rfc-editor.org/rfc/rfc826) (ARP), [RFC 1027](https://www.rfc-editor.org/rfc/rfc1027) (Proxy ARP), [RFC 1122](https://www.rfc-editor.org/rfc/rfc1122) (Requisitos de hosts), [RFC 5227](https://www.rfc-editor.org/rfc/rfc5227) (Conflito de endereço)
-- **Tópicos:** Requisição e resposta; Tabela ARP (REACHABLE, STALE, FAILED); Gateway e proxy ARP; ARP Probe e Announce; Conflito de endereço e failover; Envenenamento de cache e defesas (DAI, entradas estáticas)
+- **Tópicos:** Requisição e resposta; Pacote ARP e quadro Ethernet; Tabela ARP (REACHABLE, STALE, FAILED); Gateway e proxy ARP; ARP Probe e Announce; Conflito de endereço e failover; Envenenamento de cache e defesas (DAI, entradas estáticas)
 
 ## 1. Modos
 
@@ -24,7 +24,34 @@ Em uma rede local, o quadro Ethernet precisa do **endereço MAC** do destino, ma
 
 Para falar com um destino de **outra** rede, o host não resolve o MAC do destino final: resolve o MAC do **gateway** (veja o simulador de IPv4 para a decisão entre entrega direta e gateway).
 
-### 2.2 O diagrama da resolução
+**O que você aprende com este simulador.**
+
+- Explicar por que o IP precisa do MAC e como o ARP faz a ligação entre os dois, só dentro de um enlace.
+- Ler o pacote ARP campo a campo e saber como ele viaja dentro de um quadro Ethernet.
+- Interpretar a tabela ARP e os estados das entradas (INCOMPLETE, REACHABLE, STALE e FAILED).
+- Entender o ARP gratuito, o *probe* e a detecção de endereço duplicado.
+- Reconhecer por que o ARP não autentica e quais defesas existem na rede local.
+
+
+### 2.2 Quando o host usa o ARP
+
+```mermaid
+flowchart TD
+  I["O host tem um pacote IP<br/>para o destino D"] --> T{"D está na minha<br/>sub-rede?"}
+  T -- "sim" --> A1["O próximo salto é o próprio D"]
+  T -- "não" --> A2["O próximo salto é o gateway"]
+  A1 --> C{"O MAC do próximo salto<br/>está na tabela ARP?"}
+  A2 --> C
+  C -- "sim" --> S["Monta o quadro e envia"]
+  C -- "não" --> R["Envia um ARP Request em broadcast<br/>e guarda o pacote até a resposta"]
+  R --> P{"Chegou o ARP Reply?"}
+  P -- "sim" --> G["Grava a entrada na tabela<br/>e envia o quadro"]
+  P -- "não" --> F["Esgotadas as tentativas: entrada FAILED<br/>e o envio falha com host inalcançável"]
+```
+
+*Esquema 1 (quando o ARP entra em ação).* O ARP resolve sempre o MAC do **próximo salto**, que é o destino (na mesma sub-rede) ou o gateway (em outra rede). A decisão entre os dois é a do host IPv4 (veja o simulador de IPv4). O host guarda o pacote durante a resolução e só consulta a rede se a tabela não tiver a entrada ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seções 2.3.2.1 e 2.3.2.2).
+
+### 2.3 O diagrama da resolução
 
 ```mermaid
 sequenceDiagram
@@ -40,25 +67,87 @@ sequenceDiagram
   A->>B: quadro IP com MAC-B de destino
 ```
 
-*Esquema 1 (resolução de um endereço).* A pergunta é um **broadcast**, e a resposta é **unicast** direto ao solicitante. O resultado fica na **tabela ARP** (cache) por um tempo, para não perguntar de novo a cada pacote.
+*Esquema 2 (resolução de um endereço).* A pergunta é um **broadcast**, e a resposta é **unicast** direto ao solicitante. O resultado fica na **tabela ARP** (cache) por um tempo, para não perguntar de novo a cada pacote.
 
 O algoritmo da [RFC 826](https://www.rfc-editor.org/rfc/rfc826) tem uma particularidade: ao receber qualquer pacote ARP, o host **atualiza** a entrada do remetente, se ela já existir, antes mesmo de olhar o código da operação. Só adiciona uma entrada nova se o pacote for dirigido a ele. Isso economiza mensagens, mas é a raiz do problema de confiança descrito mais abaixo.
 
-### 2.3 O pacote ARP
+### 2.4 O pacote ARP
 
-| Campo | Tamanho | Valor no Ethernet com IPv4 |
-| --- | --- | --- |
-| Tipo de hardware | 16 bits | 1 (Ethernet) |
-| Tipo de protocolo | 16 bits | 0x0800 (IPv4) |
-| Tamanho do endereço de hardware | 8 bits | 6 |
-| Tamanho do endereço de protocolo | 8 bits | 4 |
-| Operação | 16 bits | 1 (pedido) ou 2 (resposta) |
-| MAC e IP do remetente | 6 e 4 bytes | quem envia |
-| MAC e IP do alvo | 6 e 4 bytes | MAC desconhecido (zeros) no pedido |
+O pacote ARP tem **28 bytes** quando resolve endereços IPv4 em uma rede Ethernet ([RFC 826](https://www.rfc-editor.org/rfc/rfc826)). O desenho mostra os campos em linhas de 32 bits, na ordem de transmissão.
 
-No pedido, o MAC do alvo é o que se procura, por isso fica vazio. Na resposta, ele traz o MAC de quem pediu. O quadro Ethernet que carrega o ARP usa o tipo 0x0806.
+```mermaid
+packet-beta
+  0-15: "Tipo de hardware (1)"
+  16-31: "Tipo de protocolo (0x0800)"
+  32-39: "HLEN (6)"
+  40-47: "PLEN (4)"
+  48-63: "Operação (1 ou 2)"
+  64-111: "MAC do remetente (SHA)"
+  112-143: "IP do remetente (SPA)"
+  144-191: "MAC do alvo (THA)"
+  192-223: "IP do alvo (TPA)"
+```
 
-### 2.4 ARP gratuito, probe e conflito de endereço
+*Esquema 3 (o pacote ARP).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. Os endereços de hardware (48 bits) atravessam linhas, e os de protocolo (IPv4) ocupam 32 bits. A tabela abaixo descreve todos os campos, em ordem.
+
+| Campo | Posição (bits) | Tamanho | Valor no Ethernet com IPv4 |
+| --- | --- | --- | --- |
+| Tipo de hardware (HTYPE) | 0 a 15 | 16 bits | 1 (Ethernet) |
+| Tipo de protocolo (PTYPE) | 16 a 31 | 16 bits | 0x0800 (IPv4) |
+| Tamanho do endereço de hardware (HLEN) | 32 a 39 | 8 bits | 6 |
+| Tamanho do endereço de protocolo (PLEN) | 40 a 47 | 8 bits | 4 |
+| Operação (OPER) | 48 a 63 | 16 bits | 1 (pedido) ou 2 (resposta) |
+| MAC do remetente (SHA) | 64 a 111 | 48 bits | quem envia |
+| IP do remetente (SPA) | 112 a 143 | 32 bits | quem envia |
+| MAC do alvo (THA) | 144 a 191 | 48 bits | zeros no pedido; MAC de quem perguntou na resposta |
+| IP do alvo (TPA) | 192 a 223 | 32 bits | o IP que se procura |
+
+No pedido do Host A (192.168.1.10) pelo Host B (192.168.1.20), o SHA é 00:00:5e:00:53:0a, o SPA é 192.168.1.10, o THA é 00:00:00:00:00:00 e o TPA é 192.168.1.20. Na resposta, o Host B envia o próprio MAC (00:00:5e:00:53:14) no SHA e o IP dele no SPA, e o MAC e o IP do Host A vão no THA e no TPA.
+
+### 2.5 O pacote dentro do quadro Ethernet
+
+O ARP não usa o IP: o pacote vai **direto no quadro Ethernet**, com o tipo 0x0806. Por isso o ARP é um protocolo de enlace que não passa por roteadores.
+
+```mermaid
+packet-beta
+  0-47: "MAC de destino (ff:ff:ff:ff:ff:ff no pedido)"
+  48-95: "MAC de origem"
+  96-111: "Tipo 0x0806"
+  112-335: "Pacote ARP (28 bytes)"
+  336-479: "Preenchimento (18 bytes)"
+  480-511: "FCS"
+```
+
+*Esquema 4 (o quadro Ethernet que carrega o ARP).* O cabeçalho Ethernet tem 14 bytes (destino, origem e tipo). O pedido vai ao endereço de broadcast, e a resposta vai ao MAC de quem perguntou. A carga útil mínima do Ethernet é de 46 bytes (IEEE 802.3), então os 28 bytes do ARP recebem **18 bytes de preenchimento**. Com os 4 bytes do FCS (*Frame Check Sequence*), o quadro tem 64 bytes. A placa de rede costuma acrescentar o preenchimento e o FCS, e por isso eles não aparecem em uma captura comum.
+
+### 2.6 A tabela ARP e os estados das entradas
+
+Para não perguntar a cada pacote, o host guarda o resultado na **tabela ARP** (cache), com validade limitada ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 2.3.2.1). No Linux, ela é vista com `ip neigh`, e cada entrada tem um estado.
+
+```mermaid
+stateDiagram-v2
+  [*] --> INCOMPLETE: precisa do MAC, envia o pedido
+  INCOMPLETE --> REACHABLE: recebe o ARP Reply
+  INCOMPLETE --> FAILED: sem resposta depois das tentativas
+  REACHABLE --> STALE: a validade vence
+  STALE --> REACHABLE: confirmada por nova resposta
+  FAILED --> INCOMPLETE: nova tentativa de envio
+```
+
+*Esquema 5 (estados de uma entrada ARP no Linux).* O kernel do Linux tem ainda os estados intermediários DELAY e PROBE entre STALE e REACHABLE, e as entradas PERMANENT (estáticas); o diagrama os omite para mostrar só os estados que o simulador exibe. A entrada STALE continua sendo usada e é confirmada com uma nova consulta quando há tráfego. Os tempos variam entre sistemas: no Linux, a validade é de algumas dezenas de segundos, e em roteadores costuma ser de horas.
+
+| Estado | Significado |
+| --- | --- |
+| INCOMPLETE | o pedido foi enviado, e a resposta ainda não chegou |
+| REACHABLE | o vizinho respondeu há pouco, e a entrada é confiável |
+| STALE | a validade passou; a entrada ainda é usada, mas será confirmada |
+| FAILED | não houve resposta depois das tentativas |
+
+### 2.7 Fora da sub-rede e proxy ARP
+
+O broadcast do ARP **não atravessa roteadores**. Para um destino em outra rede, o host faz o ARP do **gateway**, e o quadro leva o MAC do gateway com o IP do destino final. No **proxy ARP** ([RFC 1027](https://www.rfc-editor.org/rfc/rfc1027)), o roteador responde ao pedido de um endereço de outra rede usando o próprio MAC. Isso permite a hosts sem gateway configurado alcançar outras redes, mas esconde erros de máscara e de rota.
+
+### 2.8 ARP gratuito, probe e conflito de endereço
 
 ```mermaid
 sequenceDiagram
@@ -76,11 +165,11 @@ sequenceDiagram
   end
 ```
 
-*Esquema 2 (detecção de conflito).* Segundo a [RFC 5227](https://www.rfc-editor.org/rfc/rfc5227), antes de usar um endereço o host envia **3 sondas** (*probes*) espaçadas de 1 a 2 segundos, com o IP de origem zerado para não contaminar o cache dos outros (seção 2.1.1). Se ninguém reclamar, envia **2 anúncios** com intervalo de 2 segundos (seção 2.3). Depois, continua a vigiar conflitos e defende o endereço (seção 2.4).
+*Esquema 6 (detecção de conflito).* Segundo a [RFC 5227](https://www.rfc-editor.org/rfc/rfc5227), antes de usar um endereço o host envia **3 sondas** (*probes*) espaçadas de 1 a 2 segundos, com o IP de origem zerado para não contaminar o cache dos outros (seção 2.1.1). Se ninguém reclamar, envia **2 anúncios** com intervalo de 2 segundos (seção 2.3). Depois, continua a vigiar conflitos e defende o endereço (seção 2.4).
 
 O anúncio é feito com um **pedido** (e não com uma resposta), e serve para atualizar os caches dos vizinhos quando um endereço muda de MAC, como acontece na troca de um equipamento ou em um failover de gateway.
 
-### 2.5 O limite de confiança: o ARP não autentica
+### 2.9 O limite de confiança: o ARP não autentica
 
 O ARP não tem nenhuma forma de verificar quem responde. Qualquer host do enlace pode enviar uma resposta dizendo que um IP está em seu MAC, e os outros hosts a aceitam. É um limite do projeto original, e não um defeito de implementação.
 
@@ -95,16 +184,18 @@ flowchart TD
   D --> D4["Monitoramento de mudanças<br/>de MAC para um mesmo IP"]
 ```
 
-*Esquema 3 (limite de confiança e defesas).* O diagrama mostra o efeito e as defesas, no nível defensivo. O simulador mostra, no modo **Envenenamento de cache**, como a tabela de um host muda depois de uma resposta não solicitada, e como uma proteção na rede impede essa mudança.
+*Esquema 7 (limite de confiança e defesas).* O diagrama mostra o efeito e as defesas, no nível defensivo. O simulador mostra, no modo **Envenenamento de cache**, como a tabela de um host muda depois de uma resposta não solicitada, e como uma proteção na rede impede essa mudança.
 
-### 2.6 Como ler o diagrama do simulador
+### 2.10 O que cada modo e aba do simulador mostram
 
 - **Topologia:** hosts, um switch e o gateway, na mesma rede local. O ARP é enviado a todas as portas do switch, e a resposta segue só pelo caminho do solicitante.
 - **Diagrama de sequência:** as setas são os pacotes ARP, e o quadro de dados só aparece depois da resolução.
 - **Aba Tabela ARP:** mostra o cache de cada host no instante atual, no formato do `ip neigh` do Linux, com o estado de cada entrada (INCOMPLETE, REACHABLE, STALE ou FAILED).
 - **Modos:** *Resolução*, *ARP gratuito e conflito* e *Envenenamento de cache*.
 
-### 2.7 Limites do modelo e do diagrama
+Para treinar a resolução, use o modo **Resolução** e varie o destino (mesma rede, gateway e proxy ARP). Para treinar o conflito de endereço, use o modo **ARP gratuito e conflito**. Para ver o efeito de uma resposta forjada e das defesas, use o modo **Envenenamento de cache**.
+
+### 2.11 Limites do modelo e do diagrama
 
 - A [RFC 826](https://www.rfc-editor.org/rfc/rfc826) não tem seções numeradas, então as citações se referem aos títulos ("Packet Reception"). A [RFC 5227](https://www.rfc-editor.org/rfc/rfc5227) tem seções numeradas, e elas são citadas.
 - O simulador trata de **IPv4 sobre Ethernet**. O IPv6 usa outro mecanismo, o *Neighbor Discovery* ([RFC 4861](https://www.rfc-editor.org/rfc/rfc4861)), no lugar do ARP.
@@ -1477,12 +1568,19 @@ Significado e finalidade das siglas usadas neste documento.
 | **BGP** | Border Gateway Protocol, protocolo de roteador de borda | troca rotas entre sistemas autônomos e sustenta o roteamento entre operadoras na Internet |
 | **DAI** | Dynamic ARP Inspection, inspeção dinâmica de ARP | recurso do switch que confere as respostas ARP com a tabela do DHCP snooping e descarta as forjadas |
 | **DHCP** | Dynamic Host Configuration Protocol, protocolo de configuração dinâmica de hosts | entrega ao cliente endereço IP, máscara, gateway e DNS, por empréstimo (lease) |
+| **FCS** | Frame Check Sequence, sequência de verificação do frame | código (CRC) no fim do frame que permite ao receptor descartar frames corrompidos |
+| **HLEN** | Hardware Address Length, tamanho do endereço de hardware | campo do pacote ARP com o tamanho, em bytes, do endereço físico (6 para MAC) |
 | **HTTP** | Hypertext Transfer Protocol, protocolo de transferência de hipertexto | transporta páginas e dados entre navegador e servidor web |
 | **HTTPS** | HTTP Secure | HTTP protegido por TLS: cifra o conteúdo e autentica o servidor |
+| **HTYPE** | Hardware Type, tipo de hardware | campo do pacote ARP que identifica a tecnologia do enlace (1 para Ethernet) |
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
+| **IEEE** | Institute of Electrical and Electronics Engineers | entidade que publica padrões de redes locais, como o 802.3 (Ethernet), o 802.1 (comutação) e o 802.11 (Wi-Fi) |
 | **IP** | Internet Protocol, protocolo de internet | endereça e encaminha pacotes entre redes, de origem a destino |
 | **MAC** | Media Access Control | camada de enlace que controla o acesso ao meio; também nomeia o endereço físico de 48 bits de uma interface |
 | **NDP** | Neighbor Discovery Protocol, protocolo de descoberta de vizinhos | equivalente do ARP no IPv6 ([RFC 4861](https://www.rfc-editor.org/rfc/rfc4861)), feito por mensagens ICMPv6 |
+| **OPER** | Operation, operação | campo do pacote ARP que distingue o pedido (1) da resposta (2) |
+| **PLEN** | Protocol Address Length, tamanho do endereço de protocolo | campo do pacote ARP com o tamanho, em bytes, do endereço de rede (4 para IPv4) |
+| **PTYPE** | Protocol Type, tipo de protocolo | campo do pacote ARP que identifica o protocolo de rede dos endereços resolvidos (0x0800 para IPv4) |
 | **RFC** | Request for Comments, pedido de comentários | documento numerado do IETF que define ou descreve um protocolo da Internet; cada documento do projeto cita as RFCs com link para o RFC Editor |
 | **RTT** | Round-Trip Time, tempo de ida e volta | mede o tempo entre enviar um pacote e receber a resposta; base dos temporizadores e da latência |
 | **SHA** | Sender Hardware Address, endereço de hardware do remetente | campo do pacote ARP com o MAC de quem o enviou |
