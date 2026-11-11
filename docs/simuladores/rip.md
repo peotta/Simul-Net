@@ -87,6 +87,7 @@ packet-beta
 | --- | --- | --- |
 | Comando | 1 byte | 1 para Request (pede a tabela) e 2 para Response (envia a tabela) |
 | Versão | 1 byte | 2 para o RIPv2 |
+| Zero | 2 bytes | reservado, deve ser 0 |
 | Família de endereços | 2 bytes | 2 para IP |
 | Etiqueta de rota | 2 bytes | marca a origem da rota (por exemplo, rota externa); o RIP só a repassa |
 | Endereço IP | 4 bytes | o destino da rota |

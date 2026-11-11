@@ -89,6 +89,19 @@ packet-beta
 
 *Esquema 4 (EAPOL e o pacote EAP que ele carrega).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. As duas primeiras linhas são o cabeçalho EAPOL: versão, tipo (0 para um pacote EAP, 1 para Start, 2 para Logoff e 3 para Key) e o tamanho do corpo. O corpo é o pacote EAP, com o código (1 Request, 2 Response, 3 Success e 4 Failure), o identificador que casa cada Response com o seu Request, o tamanho e, nos Request e Response, o **tipo do método** (1 Identity, 3 Nak, 4 MD5-Challenge e 13 EAP-TLS) seguido dos dados dele (RFC 3748, seção 4). Success e Failure não têm tipo nem dados.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Versão EAPOL | 0 a 7 | 8 bits | versão do EAPOL (1, 2 ou 3, conforme a edição do 802.1X) |
+| Tipo do pacote EAPOL | 8 a 15 | 8 bits | 0 EAP-Packet, 1 EAPOL-Start, 2 EAPOL-Logoff, 3 EAPOL-Key |
+| Tamanho do corpo | 16 a 31 | 16 bits | tamanho do corpo que vem depois do cabeçalho EAPOL, em bytes |
+| Código EAP | 32 a 39 | 8 bits | 1 Request, 2 Response, 3 Success, 4 Failure |
+| Identificador | 40 a 47 | 8 bits | casa cada Response com o Request que o provocou |
+| Tamanho do pacote EAP | 48 a 63 | 16 bits | tamanho do pacote EAP inteiro, do código aos dados |
+| Tipo do método | 64 a 71 | 8 bits | só em Request e Response: 1 Identity, 3 Nak, 4 MD5-Challenge, 13 EAP-TLS |
+| Dados do método | 72 a 95 (condensado) | variável | conteúdo específico do método, como a identidade ou o desafio |
+
+Os campos de Código EAP a Dados do método formam o pacote EAP, que vai no corpo do EAPOL. Success e Failure terminam no tamanho, sem tipo nem dados.
+
 Entre o autenticador e o servidor, o EAP viaja dentro do RADIUS:
 
 \`\`\`mermaid
@@ -101,6 +114,14 @@ packet-beta
 \`\`\`
 
 *Esquema 5 (o pacote RADIUS).* O pacote tem o código (1 Access-Request, 2 Access-Accept, 3 Access-Reject e 11 Access-Challenge), um identificador, o tamanho, o campo **Authenticator** de 16 bytes e uma lista de atributos (RFC 2865, seção 3). Os atributos têm o formato tipo, tamanho e valor. O pacote EAP vai no atributo **EAP-Message** (tipo 79), e o atributo **Message-Authenticator** (tipo 80) protege a integridade do pacote com o segredo compartilhado (RFC 3579). O campo Authenticator do Access-Request é um número aleatório de 16 bytes, usado também para esconder atributos como a senha.
+
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Código RADIUS | 0 a 7 | 8 bits | 1 Access-Request, 2 Access-Accept, 3 Access-Reject, 11 Access-Challenge |
+| Identificador | 8 a 15 | 8 bits | casa a resposta com o pedido |
+| Tamanho | 16 a 31 | 16 bits | tamanho do pacote RADIUS inteiro, em bytes |
+| Authenticator | 32 a 159 | 16 bytes | no Access-Request, um número aleatório; nas respostas, um resumo calculado com o segredo compartilhado |
+| Atributos | 160 a 191 (condensado) | variável | lista de atributos em tipo, tamanho e valor; o EAP vai no EAP-Message (79) e a integridade, no Message-Authenticator (80) |
 
 ### Os métodos EAP
 

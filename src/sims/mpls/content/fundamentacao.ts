@@ -48,12 +48,16 @@ packet-beta
 
 *Esquema 2 (uma entrada de rótulo em um quadro Ethernet).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O Tipo 0x8847 indica unicast MPLS (0x8848, multicast), e o pacote IP aparece condensado no desenho. Cada entrada da pilha tem 32 bits, e o pacote pode levar **várias** entradas, uma depois da outra: o bit S vale 1 só na última.
 
-| Campo | Tamanho | Função |
-| --- | --- | --- |
-| Rótulo | 20 bits | identifica a classe de encaminhamento (FEC) |
-| TC | 3 bits | classe de tráfego, usada para QoS (era chamado EXP na RFC 3032) |
-| S | 1 bit | vale 1 na última entrada da pilha |
-| TTL | 8 bits | decrementado a cada roteador, como no IP |
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| MAC de destino | 0 a 47 | 6 bytes | endereço do próximo equipamento no enlace |
+| MAC de origem | 48 a 95 | 6 bytes | endereço de quem envia o quadro |
+| Tipo | 96 a 111 | 2 bytes | 0x8847 para MPLS unicast (0x8848 para multicast) |
+| Rótulo | 112 a 131 | 20 bits | identifica a classe de encaminhamento (FEC) e é o índice da tabela de rótulos |
+| TC | 132 a 134 | 3 bits | classe de tráfego, usada para QoS (era chamado EXP na RFC 3032) |
+| S | 135 | 1 bit | vale 1 na última entrada da pilha de rótulos |
+| TTL | 136 a 143 | 8 bits | decrementado a cada roteador, como no IP |
+| Pacote IP | 144 a 175 (condensado) | variável | o cabeçalho e os dados do pacote transportado |
 
 Alguns valores são reservados (RFC 3032): 0 é o *IPv4 Explicit NULL*, 1 é o *Router Alert*, 2 é o *IPv6 Explicit NULL* e 3 é o *Implicit NULL*, que é anunciado mas nunca aparece no pacote. Os rótulos livres começam em 16.
 

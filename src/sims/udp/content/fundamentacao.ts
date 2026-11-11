@@ -71,6 +71,16 @@ packet-beta
 
 *Esquema 3 (o pseudocabeçalho IPv4 do checksum).* O cálculo é a soma em complemento de um, em palavras de 16 bits, do pseudocabeçalho, do cabeçalho UDP (com o checksum zerado) e dos dados, com o resultado complementado ([RFC 768](https://www.rfc-editor.org/rfc/rfc768); [RFC 1071](https://www.rfc-editor.org/rfc/rfc1071)). O receptor refaz a soma, e o resultado correto fecha em zero.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Endereço IP de origem | 0 a 31 | 32 bits | o IP de origem do datagrama, copiado do cabeçalho IP |
+| Endereço IP de destino | 32 a 63 | 32 bits | o IP de destino do datagrama, copiado do cabeçalho IP |
+| Zero | 64 a 71 | 8 bits | preenchimento com zeros |
+| Protocolo | 72 a 79 | 8 bits | 17, o número do UDP no cabeçalho IP |
+| Comprimento do UDP | 80 a 95 | 16 bits | cabeçalho UDP mais dados, em bytes, o mesmo do cabeçalho UDP |
+
+O pseudocabeçalho não é transmitido: o emissor e o receptor o montam só para calcular o checksum.
+
 ### O tamanho do datagrama
 
 O campo de comprimento tem 16 bits, e o IPv4 limita o pacote a 65.535 bytes, então a carga útil máxima teórica é de **65.507 bytes** (65.535 menos 20 do IP e 8 do UDP). Na prática, o limite útil é a MTU: em Ethernet (1500 bytes), cabem **1472 bytes** de dados sem fragmentar (1500 menos 20 e menos 8). Datagramas maiores são fragmentados pelo IP, e a perda de um fragmento descarta o datagrama inteiro, por isso as aplicações costumam manter o UDP abaixo da MTU (RFC 8085, seção 3.2).

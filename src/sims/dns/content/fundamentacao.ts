@@ -67,6 +67,33 @@ packet-beta
 
 *Esquema 2 (o cabeçalho da mensagem DNS).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O **identificador** casa a resposta com a pergunta. Os flags dizem se a mensagem é pergunta ou resposta (QR), o tipo de consulta (Opcode), se a resposta é autoritativa (AA), se foi truncada (TC), se a recursão é desejada (RD) e está disponível (RA); o bit Z é reservado, e o AD (dados autenticados) e o CD (checagem desabilitada) são do DNSSEC (RFC 4035). O **RCODE** é o resultado: 0 sem erro, 1 formato inválido, 2 falha do servidor, 3 nome inexistente (NXDOMAIN) e 5 recusado. Os quatro contadores dizem quantas entradas cada seção tem.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Identificador | 0 a 15 | 16 bits | número escolhido por quem pergunta e copiado na resposta, para casar as duas |
+| QR | 16 | 1 bit | 0 na pergunta (*query*), 1 na resposta (*response*) |
+| Opcode | 17 a 20 | 4 bits | tipo de consulta: 0 padrão, 1 inversa (obsoleta), 2 status; 4 NOTIFY e 5 UPDATE vêm de RFCs posteriores |
+| AA | 21 | 1 bit | resposta autoritativa: o servidor é o dono da zona |
+| TC | 22 | 1 bit | mensagem truncada por não caber no limite do UDP; o cliente repete por TCP |
+| RD | 23 | 1 bit | recursão desejada: o cliente pede que o servidor percorra a hierarquia por ele |
+| RA | 24 | 1 bit | recursão disponível: o servidor informa que atende a recursão |
+| Z | 25 | 1 bit | reservado, deve ser 0 |
+| AD | 26 | 1 bit | dados autenticados: o resolvedor validou as assinaturas DNSSEC (RFC 4035) |
+| CD | 27 | 1 bit | checagem desabilitada: o cliente pede os dados mesmo sem validação (RFC 4035) |
+| RCODE | 28 a 31 | 4 bits | resultado, conforme a tabela abaixo |
+| QDCOUNT | 32 a 47 | 16 bits | quantidade de entradas na seção de pergunta (em geral 1) |
+| ANCOUNT | 48 a 63 | 16 bits | quantidade de registros na seção de resposta |
+| NSCOUNT | 64 a 79 | 16 bits | quantidade de registros na seção de autoridade (os servidores de nomes) |
+| ARCOUNT | 80 a 95 | 16 bits | quantidade de registros na seção de informações adicionais |
+
+| RCODE | Nome | Significado |
+| --- | --- | --- |
+| 0 | NOERROR | sem erro |
+| 1 | FORMERR | o servidor não entendeu o formato da pergunta |
+| 2 | SERVFAIL | falha no servidor (inclui falha de validação DNSSEC) |
+| 3 | NXDOMAIN | o nome não existe |
+| 4 | NOTIMP | tipo de consulta não implementado |
+| 5 | REFUSED | o servidor recusou responder por política |
+
 Cada entrada das seções de resposta, autoridade e adicionais é um **registro de recurso**, com o formato abaixo (seção 3.2.1).
 
 \`\`\`mermaid
@@ -80,6 +107,17 @@ packet-beta
 \`\`\`
 
 *Esquema 3 (um registro de recurso).* O **nome** é uma sequência de rótulos precedidos do tamanho, e pode ser trocado por um ponteiro para um trecho anterior da mensagem, o que economiza espaço (seção 4.1.4). O **tipo** diz o que o registro é, a **classe** é quase sempre IN (internet), o **TTL** é o prazo de validade no cache, e o **RDATA** tem o dado, com o tamanho dado em RDLENGTH. A seção de pergunta tem só o nome, o tipo e a classe.
+
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Nome | 0 a 31 (condensado) | variável | o nome do dono do registro, em rótulos precedidos do tamanho; pode terminar em um ponteiro de compressão (dois bytes que começam com os bits 11) |
+| Tipo | 32 a 47 | 16 bits | o tipo do registro (A, AAAA, NS, CNAME, MX e outros, na tabela abaixo) |
+| Classe | 48 a 63 | 16 bits | a família de protocolos; quase sempre 1 (IN, internet) |
+| TTL | 64 a 95 | 32 bits | segundos em que a resposta pode ficar no cache |
+| RDLENGTH | 96 a 111 | 16 bits | tamanho do RDATA, em bytes |
+| RDATA | 112 a 143 (condensado) | variável | o dado do registro, cujo formato depende do tipo (por exemplo 4 bytes num A e 16 num AAAA) |
+
+A entrada da seção de pergunta tem só três campos: o nome, o tipo (QTYPE) e a classe (QCLASS), sem TTL, RDLENGTH nem RDATA.
 
 | Tipo de registro | Código | Função |
 | --- | --- | --- |

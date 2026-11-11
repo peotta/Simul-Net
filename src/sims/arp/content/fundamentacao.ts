@@ -103,6 +103,15 @@ packet-beta
 
 *Esquema 4 (o quadro Ethernet que carrega o ARP).* O cabeçalho Ethernet tem 14 bytes (destino, origem e tipo). O pedido vai ao endereço de broadcast, e a resposta vai ao MAC de quem perguntou. A carga útil mínima do Ethernet é de 46 bytes (IEEE 802.3), então os 28 bytes do ARP recebem **18 bytes de preenchimento**. Com os 4 bytes do FCS (*Frame Check Sequence*), o quadro tem 64 bytes. A placa de rede costuma acrescentar o preenchimento e o FCS, e por isso eles não aparecem em uma captura comum.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| MAC de destino | 0 a 47 | 6 bytes | ff:ff:ff:ff:ff:ff no pedido (broadcast); o MAC de quem perguntou na resposta |
+| MAC de origem | 48 a 95 | 6 bytes | MAC de quem envia o quadro |
+| Tipo | 96 a 111 | 2 bytes | 0x0806, que indica ARP na carga |
+| Pacote ARP | 112 a 335 | 28 bytes | os campos do esquema 3 |
+| Preenchimento | 336 a 479 | 18 bytes | zeros que completam os 46 bytes mínimos da carga do Ethernet |
+| FCS | 480 a 511 | 4 bytes | verificação do quadro, um CRC de 32 bits |
+
 ### A tabela ARP e os estados das entradas
 
 Para não perguntar a cada pacote, o host guarda o resultado na **tabela ARP** (cache), com validade limitada ([RFC 1122](https://www.rfc-editor.org/rfc/rfc1122), seção 2.3.2.1). No Linux, ela é vista com \`ip neigh\`, e cada entrada tem um estado.

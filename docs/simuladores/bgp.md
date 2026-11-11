@@ -74,6 +74,12 @@ packet-beta
 
 *Esquema 2 (o cabeçalho BGP).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O **marcador** tem 16 bytes com todos os bits em 1 (na versão 4 sem autenticação) e serve para o receptor se sincronizar no fluxo TCP. O **tamanho** vai de 19 (o KEEPALIVE, que é só o cabeçalho) a 4096 bytes. O **tipo** é 1 OPEN, 2 UPDATE, 3 NOTIFICATION e 4 KEEPALIVE.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Marcador | 0 a 127 | 16 bytes | todos os bits em 1 (sem autenticação), para o receptor se sincronizar no fluxo TCP |
+| Tamanho da mensagem | 128 a 143 | 2 bytes | tamanho total da mensagem, cabeçalho incluído, de 19 a 4096 bytes |
+| Tipo | 144 a 151 | 1 byte | 1 OPEN, 2 UPDATE, 3 NOTIFICATION, 4 KEEPALIVE |
+
 O corpo da mensagem **OPEN** vem logo depois do cabeçalho ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), seção 4.2):
 
 ```mermaid
@@ -87,6 +93,15 @@ packet-beta
 ```
 
 *Esquema 3 (o corpo do OPEN).* O **Meu AS** tem 16 bits: para um AS de 32 bits, o campo leva o valor 23456 (AS_TRANS) e o número real viaja em uma capacidade negociada nos parâmetros opcionais ([RFC 6793](https://www.rfc-editor.org/rfc/rfc6793)). O **Hold Time** proposto vale zero ou pelo menos 3 s, e a sessão usa o menor dos dois valores propostos. O **BGP Identifier** é um número de 32 bits, no formato de um endereço IPv4, que identifica o roteador e é o desempate final da decisão.
+
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Versão | 0 a 7 | 1 byte | versão do BGP, 4 |
+| Meu AS | 8 a 23 | 2 bytes | número do AS de quem envia; 23456 (AS_TRANS) quando o AS tem 32 bits |
+| Hold Time | 24 a 39 | 2 bytes | tempo máximo, em segundos, sem receber KEEPALIVE ou UPDATE; 0 ou pelo menos 3 |
+| BGP Identifier | 40 a 71 | 4 bytes | identificador do roteador, no formato de um endereço IPv4 |
+| Tamanho dos parâmetros | 72 a 79 | 1 byte | tamanho dos parâmetros opcionais; 0 se não houver |
+| Parâmetros opcionais | 80 a 111 (condensado) | variável | capacidades negociadas, como o AS de 32 bits e o suporte a IPv6 |
 
 O corpo do **UPDATE** tem três partes, nesta ordem ([RFC 4271](https://www.rfc-editor.org/rfc/rfc4271), seção 4.3):
 

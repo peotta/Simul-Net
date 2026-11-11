@@ -59,6 +59,17 @@ packet-beta
 
 *Esquema 2 (os campos que o filtro usa).* Este é um desenho **condensado**, e não o formato real dos cabeçalhos: o protocolo e os endereços ficam no cabeçalho IP, e as portas e as flags, no cabeçalho TCP ou UDP (veja os simuladores de IPv4, TCP e UDP). Somando a **interface** por onde o pacote entrou, esses campos formam a **tupla de cinco campos** (protocolo, origem e destino, portas de origem e de destino) que identifica uma conexão. No ICMP, não há portas: valem o tipo e o código.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Protocolo | 0 a 7 | 8 bits | protocolo transportado (TCP, UDP ou ICMP), lido no cabeçalho IP |
+| IP de origem | 8 a 39 | 32 bits | endereço de quem enviou o pacote, lido no cabeçalho IP |
+| IP de destino | 40 a 71 | 32 bits | endereço a quem o pacote se destina, lido no cabeçalho IP |
+| Porta de origem | 72 a 87 | 16 bits | porta de quem enviou, lida no cabeçalho TCP ou UDP |
+| Porta de destino | 88 a 103 | 16 bits | porta do serviço procurado, lida no cabeçalho TCP ou UDP |
+| Flags do TCP | 104 a 111 | 8 bits | SYN, ACK, FIN, RST e outras; o filtro com estado as usa para acompanhar a conexão |
+
+A interface de entrada não aparece no desenho porque não faz parte do pacote, mas as regras também podem citá-la.
+
 Uma regra casa quando **todos** os campos que ela cita conferem. Exemplo de lista, com a notação genérica do simulador:
 
 | Ordem | Ação | Origem | Destino | Protocolo | Porta de destino | Para quê |

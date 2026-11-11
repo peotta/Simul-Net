@@ -106,6 +106,15 @@ packet-beta
 
 *Esquema 3 (o quadro HTTP/2).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O **tamanho** é o da carga (por padrão, até 16.384 bytes). O **tipo** é 0 DATA, 1 HEADERS, 3 RST_STREAM, 4 SETTINGS, 6 PING, 7 GOAWAY e 8 WINDOW_UPDATE, entre outros. As **flags** dependem do tipo: por exemplo, END_STREAM (0x1) marca o último quadro de um fluxo e END_HEADERS (0x4), o fim dos cabeçalhos. O bit **R** é reservado. O **identificador do fluxo** tem 31 bits: os fluxos iniciados pelo cliente têm número ímpar, e o fluxo 0 é o da conexão inteira.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Tamanho da carga | 0 a 23 | 24 bits | tamanho da carga útil do quadro, em bytes (por padrão até 16.384) |
+| Tipo | 24 a 31 | 8 bits | 0 DATA, 1 HEADERS, 3 RST_STREAM, 4 SETTINGS, 6 PING, 7 GOAWAY, 8 WINDOW_UPDATE, entre outros |
+| Flags | 32 a 39 | 8 bits | dependem do tipo: END_STREAM (0x1) e END_HEADERS (0x4) são exemplos |
+| R | 40 | 1 bit | reservado, deve ser 0 |
+| Identificador do fluxo | 41 a 71 | 31 bits | a que fluxo o quadro pertence; 0 é a conexão inteira e os do cliente são ímpares |
+| Carga útil | 72 a 103 (condensado) | variável | os dados do quadro, conforme o tipo |
+
 É o identificador do fluxo que permite **intercalar** quadros de pedidos diferentes na mesma conexão: o receptor remonta cada mensagem pelo número do fluxo.
 
 No HTTP/3, os quadros (HEADERS, DATA, SETTINGS e outros) têm um tipo e um tamanho de comprimento variável e vão cada um em um **fluxo QUIC**, o que dispensa o identificador no quadro. Os cabeçalhos são comprimidos com o QPACK ([RFC 9114](https://www.rfc-editor.org/rfc/rfc9114), seção 7).

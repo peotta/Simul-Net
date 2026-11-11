@@ -53,14 +53,19 @@ packet-beta
 
 *Esquema 1 (o quadro com a tag 802.1Q).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O quadro sem tag tem Destino, Origem, Tipo e Dados. A tag soma **4 bytes** (TPID e TCI) e ocupa o lugar logo depois do MAC de origem, e o Tipo original segue depois dela. O campo de dados é condensado no desenho. O quadro com tag pode chegar a 1522 bytes, e o FCS é recalculado quando a tag é inserida ou removida.
 
-| Campo da tag | Posição (bits) | Tamanho | Função |
+| Campo | Bits no desenho | Tamanho | Função |
 | --- | --- | --- | --- |
+| MAC de destino | 0 a 47 | 6 bytes | endereço de quem deve receber o quadro |
+| MAC de origem | 48 a 95 | 6 bytes | endereço de quem enviou o quadro |
 | TPID | 96 a 111 | 16 bits | vale 0x8100 e identifica o quadro como marcado (ocupa o lugar do Tipo) |
 | PCP | 112 a 114 | 3 bits | prioridade do quadro (classe de serviço) |
 | DEI | 115 | 1 bit | elegibilidade para descarte em caso de congestionamento |
 | VID | 116 a 127 | 12 bits | identificador da VLAN: 1 a 4094 em uso; 0 indica só prioridade, e 4095 é reservado |
+| Tipo (EtherType) | 128 a 143 | 16 bits | o tipo original do conteúdo, como 0x0800 para IPv4 |
+| Dados | 144 a 175 (condensado) | 46 a 1500 bytes | o conteúdo transportado, preenchido até o mínimo de 46 bytes |
+| FCS | 176 a 207 | 4 bytes | verificação do quadro, um CRC de 32 bits, recalculado quando a tag entra ou sai |
 
-Os três últimos campos formam o **TCI** (*Tag Control Information*), de 16 bits.
+Os campos PCP, DEI e VID formam o **TCI** (*Tag Control Information*), de 16 bits.
 
 ### 2.3 Portas de acesso e portas de tronco
 
@@ -1343,6 +1348,7 @@ Significado e finalidade das siglas usadas neste documento.
 | --- | --- | --- |
 | **ARP** | Address Resolution Protocol, protocolo de resolução de endereços | descobre o endereço MAC que corresponde a um endereço IPv4 na rede local |
 | **BGP** | Border Gateway Protocol, protocolo de roteador de borda | troca rotas entre sistemas autônomos e sustenta o roteamento entre operadoras na Internet |
+| **CRC** | Cyclic Redundancy Check, verificação de redundância cíclica | código que detecta erros de transmissão, como o do FCS dos frames Ethernet e 802.11 |
 | **DEI** | Drop Eligible Indicator, indicador de descarte permitido | bit da etiqueta 802.1Q que marca o frame como descartável em caso de congestionamento |
 | **DTP** | Dynamic Trunking Protocol, protocolo de tronco dinâmico | protocolo proprietário da Cisco que negocia automaticamente o modo de tronco de uma porta |
 | **FCS** | Frame Check Sequence, sequência de verificação do frame | código (CRC) no fim do frame que permite ao receptor descartar frames corrompidos |

@@ -138,6 +138,32 @@ packet-beta
 
 *Esquema 3 (o quadro completo, camada por camada).* O prefixo de cada campo indica a camada dona (L2 enlace, L3 rede, L4 transporte, L5-7 dados). Os dados HTTP aparecem **condensados**: ocupam o tamanho da mensagem. Repare que cada cabeçalho carrega o identificador da camada seguinte: o **Tipo** (0x0800) diz que o conteúdo é IPv4, o **Protocolo** (6) diz que é TCP, e a **porta de destino** aponta o processo que recebe os dados. O preâmbulo e o SFD, de 8 bytes, vêm antes do quadro e não aparecem no desenho. Os campos desses cabeçalhos estão detalhados nos simuladores de IPv4, de TCP e de switching.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| L2 MAC de destino | 0 a 47 | 6 bytes | endereço do próximo equipamento no enlace |
+| L2 MAC de origem | 48 a 95 | 6 bytes | endereço de quem envia o quadro |
+| L2 Tipo | 96 a 111 | 2 bytes | 0x0800: o conteúdo é IPv4 |
+| L3 Versão e IHL | 112 a 119 | 1 byte | versão (4) e tamanho do cabeçalho IP em palavras de 32 bits |
+| L3 DSCP e ECN | 120 a 127 | 1 byte | classe de serviço e notificação de congestionamento |
+| L3 Tamanho total | 128 a 143 | 2 bytes | cabeçalho IP mais dados, em bytes |
+| L3 Identificação | 144 a 159 | 2 bytes | identifica o datagrama, para remontar fragmentos |
+| L3 Flags e deslocamento | 160 a 175 | 2 bytes | flags DF e MF e posição do fragmento |
+| L3 TTL | 176 a 183 | 1 byte | limite de saltos, decrementado a cada roteador |
+| L3 Protocolo | 184 a 191 | 1 byte | 6: o conteúdo é TCP |
+| L3 Checksum do cabeçalho | 192 a 207 | 2 bytes | verificação só do cabeçalho IP |
+| L3 IP de origem | 208 a 239 | 4 bytes | endereço de quem enviou o pacote |
+| L3 IP de destino | 240 a 271 | 4 bytes | endereço de quem deve receber o pacote |
+| L4 Porta de origem | 272 a 287 | 2 bytes | porta de quem enviou |
+| L4 Porta de destino | 288 a 303 | 2 bytes | porta do processo que recebe (por exemplo 80) |
+| L4 Número de sequência | 304 a 335 | 4 bytes | posição do primeiro byte do segmento no fluxo |
+| L4 Número de confirmação | 336 a 367 | 4 bytes | próximo byte esperado, quando o flag ACK vale 1 |
+| L4 Deslocamento e flags | 368 a 383 | 2 bytes | tamanho do cabeçalho TCP, bits reservados e flags (SYN, ACK, FIN, RST e outras) |
+| L4 Janela | 384 a 399 | 2 bytes | bytes que o receptor aceita receber (controle de fluxo) |
+| L4 Checksum | 400 a 415 | 2 bytes | verificação do segmento, com o pseudocabeçalho |
+| L4 Ponteiro urgente | 416 a 431 | 2 bytes | posição dos dados urgentes, se o flag URG vale 1 |
+| L5-7 Dados HTTP | 432 a 463 (condensado) | variável | a mensagem da aplicação |
+| L2 FCS | 464 a 495 (depois dos dados) | 4 bytes | verificação do quadro, um CRC de 32 bits |
+
 ### 2.6 O que cada dispositivo faz com as camadas
 
 ```mermaid
@@ -370,9 +396,12 @@ Significado e finalidade das siglas usadas neste documento.
 | **ACK** | Acknowledgment, confirmação | flag que confirma o recebimento de dados anteriores |
 | **ARP** | Address Resolution Protocol, protocolo de resolução de endereços | descobre o endereço MAC que corresponde a um endereço IPv4 na rede local |
 | **ASCII** | American Standard Code for Information Interchange | codificação de caracteres em texto simples, usada aqui nas mensagens HTTP sem cifra |
+| **CRC** | Cyclic Redundancy Check, verificação de redundância cíclica | código que detecta erros de transmissão, como o do FCS dos frames Ethernet e 802.11 |
 | **CRC-32** | Cyclic Redundancy Check de 32 bits | código de 32 bits usado como FCS no fim dos frames 802.11 e Ethernet |
 | **DNS** | Domain Name System, sistema de nomes de domínio | traduz nomes (www.exemplo.org) em endereços IP e guarda outros registros do domínio |
+| **ECN** | Explicit Congestion Notification, notificação explícita de congestionamento | os roteadores marcam os pacotes quando há congestionamento, e o TCP reduz a taxa sem precisar de perda |
 | **FCS** | Frame Check Sequence, sequência de verificação do frame | código (CRC) no fim do frame que permite ao receptor descartar frames corrompidos |
+| **FIN** | Finish | flag do TCP que encerra a conexão de forma ordenada |
 | **HTTP** | Hypertext Transfer Protocol, protocolo de transferência de hipertexto | transporta páginas e dados entre navegador e servidor web |
 | **HTTP/1** | HTTP versão 1.1 | versão textual do HTTP, com uma requisição por vez em cada conexão |
 | **ICMP** | Internet Control Message Protocol | leva mensagens de controle e de erro da camada IP, como o eco do ping e o aviso de destino inalcançável |
@@ -386,9 +415,11 @@ Significado e finalidade das siglas usadas neste documento.
 | **NAT** | Network Address Translation, tradução de endereços de rede | troca endereços e portas dos pacotes, para que uma rede privada compartilhe poucos endereços públicos |
 | **OSI** | Open Systems Interconnection, interconexão de sistemas abertos | modelo de referência que divide a comunicação em sete camadas, usado para nomear funções e localizar problemas |
 | **PDU** | Protocol Data Unit, unidade de dados de protocolo | a unidade de dados de cada camada: dados, segmento, pacote, quadro e bits |
+| **RST** | Reset | flag do TCP que derruba a conexão de imediato, por exemplo ao receber segmento de uma conexão que não existe |
 | **RTT** | Round-Trip Time, tempo de ida e volta | mede o tempo entre enviar um pacote e receber a resposta; base dos temporizadores e da latência |
 | **SFD** | Start Frame Delimiter, delimitador de início de quadro | byte que, depois do preâmbulo, marca o início do quadro Ethernet |
 | **SSH** | Secure Shell | acesso remoto e transferência de arquivos por um canal cifrado, com autenticação do servidor e do usuário |
+| **SYN** | Synchronize | flag do TCP que inicia uma conexão e sincroniza os números de sequência |
 | **TCP** | Transmission Control Protocol, protocolo de controle de transmissão | entrega dados de forma ordenada e confiável, com conexão, confirmação e controle de congestionamento |
 | **TCP/IP** | Transmission Control Protocol e Internet Protocol | refere-se à pilha de protocolos da Internet, nomeada pelos seus dois protocolos mais conhecidos |
 | **TLS** | Transport Layer Security, segurança da camada de transporte | estabelece um canal cifrado e autenticado entre dois pontos, a base do HTTPS |

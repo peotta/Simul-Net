@@ -72,6 +72,14 @@ packet-beta
 
 *Esquema 3 (o pacote do SSH).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O payload e o padding aparecem **condensados**: o payload tem tamanho variável, e o primeiro byte dele é o **tipo da mensagem**. O padding aleatório completa o pacote até um múltiplo do tamanho do bloco da cifra (no mínimo 4 bytes), e o **MAC** (ou a etiqueta, nos modos AEAD) garante a integridade de cada pacote. Antes do NEWKEYS, os pacotes vão em claro e sem MAC.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Tamanho do pacote | 0 a 31 | 32 bits | tamanho do pacote, sem contar este campo nem o MAC |
+| Tamanho do padding | 32 a 39 | 8 bits | quantos bytes de preenchimento aleatório há no fim (de 4 a 255) |
+| Payload (tipo da mensagem) | 40 a 63 | 1 byte no início | o primeiro byte do payload é o número da mensagem (tabela abaixo) |
+| Payload (continuação) | 64 a 95 (condensado) | variável | o restante do conteúdo da mensagem, que pode ser comprimido |
+| Padding e MAC | 96 a 127 (condensado) | 4 a 255 bytes e o MAC | o preenchimento aleatório e o MAC (ou a etiqueta, nos modos AEAD) de cada pacote |
+
 Os números das mensagens mais importantes são estes (RFC 4250, seção 4.1):
 
 | Número | Mensagem | Fase |

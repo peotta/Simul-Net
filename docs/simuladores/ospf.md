@@ -131,6 +131,17 @@ packet-beta
 
 *Esquema 4 (o cabeçalho do LSA).* Os campos **tipo**, **ID do estado de enlace** e **roteador que anunciou** identificam o LSA, e o **número de sequência**, a **idade** e o **checksum** dizem qual cópia é a mais recente ([RFC 2328](https://www.rfc-editor.org/rfc/rfc2328), seção 13.1). O roteador reemite o próprio LSA a cada 30 minutos, e a idade máxima é de 1 hora, depois da qual o LSA é removido da base.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Idade do LSA (LS age) | 0 a 15 | 16 bits | segundos desde a origem do LSA; chega a 3600 (1 hora), quando ele é removido |
+| Opções | 16 a 23 | 8 bits | recursos que o roteador suporta (por exemplo, área stub) |
+| Tipo do LSA | 24 a 31 | 8 bits | 1 Router, 2 Network, 3 Summary, 4 ASBR-Summary e 5 AS-External |
+| ID do estado de enlace | 32 a 63 | 32 bits | identifica o que o LSA descreve; depende do tipo |
+| Roteador que anunciou | 64 a 95 | 32 bits | Router ID de quem originou o LSA |
+| Número de sequência | 96 a 127 | 32 bits | cresce a cada nova versão do LSA; a maior sequência é a mais recente |
+| Checksum | 128 a 143 | 16 bits | verificação do LSA, sem o campo de idade |
+| Tamanho | 144 a 159 | 16 bits | tamanho do LSA, cabeçalho incluído, em bytes |
+
 ### 2.5 O LSA e a LSDB
 
 Cada roteador gera um **Router-LSA** com os próprios enlaces ativos e os custos. A coleção de todos os LSAs de uma área é a **LSDB** (*Link State Database*), e ela é igual em todos os roteadores da área.

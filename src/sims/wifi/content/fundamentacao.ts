@@ -62,14 +62,7 @@ packet-beta
   0-1: "Versão"
   2-3: "Tipo"
   4-7: "Subtipo"
-  8: "To DS"
-  9: "From DS"
-  10: "More Frag"
-  11: "Retry"
-  12: "Pwr Mgt"
-  13: "More Data"
-  14: "Protected"
-  15: "Order"
+  8-15: "Sinalização (flags)"
   16-31: "Duração ou ID"
   32-79: "Endereço 1 (receptor)"
   80-127: "Endereço 2 (transmissor)"
@@ -79,20 +72,30 @@ packet-beta
   224-255: "FCS"
 \`\`\`
 
-*Esquema 2 (o quadro de dados 802.11).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O corpo do quadro é **condensado** no desenho, e há campos opcionais que dependem do tipo: o Endereço 4 (só quando To DS e From DS valem 1, em um enlace entre APs), o controle de QoS (nos quadros de dados com QoS) e o controle HT. A tabela abaixo descreve os campos do desenho.
+*Esquema 2 (o quadro de dados 802.11).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. Os oito bits de sinalização (8 a 15) aparecem juntos porque um bit sozinho não comporta o texto; na ordem, são To DS, From DS, More Frag, Retry, Pwr Mgt, More Data, Protected e Order. O corpo do quadro também é **condensado** no desenho, e há campos opcionais que dependem do tipo: o Endereço 4 (só quando To DS e From DS valem 1, em um enlace entre APs), o controle de QoS (nos quadros de dados com QoS) e o controle HT. A tabela abaixo descreve os campos do desenho.
 
-| Campo | Tamanho | Função |
-| --- | --- | --- |
-| Controle do quadro | 2 bytes | versão, tipo (gerência, controle ou dados), subtipo e os oito bits de sinalização |
-| To DS e From DS | 1 bit cada | dizem se o quadro vai para o sistema de distribuição ou vem dele, e definem o papel de cada endereço |
-| Retry | 1 bit | indica que o quadro é uma retransmissão |
-| Pwr Mgt | 1 bit | o cliente avisa que vai entrar em modo de economia de energia |
-| More Data | 1 bit | o AP avisa que há mais quadros guardados para o cliente |
-| Protected | 1 bit | o corpo do quadro está cifrado |
-| Duração ou ID | 2 bytes | o tempo que o meio ficará reservado (base do NAV), ou o AID no PS-Poll |
-| Endereços 1, 2 e 3 | 6 bytes cada | o significado depende de To DS e From DS |
-| Controle de sequência | 2 bytes | número do quadro e do fragmento, para detectar duplicatas |
-| FCS | 4 bytes | verificação do quadro, um CRC de 32 bits |
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Versão | 0 a 1 | 2 bits | versão do protocolo do quadro, sempre 0 |
+| Tipo | 2 a 3 | 2 bits | classe do quadro: 00 gerência, 01 controle, 10 dados |
+| Subtipo | 4 a 7 | 4 bits | função dentro do tipo (por exemplo Beacon, ACK ou dados com QoS) |
+| To DS | 8 | 1 bit | 1 quando o quadro vai para o sistema de distribuição (do cliente para o AP) |
+| From DS | 9 | 1 bit | 1 quando o quadro vem do sistema de distribuição (do AP para o cliente) |
+| More Frag | 10 | 1 bit | 1 quando ainda há fragmentos do mesmo quadro a seguir |
+| Retry | 11 | 1 bit | 1 quando o quadro é uma retransmissão |
+| Pwr Mgt | 12 | 1 bit | 1 quando o cliente avisa que vai entrar em modo de economia de energia |
+| More Data | 13 | 1 bit | 1 quando o AP avisa que há mais quadros guardados para o cliente |
+| Protected | 14 | 1 bit | 1 quando o corpo do quadro está cifrado |
+| Order | 15 | 1 bit | 1 quando o quadro pertence à classe de serviço de ordem estrita (raro) |
+| Duração ou ID | 16 a 31 | 2 bytes | o tempo que o meio ficará reservado (base do NAV), ou o AID no PS-Poll |
+| Endereço 1 | 32 a 79 | 6 bytes | receptor imediato do quadro |
+| Endereço 2 | 80 a 127 | 6 bytes | transmissor do quadro |
+| Endereço 3 | 128 a 175 | 6 bytes | BSSID, origem ou destino final, conforme To DS e From DS (tabela abaixo) |
+| Controle de sequência | 176 a 191 | 2 bytes | número do fragmento (4 bits) e número de sequência (12 bits), para detectar duplicatas e remontar fragmentos |
+| Corpo do quadro | 192 a 223 (condensado) | variável | os dados transportados (por exemplo um pacote IP, precedido do cabeçalho LLC/SNAP), cifrados quando Protected vale 1 |
+| FCS | 224 a 255 (depois do corpo) | 4 bytes | verificação do quadro, um CRC de 32 bits |
+
+Os campos de 8 a 15 formam o byte de sinalização do Controle do quadro; junto com Versão, Tipo e Subtipo, ele ocupa 2 bytes. A posição do corpo e do FCS no desenho é apenas ilustrativa, porque o corpo tem tamanho variável.
 
 O papel de cada endereço muda com os bits To DS e From DS:
 

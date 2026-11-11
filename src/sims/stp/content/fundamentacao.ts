@@ -57,13 +57,7 @@ packet-beta
   0-15: "Protocol ID (0)"
   16-23: "Versão"
   24-31: "Tipo do BPDU"
-  32: "TC Ack"
-  33: "Agreement"
-  34: "Forwarding"
-  35: "Learning"
-  36-37: "Papel"
-  38: "Proposal"
-  39: "TC"
+  32-39: "Flags (8 bits)"
   40-103: "ID da raiz (prioridade e MAC)"
   104-135: "Custo até a raiz"
   136-199: "ID da ponte que enviou"
@@ -74,7 +68,7 @@ packet-beta
   264-279: "Forward Delay"
 \`\`\`
 
-*Esquema 3 (o BPDU de configuração).* O BPDU tem 35 bytes (36 no RSTP, com mais um byte de tamanho da informação de versão 1) e vai dentro de um quadro **802.3 com LLC** (DSAP e SSAP 0x42), para o endereço de grupo 01:80:C2:00:00:00, que as pontes não encaminham. O byte de flags tem oito bits: no STP clássico só o TC e o TC Ack são usados, e o RSTP usa os demais (proposta, papel da porta, aprendizado, encaminhamento e acordo). A tabela abaixo descreve os campos.
+*Esquema 3 (o BPDU de configuração).* O BPDU tem 35 bytes (36 no RSTP, com mais um byte de tamanho da informação de versão 1) e vai dentro de um quadro **802.3 com LLC** (DSAP e SSAP 0x42), para o endereço de grupo 01:80:C2:00:00:00, que as pontes não encaminham. O byte de flags tem oito bits, mostrados juntos no desenho (da esquerda para a direita: TC Ack, Agreement, Forwarding, Learning, Papel em dois bits, Proposal e TC; o bit menos significativo do byte é o TC): no STP clássico só o TC e o TC Ack são usados, e o RSTP usa os demais (proposta, papel da porta, aprendizado, encaminhamento e acordo). A tabela abaixo descreve os campos.
 
 | Campo | Tamanho | Função |
 | --- | --- | --- |

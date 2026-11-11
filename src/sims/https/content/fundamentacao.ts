@@ -52,6 +52,13 @@ packet-beta
 
 *Esquema 2 (o registro TLS).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O **tipo** é 20 para a troca de cifra, 21 para um alerta, 22 para o handshake e 23 para dados da aplicação. O campo **versão** vale 0x0303 por compatibilidade (era a do TLS 1.2), e a versão real do TLS 1.3 é negociada no handshake. O **tamanho** do fragmento chega a 16.384 bytes. No TLS 1.3, depois do ServerHello, os registros do handshake também usam o tipo 23: o tipo real vai **dentro** do fragmento cifrado, o que impede o observador de distinguir o handshake dos dados.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Tipo | 0 a 7 | 8 bits | 20 troca de cifra, 21 alerta, 22 handshake, 23 dados da aplicação |
+| Versão | 8 a 23 | 16 bits | 0x0303 por compatibilidade com o TLS 1.2 |
+| Tamanho | 24 a 39 | 16 bits | tamanho do fragmento, em bytes, de até 16.384 |
+| Fragmento | 40 a 71 (condensado) | variável | os dados do registro, cifrados após o handshake |
+
 Dentro de um registro de handshake, cada mensagem tem um cabeçalho de 4 bytes (seção 4).
 
 \`\`\`mermaid
@@ -62,6 +69,12 @@ packet-beta
 \`\`\`
 
 *Esquema 3 (o cabeçalho de uma mensagem de handshake).* O tipo é 1 para o ClientHello, 2 para o ServerHello, 8 para EncryptedExtensions, 11 para Certificate, 15 para CertificateVerify e 20 para Finished. O ClientHello leva as versões, as suítes de cifra, o key_share, o SNI e o ALPN, e o ServerHello escolhe a versão, a suíte e responde com o próprio key_share.
+
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Tipo da mensagem | 0 a 7 | 8 bits | 1 ClientHello, 2 ServerHello, 8 EncryptedExtensions, 11 Certificate, 15 CertificateVerify, 20 Finished |
+| Tamanho do corpo | 8 a 31 | 24 bits | tamanho do corpo da mensagem, em bytes |
+| Corpo da mensagem | 32 a 63 (condensado) | variável | o conteúdo, conforme o tipo (versões, suítes, key_share, SNI, ALPN e outros) |
 
 ### TLS 1.3 e TLS 1.2
 

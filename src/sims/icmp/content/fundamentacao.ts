@@ -48,6 +48,14 @@ packet-beta
 
 *Esquema 2 (formato geral da mensagem ICMP).* Cada linha tem 32 bits, numerados de 0 a 31 da esquerda para a direita. O tipo diz a família da mensagem, e o código refina o motivo. O significado do "resto do cabeçalho" muda com o tipo: no eco, são o identificador e o número de sequência; no destino inalcançável com código 4, os 16 bits finais levam o MTU do próximo salto (RFC 1191); no Redirect, o endereço do roteador melhor; no tempo excedido, o campo não é usado.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Tipo | 0 a 7 | 8 bits | a família da mensagem (0 Echo Reply, 3 destino inalcançável, 8 Echo Request, 11 tempo excedido) |
+| Código | 8 a 15 | 8 bits | refina o motivo dentro do tipo |
+| Checksum | 16 a 31 | 16 bits | verificação da mensagem ICMP inteira |
+| Resto do cabeçalho | 32 a 63 | 4 bytes | muda com o tipo: identificador e sequência no eco, MTU do próximo salto no código 4 do tipo 3, roteador melhor no Redirect, sem uso no tempo excedido |
+| Dados | 64 a 95 (condensado) | variável | depende do tipo: dados do eco ou, nos erros, o cabeçalho IP original mais 8 bytes |
+
 \`\`\`mermaid
 packet-beta
   0-7: "Tipo (8 ou 0)"
@@ -60,10 +68,19 @@ packet-beta
 
 *Esquema 3 (Echo Request e Echo Reply).* O eco leva um **identificador** e um **número de sequência**, que o ping usa para casar cada resposta com o pedido que a originou; o Echo Reply devolve os mesmos valores e os mesmos dados. As mensagens de erro, ao contrário, carregam o **cabeçalho IP original mais os 8 primeiros bytes** dos dados do datagrama que as provocou (RFC 792). Com isso, quem recebe o aviso identifica a conexão ou o processo afetado, pois as portas do TCP e do UDP estão nesses 8 bytes.
 
+| Campo | Bits no desenho | Tamanho | Função |
+| --- | --- | --- | --- |
+| Tipo | 0 a 7 | 8 bits | 8 no Echo Request (pedido de eco), 0 no Echo Reply (resposta) |
+| Código | 8 a 15 | 8 bits | 0 |
+| Checksum | 16 a 31 | 16 bits | verificação da mensagem ICMP inteira |
+| Identificador | 32 a 47 | 16 bits | identifica a sessão do ping; a resposta devolve o mesmo valor |
+| Número de sequência | 48 a 63 | 16 bits | cresce a cada pedido e casa a resposta com ele |
+| Dados do eco | 64 a 95 (condensado) | variável | conteúdo arbitrário, devolvido igual na resposta |
+
 | Tipo | Mensagem | Códigos principais |
 | --- | --- | --- |
 | 0 | Echo Reply (resposta de eco) | 0 |
-| 8 | Echo (pedido de eco) | 0 |
+| 8 | Echo Request (pedido de eco) | 0 |
 | 3 | Destination Unreachable (destino inalcançável) | 0 rede, 1 host, 2 protocolo, 3 porta, 4 fragmentação necessária com DF ligado, 13 proibido por filtro administrativo (RFC 1812) |
 | 11 | Time Exceeded (tempo excedido) | 0 TTL esgotado em trânsito, 1 tempo de remontagem excedido |
 | 5 | Redirect | 0 rede, 1 host |
