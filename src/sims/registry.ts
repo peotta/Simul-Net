@@ -109,7 +109,6 @@ export const SIMS: SimMeta[] = [
     rfcs: ['RFC 791', 'RFC 1122', 'RFC 1812', 'RFC 3704', 'RFC 2644', 'RFC 3021', 'RFC 4632', 'RFC 6890'],
     status: 'available',
     engine: 'nativo',
-    novo: true,
   },
   {
     id: 'ipv6',
@@ -370,11 +369,14 @@ export const SIMS: SimMeta[] = [
     id: 'congestionamento',
     category: 'transporte',
     title: 'Controle de congestionamento (Reno, CUBIC e BBR)',
-    summary: 'Como cada algoritmo ajusta a janela de congestionamento diante de perdas e de atraso: Reno, CUBIC e BBR comparados no mesmo cenário. Estende o simulador de TCP.',
-    topics: [],
-    rfcs: ['RFC 5681', 'RFC 9438', 'RFC 6582'],
-    status: 'planned',
+    summary: 'Como cada algoritmo ajusta a janela de congestionamento diante da fila, da perda e da mudança de capacidade: slow start e AIMD no Reno e NewReno, a função cúbica do CUBIC e as fases do BBR, com a comparação dos três no mesmo caminho.',
+    topics: ['Reno e NewReno: slow start, AIMD e recuperação', 'CUBIC: função cúbica e região Reno-friendly', 'BBR: banda, RTT mínimo e fases', 'Fila, bufferbloat e perda aleatória', 'Mudança de capacidade do enlace'],
+    rfcs: ['RFC 5681', 'RFC 6582', 'RFC 9438', 'RFC 6928', 'RFC 2018', 'RFC 6298', 'draft-ietf-ccwg-bbr'],
+    status: 'available',
+    novo: true,
+    engine: 'nativo',
   },
+
   {
     id: '802-1x',
     category: 'protocolos-seguros',

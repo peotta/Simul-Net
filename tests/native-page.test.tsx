@@ -62,6 +62,8 @@ describe('páginas dos simuladores nativos', () => {
 
   it('DHCP: carrega, percorre os dois modos e não tem violações de acessibilidade', () => checkSim('dhcp', /^DHCP \(DORA\)$/), 120000);
 
+  it('Congestionamento: carrega, percorre os quatro modos e não tem violações de acessibilidade', () => checkSim('congestionamento', /^Controle de congestionamento \(Reno, CUBIC e BBR\)$/), 180000);
+
   it('HTTP: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('http-versoes', /^HTTP\/1\.1, HTTP\/2 e HTTP\/3$/), 120000);
 
   it('NAT: carrega, percorre os três modos e não tem violações de acessibilidade', () => checkSim('nat', /^NAT \(SNAT, DNAT e NAPT\)$/), 120000);

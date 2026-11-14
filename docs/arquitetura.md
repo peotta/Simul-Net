@@ -32,7 +32,7 @@ Simul-Net/
 
 ## 4. Simuladores nativos
 
-- **Simulador nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, IPv4, IPv6, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP, o BGP, o TCP, o UDP e os ataques e defesas TCP/UDP e o modelo OSI (jornada de um quadro) estão disponíveis. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
+- **Simulador nativo:** componente React com motor de simulação separado da interface e testado, na rota `/sim/:id`. SSH, HTTPS e TLS, FTP, FTPS e SFTP, ARP, IPv4, IPv6, ICMP, DHCP, NAT, DNS e DNSSEC e as versões do HTTP (HTTP/1.1, HTTP/2 e HTTP/3), o Firewall, o Switching, o STP, RSTP e MSTP, o VLAN e trunking (802.1Q), o 802.1X e RADIUS (EAP), o Wi-Fi (802.11), o MPLS (LDP e L3VPN), o OSPF, o RIP, o BGP, o TCP, o UDP, os ataques e defesas TCP/UDP, o controle de congestionamento (Reno, NewReno, CUBIC e BBR) e o modelo OSI (jornada de um quadro) estão disponíveis. Seguem o padrão visual e didático dos demais (abas, ajuda nos campos, rodapé de crédito) e têm a bancada de trabalho: tela única, frames que destacam, movem, redimensionam, maximizam e recolhem, zoom do diagrama e alça de altura das abas.
 - **Motor compartilhado por mais de um simulador:** quando dois simuladores usam as mesmas regras, o motor e os textos ficam em uma pasta `-base` (`roteamento-base` para OSPF e RIP, `transporte-base` para TCP e UDP). Cada simulador declara só os seus modos: em `transporte-base/derive.ts`, a função `derive(subs, override)` seleciona controles, cenários, grupos, documentação e abas dos modos pedidos e permite trocar o texto de cenários que mudam de foco (a comparação TCP x UDP tem um texto em cada simulador).
 - **Por que o motor nativo:** o motor é uma função pura (os mesmos parâmetros produzem o mesmo `Trace`), separada da interface, o que permite testar cada regra, fixar o comportamento por impressões digitais e reutilizar a bancada de trabalho (diagrama, captura, mensagem, estados, abas, log).
 - **Execução por ciclos e interatividade:** simuladores que antes eram animações contínuas (o TCP, o UDP e os ataques e defesas) rodam hoje a simulação inteira de uma vez e a reproduzem no diagrama. Parâmetros que o aluno antes mudava durante a animação viraram controles: por exemplo, a mitigação upstream é escolhida como "ativa desde o início" ou "acionada depois do ciclo N".
@@ -57,7 +57,7 @@ O núcleo está em `src/sim-core/` (`trace.ts`, `hash.ts`, `types.ts`) e a banca
 | 1 | Hub com registro, categorias e cartões | concluída |
 | 2 | Núcleo (`src/sim-core`) e bancada React | concluída |
 | 3 | Simuladores de enlace, rede, transporte e protocolos seguros sobre o núcleo (DNS e DNSSEC, ARP, HTTP, 802.1X, Wi-Fi, MPLS, OSPF, RIP, BGP, IPv4, IPv6, TCP, UDP, ataques e defesas TCP/UDP e os demais já listados no registro) | concluída |
-| 4 | Novos simuladores (VPN, SMTP, IS-IS, SNMP, congestionamento) | prevista; usam o núcleo e a bancada desde o início |
+| 4 | Novos simuladores (VPN, SMTP, IS-IS, SNMP; o controle de congestionamento já está disponível) | prevista; usam o núcleo e a bancada desde o início |
 
 ## 7. Testes
 

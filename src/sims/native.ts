@@ -30,4 +30,5 @@ export const NATIVE: Record<string, () => Promise<{ default: ProtocolDef }>> = {
   ipv6: () => import('./ipv6/protocol'),
   'ataques-tcp-udp': () => import('./ataques-tcp-udp/protocol'),
   'osi': () => import('./osi/protocol'),
+  'congestionamento': () => import('./congestionamento/protocol'),
 };

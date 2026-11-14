@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { arpProtocol } from '../../src/sims/arp/protocol';
 import { ftpProtocol } from '../../src/sims/ftp/protocol';
 import { dhcpProtocol } from '../../src/sims/dhcp/protocol';
+import { congestionamentoProtocol } from '../../src/sims/congestionamento/protocol';
 import { httpProtocol } from '../../src/sims/http-versoes/protocol';
 import { natProtocol } from '../../src/sims/nat/protocol';
 import { dnsProtocol } from '../../src/sims/dns/protocol';
@@ -98,6 +99,7 @@ const SIMS: [string, ProtocolDef][] = [
   ['udp', udpProtocol],
   ['ipv4', ipv4Protocol],
   ['ipv6', ipv6Protocol],
+  ['congestionamento', congestionamentoProtocol],
 ];
 
 describe.each(SIMS)('impressões digitais: %s', (name, def) => {
