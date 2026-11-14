@@ -6,6 +6,7 @@ import { MotionConfig } from 'motion/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppRoutes } from '../src/App';
+import { withoutChartLegend } from '../src/docs/DocView';
 import { headingsOf, slug } from '../src/docs/slug';
 import { SIMS } from '../src/sims/registry';
 
@@ -129,4 +130,15 @@ describe('página de documentação (Markdown e Mermaid)', () => {
     const result = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false } } });
     expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   }, 90000);
+});
+
+describe('legenda dos gráficos', () => {
+  const grafico = '```mermaid\n%%{init: {}}%%\n%% legenda: A | B\nxychart-beta\n```';
+  it('o site oculta a legenda em texto de um gráfico com legenda própria; o Markdown a mantém', () => {
+    expect(withoutChartLegend('Antes\n\n**Legenda:** 🟥 A · 🟦 B\n\n' + grafico + '\n')).toBe('Antes\n\n' + grafico + '\n');
+  });
+  it('não mexe em uma legenda que não antecede um gráfico com legenda própria', () => {
+    const md = '**Legenda:** tracejado\n\n```mermaid\nflowchart LR\n  A --> B\n```\n';
+    expect(withoutChartLegend(md)).toBe(md);
+  });
 });

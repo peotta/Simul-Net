@@ -126,7 +126,7 @@ stateDiagram-v2
 
 ### A curva do uso da banda
 
-Os gráficos abaixo mostram quanto da banda do enlace cada algoritmo usa ao longo do tempo (vazão média por janela de tempo). Os valores vêm do **próprio motor do simulador**, o mesmo dos modos e dos cenários. Em todos, as linhas são, na ordem: **Reno** (vermelho), **CUBIC** (azul), **BBR** (verde) e a **capacidade** do enlace (preta). Quanto mais perto da linha preta, melhor a ocupação da banda.
+Os gráficos abaixo mostram quanto da banda do enlace cada algoritmo usa ao longo do tempo (vazão média por janela de tempo). Os valores vêm do **próprio motor do simulador**, o mesmo dos modos e dos cenários. As cores são: **Reno** em vermelho, **CUBIC** em azul, **BBR** em verde e a **capacidade** do enlace em preto. Quanto mais perto da linha preta, melhor a ocupação da banda.
 
 ${CURVA_LONGO}
 

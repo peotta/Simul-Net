@@ -138,12 +138,13 @@ stateDiagram-v2
 
 ### 2.7 A curva do uso da banda
 
-Os gráficos abaixo mostram quanto da banda do enlace cada algoritmo usa ao longo do tempo (vazão média por janela de tempo). Os valores vêm do **próprio motor do simulador**, o mesmo dos modos e dos cenários. Em todos, as linhas são, na ordem: **Reno** (vermelho), **CUBIC** (azul), **BBR** (verde) e a **capacidade** do enlace (preta). Quanto mais perto da linha preta, melhor a ocupação da banda.
+Os gráficos abaixo mostram quanto da banda do enlace cada algoritmo usa ao longo do tempo (vazão média por janela de tempo). Os valores vêm do **próprio motor do simulador**, o mesmo dos modos e dos cenários. As cores são: **Reno** em vermelho, **CUBIC** em azul, **BBR** em verde e a **capacidade** do enlace em preto. Quanto mais perto da linha preta, melhor a ocupação da banda.
 
 **Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Caminho longo e largo: 50 Mbit/s, RTT de 200 ms, fila rasa"
   x-axis "Tempo (s)" 2 --> 40
@@ -160,6 +161,7 @@ xychart-beta
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "A capacidade dobra aos 15 s: 20 para 40 Mbit/s, RTT de 50 ms"
   x-axis "Tempo (s)" 2 --> 30
@@ -176,6 +178,7 @@ xychart-beta
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Perda aleatória de 1%: 20 Mbit/s, RTT de 50 ms"
   x-axis "Tempo (s)" 1 --> 20
@@ -337,6 +340,7 @@ Repita o ciclo na aba Janela e fila: é o dente de serra clássico, com o enlace
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -503,6 +507,7 @@ Com IW = 1, o slow start precisa de mais rodadas para chegar ao BDP. Compare com
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.1 --> 10
@@ -666,6 +671,7 @@ Com fila de 1/4 do BDP, a perda chega cedo e a janela cai a metade de um valor p
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (83 segm.) | BDP mais fila (104 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 21 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -849,6 +855,7 @@ Veja a aba Vazão e atraso: o atraso de fila é a consequência de um algoritmo 
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (83 segm.) | BDP mais fila (416 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 333 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -984,6 +991,7 @@ A vazão cai a poucos Mbit/s num enlace de 20 Mbit/s: é o comportamento descrit
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -1272,6 +1280,7 @@ No primeiro estouro da fila, várias perdas ocorrem na mesma janela. Sem SACK, o
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -1447,6 +1456,7 @@ O BDP é de mais de 800 segmentos e a fila é de 1/4 do BDP. Depois da perda, a 
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (Reno/NewReno) | BDP (833 segm.) | BDP mais fila (1041 segm.)
 xychart-beta
   title "Janela: 50 Mbit/s, RTT de 200 ms, fila de 208 segm."
   x-axis "Tempo (s)" 0.5 --> 40
@@ -1598,6 +1608,7 @@ Observe na coluna Fase da painel de estado as regiões: côncava (abaixo do Wmax
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (CUBIC) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -1763,6 +1774,7 @@ Compare com o cenário equivalente do Reno ou use o modo Comparação.
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (CUBIC) | BDP (833 segm.) | BDP mais fila (1041 segm.)
 xychart-beta
   title "Janela: 50 Mbit/s, RTT de 200 ms, fila de 208 segm."
   x-axis "Tempo (s)" 0.5 --> 40
@@ -1940,6 +1952,7 @@ Procure a fase "região Reno-friendly".
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (CUBIC) | BDP (17 segm.) | BDP mais fila (34 segm.)
 xychart-beta
   title "Janela: 10 Mbit/s, RTT de 20 ms, fila de 17 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -2194,6 +2207,7 @@ Como o Reno, o CUBIC só reage à perda. Com 4 BDP de fila, ele enche o buffer e
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (CUBIC) | BDP (83 segm.) | BDP mais fila (416 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 333 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -2340,6 +2354,7 @@ O CUBIC reduz a janela em 30% (β = 0,7) a cada perda, menos que os 50% do Reno,
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (CUBIC) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -2620,6 +2635,7 @@ Aos 10 s o enlace passa a 40 Mbit/s. A janela, que estava na região côncava, u
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (CUBIC) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm., a capacidade dobra aos 10 s"
   x-axis "Tempo (s)" 0.3 --> 20
@@ -2796,6 +2812,7 @@ Observe que a fila quase não existe: a vazão fica na capacidade com o RTT pert
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -3026,6 +3043,7 @@ O mesmo caminho em que o Reno e o CUBIC enchem 4 BDP de fila. O BBR limita os da
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (416 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 333 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -3255,6 +3273,7 @@ Com fila de 1/4 do BDP, o Reno perde utilização. O BBR mantém o enlace cheio,
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (104 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 21 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -3484,6 +3503,7 @@ Com 1% de perda aleatória, o BBR continua perto da capacidade, porque perdas ab
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -3717,6 +3737,7 @@ O modelo do simulador é simplificado: o BBR real também aplica um limite de cu
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
   x-axis "Tempo (s)" 0.3 --> 20
@@ -3944,6 +3965,7 @@ Aos 10 s o enlace dobra de capacidade. O BBR só descobre isso na próxima sonda
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm., a capacidade dobra aos 10 s"
   x-axis "Tempo (s)" 0.3 --> 20
@@ -4173,6 +4195,7 @@ Aos 10 s o enlace cai à metade. O BBR ainda lembra a banda antiga (a estimativa
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+%% legenda: cwnd (limite de dados em voo) | BDP (83 segm.) | BDP mais fila (166 segm.)
 xychart-beta
   title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm., a capacidade cai à metade aos 10 s"
   x-axis "Tempo (s)" 0.3 --> 20
@@ -4369,6 +4392,7 @@ Os fluxos não competem entre si: cada um enxerga o gargalo para si.
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Vazão: 20 Mbit/s, RTT de 50 ms"
   x-axis "Tempo (s)" 1 --> 20
@@ -4604,6 +4628,7 @@ O Reno e o CUBIC tratam toda perda como congestionamento e ficam com uma fraçã
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Vazão: 20 Mbit/s, RTT de 50 ms"
   x-axis "Tempo (s)" 1 --> 20
@@ -4856,6 +4881,7 @@ Mesma vazão para os três, mas o RTT médio do Reno e do CUBIC é muito maior q
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Vazão: 20 Mbit/s, RTT de 50 ms"
   x-axis "Tempo (s)" 1 --> 20
@@ -5072,6 +5098,7 @@ Com pouca fila, o Reno perde utilização; o CUBIC e o BBR perdem pouco. Veja a 
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Vazão: 20 Mbit/s, RTT de 50 ms"
   x-axis "Tempo (s)" 1 --> 20
@@ -5318,6 +5345,7 @@ Fila de 1/4 do BDP em um caminho de BDP grande: onde o Reno se recupera mais dev
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Vazão: 50 Mbit/s, RTT de 200 ms"
   x-axis "Tempo (s)" 2 --> 40
@@ -5546,6 +5574,7 @@ Cada algoritmo descobre a banda nova do seu jeito: o Reno por +1 segmento por RT
 
 ```mermaid
 %%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+%% legenda: Reno | CUBIC | BBR | Capacidade do enlace
 xychart-beta
   title "Vazão: 20 Mbit/s, RTT de 50 ms, a capacidade dobra aos 10 s"
   x-axis "Tempo (s)" 1 --> 20

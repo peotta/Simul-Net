@@ -6,9 +6,12 @@ import { controls } from './controls';
 export const BASE: CongParams = { bw: 20, rtt: 50, buf: 1, loss: 0, dur: 20, shift: 'none', iw: 10, sack: true, fastConv: false, seed: 7 };
 
 const COR: Record<Algo, string> = { reno: '#dd2e44', cubic: '#2f80ed', bbr: '#2e9e4f' };
-const QUADRADO: Record<Algo, string> = { reno: '🟥', cubic: '🟦', bbr: '🟩' };
 const LARANJA = '#f4900c';
 const PRETO = '#24292f';
+
+/** Legenda em texto: vai para o Markdown (GitHub e wiki), que não desenha a legenda dentro do gráfico. O site a oculta e desenha a legenda dentro da figura. */
+const LEG_VAZAO = '**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace';
+const QUADRADO: Record<Algo, string> = { reno: '🟥', cubic: '🟦', bbr: '🟩' };
 
 /** Média ponderada pela duração das rodadas, em janelas de `passo` segundos. */
 function porJanela(rounds: Round[], dur: number, passo: number, val: (r: Round) => number): number[] {
@@ -33,10 +36,11 @@ interface Linha {
   v: number[];
 }
 
-function xychart(titulo: string, eixoY: string, passo: number, dur: number, linhas: Linha[], topo: number): string {
+function xychart(titulo: string, eixoY: string, passo: number, dur: number, linhas: Linha[], topo: number, nomes: string[]): string {
   return [
     '```mermaid',
     '%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "' + linhas.map((l) => l.cor).join(', ') + '"}}}}%%',
+    '%% legenda: ' + nomes.join(' | '),
     'xychart-beta',
     '  title "' + titulo + '"',
     '  x-axis "Tempo (s)" ' + passo + ' --> ' + dur,
@@ -59,7 +63,7 @@ export function graficoVazao(titulo: string, o: Partial<CongParams>): string {
   const flows = (['reno', 'cubic', 'bbr'] as Algo[]).map((a) => runFlow(a, P).rounds);
   const linhas: Linha[] = (['reno', 'cubic', 'bbr'] as Algo[]).map((a, i) => ({ cor: COR[a], v: porJanela(flows[i], P.dur, passo, (r) => r.rate) }));
   linhas.push({ cor: PRETO, v: porJanela(flows[0], P.dur, passo, (r) => r.cap) });
-  return ['**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace', '', xychart(titulo, 'Vazão (Mbit/s)', passo, P.dur, linhas, teto(linhas, 1.1))].join('\n');
+  return LEG_VAZAO + '\n\n' + xychart(titulo, 'Vazão (Mbit/s)', passo, P.dur, linhas, teto(linhas, 1.1), ['Reno', 'CUBIC', 'BBR', 'Capacidade do enlace']);
 }
 
 /** Gráfico do cenário: a janela de um algoritmo (o dente de serra, no Reno) ou a vazão dos três (Comparação). */
@@ -81,8 +85,8 @@ export function scenarioChart(s: ScenarioDef): string {
     { cor: PRETO, v: porJanela(r, P.dur, passo, (q) => q.bdp + fila) },
   ];
   const nome = ALGO_NAME[algo];
+  const g = xychart('Janela: ' + P.bw + ' Mbit/s, RTT de ' + P.rtt + ' ms, fila de ' + Math.round(fila) + ' segm.' + sh, 'Segmentos', passo, P.dur, linhas, teto(linhas, 1.1), [algo === 'bbr' ? 'cwnd (limite de dados em voo)' : 'cwnd (' + nome + ')', 'BDP (' + Math.round(bdp) + ' segm.)', 'BDP mais fila (' + Math.round(bdp + fila) + ' segm.)']);
   const lim = algo === 'bbr' ? 'limite de dados em voo (cwnd) do BBR' : 'janela de congestionamento (cwnd) do ' + nome;
-  const g = xychart('Janela: ' + P.bw + ' Mbit/s, RTT de ' + P.rtt + ' ms, fila de ' + Math.round(fila) + ' segm.' + sh, 'Segmentos', passo, P.dur, linhas, teto(linhas, 1.1));
   const leg = '**Legenda:** ' + QUADRADO[algo] + ' ' + lim + ' · 🟧 BDP (' + Math.round(bdp) + ' segm.) · ⬛ BDP mais fila (' + Math.round(bdp + fila) + ' segm.), o limite antes da perda';
   return leg + '\n\n' + g + '\n\n*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.';
 }

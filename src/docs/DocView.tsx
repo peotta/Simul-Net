@@ -107,6 +107,9 @@ const components: Components = {
 /** O crédito que fecha o arquivo Markdown (útil no GitHub e na wiki) já está no rodapé do site: não se repete na página. */
 export const withoutCredit = (markdown: string) => markdown.replace(/\n+---\n+\*[^*\n]+ é um projeto mantido pelo [^*\n]+\*\s*$/, '\n');
 
+/** A linha "Legenda:" que antecede um gráfico com legenda própria serve ao GitHub e à wiki: no site, a legenda é desenhada dentro da figura (ver Mermaid.tsx). */
+export const withoutChartLegend = (markdown: string) => markdown.replace(/^\*\*Legenda:\*\* [^\n]*\n\n(?=```mermaid\n[^`]*?%% legenda:)/gm, '');
+
 export function DocView({ markdown }: { markdown: string }) {
   const siglas = /^## ((?:\d+\. )?Glossário)$/m.exec(markdown);
   return (
@@ -121,7 +124,7 @@ export function DocView({ markdown }: { markdown: string }) {
         </p>
       )}
       <Markdown remarkPlugins={[remarkGfm]} components={components}>
-        {withoutCredit(markdown)}
+        {withoutChartLegend(withoutCredit(markdown))}
       </Markdown>
     </div>
   );

@@ -89,7 +89,29 @@ function fixXyChart(svg: string, code: string): string {
   if (!/xychart(-beta)?\s/.test(code)) return svg;
   const vb = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
   if (!vb) return svg;
-  return svg.replace(/^(<svg[^>]*?) width="100%"/, `$1 width="${vb[1]}" height="${vb[2]}"`).replace(/^(<svg[^>]*?) style="max-width:[^"]*;?"/, '$1');
+  let w = Number(vb[1]);
+  let h = Number(vb[2]);
+  let legenda = '';
+  // Legenda dentro da imagem: o nome de cada curva vem do comentário "%% legenda: a | b | c" e a cor, da paleta do gráfico.
+  const nomes = /^\s*%%\s*legenda:\s*(.+)$/m.exec(code)?.[1].split('|').map((n) => n.trim());
+  const cores = /plotColorPalette"\s*:\s*"([^"]+)"/.exec(code)?.[1].split(',').map((c) => c.trim());
+  if (nomes && cores && nomes.length) {
+    const itens = nomes.map((n, i) => ({ n, c: cores[i] ?? '#888', largura: 34 + n.length * 7.6 }));
+    const total = itens.reduce((t, i) => t + i.largura + 18, -18);
+    let x = Math.max(8, (w - total) / 2);
+    const y = h + 18;
+    legenda = '<g role="presentation" font-size="15" fill="currentColor">' + itens.map((i) => {
+      const g = `<line x1="${x}" y1="${y}" x2="${x + 24}" y2="${y}" stroke="${i.c}" stroke-width="4" stroke-linecap="round"/><text x="${x + 31}" y="${y + 5}">${i.n.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`;
+      x += i.largura + 18;
+      return g;
+    }).join('') + '</g>';
+    h += 36;
+  }
+  return svg
+    .replace(/^(<svg[^>]*?) width="100%"/, `$1 width="${w}" height="${h}"`)
+    .replace(/^(<svg[^>]*?) style="max-width:[^"]*;?"/, '$1')
+    .replace(/viewBox="0 0 [\d.]+ [\d.]+"/, `viewBox="0 0 ${w} ${h}"`)
+    .replace(/<\/svg>\s*$/, legenda + '</svg>');
 }
 
 export function Mermaid({ code, label }: { code: string; label: string }) {
