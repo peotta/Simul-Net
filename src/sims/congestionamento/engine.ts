@@ -82,6 +82,15 @@ export interface Flow {
   stats: Stats;
 }
 
+/** Cubo e raiz cúbica só com operações básicas (IEEE 754): o resultado não depende da plataforma nem da versão do Node, como Math.pow e Math.cbrt podem. */
+const cube = (x: number): number => x * x * x;
+function cbrt(x: number): number {
+  if (x <= 0) return 0;
+  let r = x >= 1 ? x : 1;
+  for (let i = 0; i < 60; i++) r = (2 * r + x / (r * r)) / 3;
+  return r;
+}
+
 /** Número pseudoaleatório determinístico em [0, 1) a partir da semente e de dois índices. */
 function rnd(seed: number, a: number, b: number): number {
   let t = ((seed * 1000003) ^ (a * 7919) ^ (b * 104729)) >>> 0;
@@ -217,7 +226,7 @@ function simWindow(algo: 'reno' | 'cubic', P: CongParams): Flow {
           K = 0;
           wmax = cwnd;
           afterRto = false;
-        } else if (cwnd < wmax) K = Math.cbrt((wmax - cwnd) / CUBIC_C);
+        } else if (cwnd < wmax) K = cbrt((wmax - cwnd) / CUBIC_C);
         else {
           K = 0;
           wmax = cwnd;
@@ -225,8 +234,8 @@ function simWindow(algo: 'reno' | 'cubic', P: CongParams): Flow {
         west = cwnd;
       }
       const tNow = (t - epoch) / 1000;
-      const wcNow = CUBIC_C * Math.pow(tNow - K, 3) + wmax;
-      const wcNext = CUBIC_C * Math.pow(tNow + rtt / 1000 - K, 3) + wmax;
+      const wcNow = CUBIC_C * cube(tNow - K) + wmax;
+      const wcNext = CUBIC_C * cube(tNow + rtt / 1000 - K) + wmax;
       west += (west >= cwndPrior ? 1 : CUBIC_ALPHA) * (w / cwnd);
       const target = wcNext < cwnd ? cwnd : wcNext > 1.5 * cwnd ? 1.5 * cwnd : wcNext;
       if (wcNow < west) {
