@@ -81,7 +81,15 @@ async function draw(id: string, code: string, dark: boolean): Promise<string> {
     sequence: { useMaxWidth: false, wrap: false, noteFontSize: 15, messageFontSize: 15, actorFontSize: 16 },
   });
   const { svg } = await mermaid.render(id, code);
-  return svg;
+  return fixXyChart(svg, code);
+}
+
+// O gráfico de linhas (xychart) sai com width="100%", que o contêiner ajustado ao conteúdo reduz a 300 px: fixa o tamanho natural (o do viewBox).
+function fixXyChart(svg: string, code: string): string {
+  if (!/xychart(-beta)?\s/.test(code)) return svg;
+  const vb = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg);
+  if (!vb) return svg;
+  return svg.replace(/^(<svg[^>]*?) width="100%"/, `$1 width="${vb[1]}" height="${vb[2]}"`).replace(/^(<svg[^>]*?) style="max-width:[^"]*;?"/, '$1');
 }
 
 export function Mermaid({ code, label }: { code: string; label: string }) {

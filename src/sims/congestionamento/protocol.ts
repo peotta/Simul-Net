@@ -1,6 +1,7 @@
 import type { ProtocolDef } from '../../sim-core/ui';
 import { controls } from './content/controls';
 import { explain, setup } from './content/explain';
+import { scenarioChart } from './content/charts';
 import { fundamentacao } from './content/fundamentacao';
 import { reference } from './content/reference';
 import { groupDoc, scenDoc, scenarios, stageTitles } from './content/scenarios';
@@ -35,6 +36,7 @@ export const congestionamentoProtocol: ProtocolDef = {
   explain: (tr, P) => explain(tr, P as unknown as CongParams),
   reference,
   fundamentacao,
+  docChart: scenarioChart,
   setup,
 };
 

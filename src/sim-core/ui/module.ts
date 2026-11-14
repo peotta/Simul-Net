@@ -137,5 +137,7 @@ export interface ProtocolDef {
   reference: string;
   /** Fundamentação em Markdown, só para a documentação gerada (docs e wiki): aparece antes de "Como ler os diagramas". */
   fundamentacao?: string;
+  /** Gráfico de um cenário em Markdown, só para a documentação gerada: aparece depois de "O que observar". */
+  docChart?: (s: ScenarioDef) => string;
   setup?: (s: ScenarioDef) => string;
 }

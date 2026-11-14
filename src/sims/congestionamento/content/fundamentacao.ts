@@ -1,5 +1,11 @@
 // Fundamentação do simulador de controle de congestionamento, em Markdown: aparece na documentação
 // (docs/simuladores/congestionamento.md e na wiki), antes de "Como ler os diagramas".
+import { graficoVazao } from './charts';
+
+const CURVA_LONGO = graficoVazao('Caminho longo e largo: 50 Mbit/s, RTT de 200 ms, fila rasa', { bw: 50, rtt: 200, buf: 0.25, dur: 40 });
+const CURVA_DOBRA = graficoVazao('A capacidade dobra aos 15 s: 20 para 40 Mbit/s, RTT de 50 ms', { dur: 30, shift: 'up' });
+const CURVA_PERDA = graficoVazao('Perda aleatória de 1%: 20 Mbit/s, RTT de 50 ms', { loss: 1 });
+
 export const fundamentacao: string = `
 ### O problema que o controle de congestionamento resolve
 
@@ -117,6 +123,22 @@ stateDiagram-v2
 | Fila no gargalo | enche até estourar | enche até estourar | curta, perto do BDP |
 | Perda aleatória | derruba a vazão | derruba a vazão | pouco afetado até 2% |
 | Padrão em | referência didática | Linux, Windows e macOS | uso em serviços e no QUIC |
+
+### A curva do uso da banda
+
+Os gráficos abaixo mostram quanto da banda do enlace cada algoritmo usa ao longo do tempo (vazão média por janela de tempo). Os valores vêm do **próprio motor do simulador**, o mesmo dos modos e dos cenários. Em todos, as linhas são, na ordem: **Reno** (vermelho), **CUBIC** (azul), **BBR** (verde) e a **capacidade** do enlace (preta). Quanto mais perto da linha preta, melhor a ocupação da banda.
+
+${CURVA_LONGO}
+
+*Esquema 5 (caminho longo e largo).* Com RTT de 200 ms, o Reno soma 1 segmento por RTT e leva **dezenas de segundos** para ocupar um enlace de 50 Mbit/s: a rampa quase reta do gráfico. O CUBIC cresce pelo tempo, e não por RTT, e chega perto da capacidade em poucos segundos. O BBR ocupa mais de 90% do enlace, abaixo da capacidade por causa das fases de ProbeBW e ProbeRTT. O mesmo cenário está nos modos Reno e CUBIC.
+
+${CURVA_DOBRA}
+
+*Esquema 6 (capacidade dobra).* Aos 15 s o enlace passa de 20 para 40 Mbit/s. Cada algoritmo descobre a banda nova de um jeito: o **Reno** sobe 1 segmento por RTT, o **CUBIC** acelera pela região convexa e o **BBR** só percebe a banda nova na próxima sondagem (ProbeBW_UP), quando o ritmo maior revela a capacidade. Todos chegam perto dos 40 Mbit/s em poucos segundos; o Reno e o BBR ainda oscilam depois, porque o excesso de envio estoura a fila.
+
+${CURVA_PERDA}
+
+*Esquema 7 (perda aleatória de 1%).* O Reno e o CUBIC leem cada perda como congestionamento e **mantêm a janela pequena**: usam uma fração mínima do enlace, na ordem de grandeza prevista por Mathis et al. (1997). O BBR, que não usa a perda como sinal principal enquanto ela fica abaixo de 2%, **continua perto da capacidade**. É a diferença entre um controle guiado por perda e um guiado por modelo.
 
 ### O que cada modo e aba do simulador mostram
 

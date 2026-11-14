@@ -136,13 +136,65 @@ stateDiagram-v2
 | Perda aleatória | derruba a vazão | derruba a vazão | pouco afetado até 2% |
 | Padrão em | referência didática | Linux, Windows e macOS | uso em serviços e no QUIC |
 
-### 2.7 O que cada modo e aba do simulador mostram
+### 2.7 A curva do uso da banda
+
+Os gráficos abaixo mostram quanto da banda do enlace cada algoritmo usa ao longo do tempo (vazão média por janela de tempo). Os valores vêm do **próprio motor do simulador**, o mesmo dos modos e dos cenários. Em todos, as linhas são, na ordem: **Reno** (vermelho), **CUBIC** (azul), **BBR** (verde) e a **capacidade** do enlace (preta). Quanto mais perto da linha preta, melhor a ocupação da banda.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Caminho longo e largo: 50 Mbit/s, RTT de 200 ms, fila rasa"
+  x-axis "Tempo (s)" 2 --> 40
+  y-axis "Vazão (Mbit/s)" 0 --> 60
+  line [20.6, 38.7, 39.3, 39.9, 40.5, 41.1, 41.7, 42.3, 42.9, 43.5, 44.1, 44.7, 45.3, 45.9, 46.5, 47.1, 47.7, 48.3, 48.9, 49.5]
+  line [22.6, 49.2, 48.4, 50, 50, 47.2, 50, 50, 50, 47.4, 49.8, 50, 50, 50, 47.2, 50, 50, 50, 49.2, 48]
+  line [20.4, 45.7, 46.6, 46.5, 46.1, 43.8, 46.8, 46.2, 46.7, 47, 44.1, 47, 46.3, 47.1, 47.1, 44.4, 47.3, 46.6, 47.4, 47]
+  line [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+```
+
+*Esquema 5 (caminho longo e largo).* Com RTT de 200 ms, o Reno soma 1 segmento por RTT e leva **dezenas de segundos** para ocupar um enlace de 50 Mbit/s: a rampa quase reta do gráfico. O CUBIC cresce pelo tempo, e não por RTT, e chega perto da capacidade em poucos segundos. O BBR ocupa mais de 90% do enlace, abaixo da capacidade por causa das fases de ProbeBW e ProbeRTT. O mesmo cenário está nos modos Reno e CUBIC.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "A capacidade dobra aos 15 s: 20 para 40 Mbit/s, RTT de 50 ms"
+  x-axis "Tempo (s)" 2 --> 30
+  y-axis "Vazão (Mbit/s)" 0 --> 50
+  line [18.9, 20, 20, 20, 20, 20, 20, 22.8, 33, 39.8, 40, 38.9, 35.5, 40, 40]
+  line [18.9, 20, 20, 20, 20, 20, 20, 28.3, 39.3, 40, 40, 40, 40, 40, 40]
+  line [18.8, 20, 20, 20, 20, 19, 20, 21.7, 40, 39.9, 38, 39.9, 39.9, 40, 39.9]
+  line [20, 20, 20, 20, 20, 20, 20, 29.6, 40, 40, 40, 40, 40, 40, 40]
+```
+
+*Esquema 6 (capacidade dobra).* Aos 15 s o enlace passa de 20 para 40 Mbit/s. Cada algoritmo descobre a banda nova de um jeito: o **Reno** sobe 1 segmento por RTT, o **CUBIC** acelera pela região convexa e o **BBR** só percebe a banda nova na próxima sondagem (ProbeBW_UP), quando o ritmo maior revela a capacidade. Todos chegam perto dos 40 Mbit/s em poucos segundos; o Reno e o BBR ainda oscilam depois, porque o excesso de envio estoura a fila.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Perda aleatória de 1%: 20 Mbit/s, RTT de 50 ms"
+  x-axis "Tempo (s)" 1 --> 20
+  y-axis "Vazão (Mbit/s)" 0 --> 25
+  line [5.5, 2.4, 2.2, 1.5, 3, 3.1, 3, 2.5, 2.4, 1.8, 2.2, 2.2, 3.1, 2.4, 3.7, 1.3, 2.5, 2.4, 3.5, 3]
+  line [7.5, 2.5, 1.9, 1.9, 3.1, 3.1, 3.6, 2.8, 2.6, 1.3, 2.3, 2.5, 3, 2.5, 3.3, 1.3, 3.8, 3.3, 2.4, 2.9]
+  line [17.4, 19.6, 19.5, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6, 17.7, 19.6, 19.7, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6]
+  line [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+```
+
+*Esquema 7 (perda aleatória de 1%).* O Reno e o CUBIC leem cada perda como congestionamento e **mantêm a janela pequena**: usam uma fração mínima do enlace, na ordem de grandeza prevista por Mathis et al. (1997). O BBR, que não usa a perda como sinal principal enquanto ela fica abaixo de 2%, **continua perto da capacidade**. É a diferença entre um controle guiado por perda e um guiado por modelo.
+
+### 2.8 O que cada modo e aba do simulador mostram
 
 - **Modos:** Reno/NewReno, CUBIC, BBR e Comparação (os três, cada um em uma cópia do mesmo caminho).
 - **Aba Cenário:** parâmetros do caminho e do teste. **Captura:** uma amostra das rodadas (segmentos e ACKs). **Mensagem:** os valores da rodada (janela, fila, RTT, vazão, estado do algoritmo).
 - **Aba Janela e fila:** a cwnd (ou o limite de dados em voo do BBR) contra o BDP e o limite da fila. **Vazão e atraso:** a vazão e o RTT de cada algoritmo. **Resultados:** vazão média, utilização, RTT, perdas e tempo até 90% da capacidade, para os três algoritmos com os mesmos parâmetros.
 
-### 2.8 Cenários recomendados
+### 2.9 Cenários recomendados
 
 1. **Reno, dente de serra**, e depois **fila rasa** e **fila funda**: a relação entre tamanho de buffer, utilização e atraso.
 2. **Reno, perda aleatória de 1%**, e depois **BBR, perda aleatória de 1%**: o sinal "perda" falha.
@@ -150,7 +202,7 @@ stateDiagram-v2
 4. **BBR, fases**: Startup, Drain, ProbeBW e ProbeRTT.
 5. **Comparação, capacidade dobra**: três maneiras de descobrir banda nova.
 
-### 2.9 Limites do modelo e do diagrama
+### 2.10 Limites do modelo e do diagrama
 
 - O modelo é **por rodadas**: uma por RTT, com dados em voo e fila calculados em conjunto (fluido). Não há ACK individual, relógio de ACKs, estouro de fila dentro da rodada nem variação do RTT.
 - Há **um fluxo por vez** no gargalo. A competição e a justiça entre fluxos (por exemplo, BBR contra CUBIC) **não** são modeladas.
@@ -280,6 +332,21 @@ Repita o ciclo na aba Janela e fila: é o dente de serra clássico, com o enlace
 - Na aba Janela e fila: o dente de serra da cwnd entre 1/2 e 1 vez o BDP mais a fila.
 - Na aba Vazão e atraso: a vazão quase colada na capacidade e o RTT subindo e descendo com a fila.
 - No Log: as mensagens de perda com o novo ssthresh.
+
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 250
+  line [80.5, 211.1, 162.2, 165.2, 105.1, 88.8, 94.3, 99.4, 104.3, 109, 113.5, 117.8, 122, 126, 129.9, 133.7, 137.4, 141, 144.5, 147.9, 151.3, 154.5, 157.7, 160.9, 164, 138.9, 86.4, 92, 97.3, 102.3, 107.1, 111.7, 116, 120.3, 124.4, 128.3, 132.2, 135.9, 139.5, 143.1, 146.5, 149.9, 153.2, 156.4, 159.6, 162.7, 165.7, 91.5, 89.7, 95.2, 100.3, 105.1, 109.8, 114.2, 118.5, 122.7, 126.7, 130.6, 134.4, 138, 141.6, 145.1, 148.5, 151.8, 155.1, 158.3, 161.1]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -415,7 +482,7 @@ sequenceDiagram
 | Rodada: N segm. | segmentos enviados em um RTT | emissor |
 | ACKs de N segm. | confirmações que liberam novas rodadas | receptor |
 
-**Por que importa.** É a base de todo o controle de congestionamento do TCP desde 1988 (Jacobson). Entender o dente de serra explica por que a vazão média do Reno é próxima de 75% do pico quando a fila é de 1 BDP.
+**Por que importa.** É a base de todo o controle de congestionamento do TCP desde 1988 (Jacobson). Com fila de 1 BDP, a janela oscila entre 1 e 2 vezes o BDP e o enlace fica quase sempre cheio (acima de 95%). Com fila menor, a janela cai abaixo do BDP depois de cada perda e a utilização diminui: é o que o cenário de fila rasa mostra.
 
 #### 6.1.2 Janela inicial de 1 segmento
 
@@ -431,6 +498,21 @@ Com IW = 1, o slow start precisa de mais rodadas para chegar ao BDP. Compare com
 
 - Quantas rodadas até a janela chegar a 80 segmentos, com IW = 1 e com IW = 10.
 - O mesmo ssthresh inicial (sem limite): o slow start só acaba na primeira perda.
+
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.1 --> 10
+  y-axis "Segmentos" 0 --> 250
+  line [1.5, 6, 24, 96, 221.7, 162, 128.2, 129.4, 130.6, 131.9, 133.3, 134.5, 135.7, 136.9, 138.2, 139.4, 140.5, 141.7, 142.8, 144.1, 145.2, 146.3, 147.5, 148.6, 149.7, 150.8, 151.9, 153, 154.1, 155.2, 156.3, 157.3, 158.4, 159.4, 160.5, 161.5, 162.5, 163.5, 164.6, 165.6, 166.6, 119.1, 83.6, 85.6, 87.5, 89.4, 91.3, 93.1, 94.8, 96.5, 98.3, 100, 101.6, 103.3, 104.8, 106.5, 108, 109.5, 111, 112.5, 114, 115.5, 116.8, 118.4, 119.6, 121.1, 122.5, 123.7, 125.2, 126.5, 127.7, 129.1, 130.4, 131.6, 132.8, 134.2, 135.4, 136.6, 137.8, 139, 140.3, 141.4, 142.6, 143.7, 144.8, 146.1, 147.2, 148.3, 149.4, 150.5, 151.6, 152.7, 153.8, 154.9, 156, 157.1, 158.1, 159.2, 160.2, 161.2]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -579,6 +661,21 @@ Com fila de 1/4 do BDP, a perda chega cedo e a janela cai a metade de um valor p
 - Na aba Vazão e atraso: a vazão cai abaixo da capacidade depois de cada perda.
 - Na aba Resultados: a utilização abaixo de 100%.
 - Mais perdas por segundo que no cenário de fila média.
+
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (104 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 21 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 120
+  line [68.4, 82.3, 88.1, 93.6, 98.8, 96.5, 54.3, 60.3, 66.3, 72.3, 78.3, 84.3, 90, 95.4, 100.5, 79.4, 56.4, 62.4, 68.4, 74.4, 80.4, 86.3, 91.9, 97.2, 102.2, 62.4, 58.4, 64.4, 70.4, 76.4, 82.4, 88.3, 93.7, 98.9, 95, 54.5, 60.5, 66.5, 72.5, 78.5, 84.5, 90.2, 95.6, 100.7, 77.9, 56.5, 62.5, 68.5, 74.5, 80.5, 86.5, 92.1, 97.4, 102.4, 61, 58.6, 64.6, 70.6, 76.6, 82.6, 88.4, 93.9, 99.1, 93.5, 54.7, 60.7, 66.1]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -748,6 +845,21 @@ Veja a aba Vazão e atraso: o atraso de fila é a consequência de um algoritmo 
 - Poucas perdas, mas cada uma com muitos segmentos.
 - A fila (estado Fila no gargalo) perto do limite durante quase todo o ciclo.
 
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (416 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 333 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 550
+  line [80.5, 439.5, 467, 320.3, 321.6, 323.3, 324.7, 326.4, 327.8, 329.4, 330.8, 332.4, 333.8, 335.4, 336.8, 338.4, 339.8, 341.4, 342.7, 344.3, 345.6, 347.1, 348.5, 350, 351.4, 352.7, 354.3, 355.6, 357.1, 358.5, 359.8, 361.3, 362.6, 364, 365.4, 366.7, 368.1, 369.5, 370.7, 372.2, 373.5, 374.7, 376.2, 377.5, 378.7, 380.2, 381.4, 382.7, 384, 385.4, 386.6, 387.9, 389.3, 390.5, 391.7, 393.1, 394.4, 395.6, 396.8, 398.2, 399.4, 400.6, 401.8, 403.1, 404.4, 405.6, 406.7]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -867,6 +979,21 @@ A vazão cai a poucos Mbit/s num enlace de 20 Mbit/s: é o comportamento descrit
 - A cwnd nunca passa de poucas dezenas de segmentos.
 - Fila vazia (RTT igual ao RTT de base) e o enlace ocioso.
 - Compare com o BBR no cenário equivalente.
+
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 190
+  line [38.3, 22.5, 13.5, 9.7, 9.7, 12.5, 5.3, 4.5, 10.5, 14.8, 7.7, 6.2, 4.5, 9.5, 12.3, 11.5, 17.5, 12.8, 11.7, 12.5, 16.7, 12.5, 8.7, 14.5, 9.7, 12.3, 5.7, 11.5, 12.2, 7.3, 5.7, 4.7, 10.5, 13, 11.5, 7.5, 6.5, 6.5, 12.5, 10.3, 14.5, 12.7, 13, 9.3, 8.5, 13, 10.5, 16.5, 22.5, 8.7, 4, 4.7, 6.5, 12.5, 8.7, 10.2, 11.5, 12.2, 11.2, 5.7, 9.5, 15.5, 19.3, 13.5, 13.7, 13.5, 8.8]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -1141,6 +1268,21 @@ No primeiro estouro da fila, várias perdas ocorrem na mesma janela. Sem SACK, o
 - Na aba Janela e fila: a janela despenca a 1 e refaz o slow start.
 - Ative o SACK e compare.
 
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 350
+  line [80.5, 315.5, 11.4, 137.4, 162.9, 165.9, 86.5, 90.1, 95.5, 100.6, 105.4, 110.1, 114.5, 118.8, 122.9, 126.9, 130.8, 134.6, 138.3, 141.8, 145.3, 148.7, 152, 155.3, 158.5, 161.6, 164.7, 120.1, 87.7, 93.3, 98.5, 103.4, 108.1, 112.7, 117, 121.2, 125.3, 129.2, 133, 136.7, 140.4, 143.8, 147.3, 150.6, 153.9, 157.2, 160.3, 163.4, 154.1, 85.4, 91, 96.3, 101.4, 106.2, 110.8, 115.2, 119.5, 123.6, 127.6, 131.5, 135.2, 138.8, 142.4, 145.9, 149.3, 152.6, 155.3]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -1301,6 +1443,21 @@ O BDP é de mais de 800 segmentos e a fila é de 1/4 do BDP. Depois da perda, a 
 - A utilização na aba Resultados, abaixo da do CUBIC.
 - Mude a fila para 1 BDP: a utilização sobe, porque a janela reduzida ainda cobre o BDP.
 
+**Legenda:** 🟥 janela de congestionamento (cwnd) do Reno/NewReno · 🟧 BDP (833 segm.) · ⬛ BDP mais fila (1041 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 50 Mbit/s, RTT de 200 ms, fila de 208 segm."
+  x-axis "Tempo (s)" 0.5 --> 40
+  y-axis "Segmentos" 0 --> 1150
+  line [20, 104, 640, 831.9, 641.5, 644, 646.5, 649, 651.5, 654, 656.5, 659, 661.5, 664, 666.5, 669, 671.5, 674, 676.5, 679, 681.5, 684, 686.5, 689, 691.5, 694, 696.5, 699, 701.5, 704, 706.5, 709, 711.5, 714, 716.5, 719, 721.5, 724, 726.5, 729, 731.5, 734, 736.5, 739, 741.5, 744, 746.5, 749, 751.5, 754, 756.5, 759, 761.5, 764, 766.5, 769, 771.5, 774, 776.5, 779, 781.5, 784, 786.5, 789, 791.5, 794, 796.5, 799, 801.5, 804, 806.5, 809, 811.5, 814, 816.5, 819, 821.5, 824, 826.5, 829]
+  line [833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3]
+  line [1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -1436,6 +1593,21 @@ Observe na coluna Fase da painel de estado as regiões: côncava (abaixo do Wmax
 - Na aba Janela e fila: a janela volta rápido ao Wmax, achata e acelera.
 - No estado Fase: "região côncava" e "região convexa".
 - Menos tempo gasto longe do Wmax que no Reno.
+
+**Legenda:** 🟦 janela de congestionamento (cwnd) do CUBIC · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 300
+  line [80.5, 253.6, 157.5, 162.8, 120.3, 128.7, 136, 142.5, 148, 152.9, 156.8, 160.2, 162.9, 165, 166.7, 121.5, 126, 133.4, 139.8, 145.3, 150.1, 154.2, 157.5, 160.2, 162.4, 164, 165.3, 166.2, 166.7, 152.3, 120.4, 128.7, 135.7, 141.9, 147, 151.6, 155.3, 158.4, 160.9, 162.9, 164.4, 165.5, 166.2, 166.7, 166.9, 133, 123.9, 131.6, 138.2, 143.9, 148.9, 153.1, 156.5, 159.4, 161.7, 163.5, 164.8, 165.7, 166.4, 166.8, 166.9, 130.1, 124.4, 131.9, 138.6, 144.2, 148.8]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -1586,6 +1758,21 @@ Compare com o cenário equivalente do Reno ou use o modo Comparação.
 
 - O tempo entre a perda e o retorno ao Wmax (K), na aba Janela e fila.
 - A utilização na aba Resultados, acima da do Reno no cenário equivalente.
+
+**Legenda:** 🟦 janela de congestionamento (cwnd) do CUBIC · 🟧 BDP (833 segm.) · ⬛ BDP mais fila (1041 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 50 Mbit/s, RTT de 200 ms, fila de 208 segm."
+  x-axis "Tempo (s)" 0.5 --> 40
+  y-axis "Segmentos" 0 --> 1150
+  line [20, 104, 640, 1011.1, 915.9, 978.4, 1025.3, 885.9, 751.9, 806.7, 847.4, 883.6, 915.8, 942.9, 966.5, 986.7, 1003.6, 1017.6, 1028.8, 1037.5, 874.4, 742.8, 797.1, 837.4, 873.4, 905, 931.8, 955.1, 975.3, 992, 1005.5, 1016.4, 1024.9, 1031.3, 1035.9, 1039.1, 1041, 984.1, 729.6, 781.7, 823.1, 861.8, 894, 922.2, 947.6, 968.5, 986.1, 1000.7, 1012.5, 1021.8, 1028.9, 1034.1, 1037.7, 1040, 1041.3, 1041.9, 779.9, 758.8, 809.1, 849.3, 882.7, 913.4, 939.4, 961.5, 980.2, 995.8, 1008.6, 1018.8, 1026.7, 1032.5, 1036.6, 1039.4, 1041, 1041.7, 1042, 888, 741, 794.7, 835.9, 871.5]
+  line [833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3, 833.3]
+  line [1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3, 1041.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -1748,6 +1935,21 @@ Procure a fase "região Reno-friendly".
 
 - No estado Fase: "região Reno-friendly" logo depois de cada perda.
 - A janela sobe quase linearmente nessa região.
+
+**Legenda:** 🟦 janela de congestionamento (cwnd) do CUBIC · 🟧 BDP (17 segm.) · ⬛ BDP mais fila (34 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 10 Mbit/s, RTT de 20 ms, fila de 17 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 40
+  line [28.5, 32.6, 28.2, 29.8, 33.3, 26.6, 31.2, 30.9, 28.1, 32.5, 28.6, 29.6, 33.7, 26.4, 31, 31.3, 27.9, 32.3, 29, 29.3, 33.6, 26.7, 30.7, 31.7, 27.6, 32.1, 29.3, 29.1, 33.3, 27.1, 30.5, 32.1, 27.4, 31.9, 29.7, 28.9, 33.1, 27.4, 30.3, 32.5, 27.1, 31.6, 30.1, 28.6, 32.9, 27.8, 30.1, 32.9, 26.9, 31.4, 30.5, 28.4, 32.7, 28.2, 29.8, 33.3, 26.6, 31.2, 30.9, 28.1, 32.5, 28.5, 29.6, 33.7, 26.4, 31, 34.4]
+  line [16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7, 16.7]
+  line [33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7, 33.7]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -1988,6 +2190,21 @@ Como o Reno, o CUBIC só reage à perda. Com 4 BDP de fila, ele enche o buffer e
 - RTT médio na aba Resultados, várias vezes o RTT de base.
 - Fila próxima do limite no estado Fila no gargalo.
 
+**Legenda:** 🟦 janela de congestionamento (cwnd) do CUBIC · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (416 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 333 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 600
+  line [80.5, 439.5, 536.2, 448, 330.4, 313.9, 337.5, 350.6, 364.7, 376.3, 386.5, 396.7, 405.4, 412.7, 419.1, 313.4, 295.9, 316.9, 330.4, 343.1, 354, 364.9, 373.4, 381.6, 389, 394.9, 400.1, 405, 408.8, 411.8, 414.3, 416.4, 394.4, 291.9, 300.3, 319.3, 332.6, 344.7, 355.7, 364.8, 374.5, 381.7, 388.1, 394.5, 399.4, 403.5, 406.9, 410.1, 412.4, 414.1, 415.5, 416.5, 395.7, 291.9, 300, 318.9, 332.3, 344.3, 355.3, 364.3, 374, 381.2, 387.6, 393.9, 398.8, 402.9, 406.3]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -2118,6 +2335,21 @@ O CUBIC reduz a janela em 30% (β = 0,7) a cada perda, menos que os 50% do Reno,
 
 - A cwnd em dezenas de segmentos, sem tocar a capacidade.
 - Vazão próxima à do Reno, só um pouco maior.
+
+**Legenda:** 🟦 janela de congestionamento (cwnd) do CUBIC · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 190
+  line [43.7, 38.2, 19.8, 14.9, 13.1, 9.6, 5.7, 3.9, 8.5, 13.6, 10.1, 8.5, 6.5, 9.7, 13.4, 13, 16.3, 13, 10.9, 14.2, 18.4, 16, 12.7, 15.7, 12.1, 13.2, 7.9, 11.3, 13.4, 10, 7.4, 4.3, 5.7, 9.2, 9.4, 11.2, 10.1, 8.9, 12.4, 11.9, 13.9, 13.1, 13.1, 10.3, 8.9, 12.2, 11.8, 13.9, 18.1, 11.4, 6.3, 5.4, 5.9, 10.6, 16.6, 18.3, 17.7, 17.1, 15.4, 9.9, 8.8, 9.3, 12.7, 11.8, 12, 12.1, 14.7]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -2384,6 +2616,21 @@ Aos 10 s o enlace passa a 40 Mbit/s. A janela, que estava na região côncava, u
 - A mudança de fase de "côncava" para "convexa" aos 10 s.
 - A vazão passando de 20 para cerca de 40 Mbit/s.
 
+**Legenda:** 🟦 janela de congestionamento (cwnd) do CUBIC · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2f80ed, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm., a capacidade dobra aos 10 s"
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 300
+  line [80.5, 253.6, 157.5, 162.8, 120.3, 128.7, 136, 142.5, 148, 152.9, 156.8, 160.2, 162.9, 165, 166.7, 121.5, 126, 133.4, 139.8, 145.3, 150.1, 154.2, 157.5, 160.2, 162.4, 164, 165.3, 166.2, 166.7, 152.3, 120.4, 128.7, 135.7, 142, 147.4, 151.8, 155.6, 158.6, 161.1, 163, 164.5, 165.5, 166.3, 166.7, 166.9, 167, 167.1, 168.9, 174.6, 180.2, 185.7, 191, 196.1, 201.2, 206.1, 210.9, 215.6, 220.2, 224.6, 229.1, 233.4, 237.6, 241.8, 245.9, 248.5, 178.7, 188.5]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 121.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 204.1, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -2544,6 +2791,21 @@ Observe que a fila quase não existe: a vazão fica na capacidade com o RTT pert
 - Na painel de estado: as fases se sucedendo, com BtlBw e RTprop estimados.
 - Fila quase sempre vazia e RTT perto do RTT de base.
 - A queda curta de vazão no ProbeRTT, a cada 10 s.
+
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 190
+  line [79.4, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 167.8, 169.1, 166.7, 84.9, 165.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 169.9, 166.9, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -2760,6 +3022,21 @@ O mesmo caminho em que o Reno e o CUBIC enchem 4 BDP de fila. O BBR limita os da
 - O RTT médio na aba Resultados, perto do RTT de base.
 - A fila (estado) quase sempre perto de zero.
 
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (416 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 333 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 500
+  line [79.4, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 167.7, 169.1, 166.7, 85.1, 164.9, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 169.9, 167, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3, 416.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -2974,6 +3251,21 @@ Com fila de 1/4 do BDP, o Reno perde utilização. O BBR mantém o enlace cheio,
 - Perdas concentradas no Startup e nas sondagens.
 - Vazão próxima da capacidade, ao contrário do Reno.
 
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (104 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 21 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 130
+  line [70.3, 95.9, 95.2, 95.2, 95.2, 95.2, 95.2, 95.2, 95.2, 95.2, 101.3, 96.9, 96.9, 96.9, 96.9, 96.9, 96.9, 96.9, 96.9, 96.9, 97.9, 102.8, 98.6, 98.6, 98.6, 98.6, 98.6, 98.6, 98.6, 98.6, 105, 100.3, 100.3, 65.3, 96.2, 100.3, 100.3, 100.3, 100.3, 100.3, 100.3, 102, 105.8, 102, 102, 102, 102, 102, 102, 102, 102, 102, 105.6, 105.9, 103.7, 103.7, 103.7, 103.7, 103.7, 103.7, 103.7, 103.7, 103.7, 109.2, 105.9, 105.4, 105.4]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3, 104.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -3187,6 +3479,21 @@ Com 1% de perda aleatória, o BBR continua perto da capacidade, porque perdas ab
 
 - A vazão na aba Resultados, perto da capacidade (contra poucos Mbit/s no Reno e no CUBIC).
 - Nenhum evento de redução de janela por perda.
+
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 190
+  line [77.4, 164.3, 164.6, 164.6, 164.6, 164.6, 164.6, 164.6, 164.6, 164.6, 164.6, 168.1, 165, 165, 165, 165, 165, 165, 165, 168.5, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 167, 166.6, 165.1, 165.1, 98.8, 148.8, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 168.5, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 168.5, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1, 168.5, 165.1, 165.1, 165.1, 165.1, 165.1, 165.1]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -3406,6 +3713,21 @@ O modelo do simulador é simplificado: o BBR real também aplica um limite de cu
 - No Log: "Perda acima de 2%: inflight_longterm" durante as sondagens.
 - Vazão menor que a do cenário sem perda, mas bem acima da do Reno.
 
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm."
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 190
+  line [61.9, 82.4, 80.9, 80.9, 80.9, 80.9, 80.9, 80.9, 80.9, 80.9, 78.9, 64.9, 64.9, 64.9, 64.9, 64.9, 64.9, 64.9, 64.9, 67.3, 63.5, 62.3, 62.3, 62.3, 62.3, 62.3, 62.3, 62.3, 64.6, 60, 58.9, 58.9, 58.9, 44.5, 56.2, 58.9, 58.9, 58.9, 58.9, 58.9, 58.9, 60.9, 56.4, 56.4, 56.4, 56.4, 56.4, 56.4, 56.4, 56.4, 58.5, 54.8, 53.8, 53.8, 53.8, 53.8, 53.8, 53.8, 54.4, 54.1, 51.3, 51.3, 51.3, 51.3, 51.3, 51.3, 51.3]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -3617,6 +3939,21 @@ Aos 10 s o enlace dobra de capacidade. O BBR só descobre isso na próxima sonda
 
 - O intervalo entre a mudança (10 s) e a vazão de 40 Mbit/s.
 - As rodadas seguidas de ProbeBW_UP.
+
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm., a capacidade dobra aos 10 s"
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 400
+  line [79.4, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 167.8, 169.1, 166.7, 84.9, 165.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 169.9, 322.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 340.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 333.3, 340.3, 333.3, 333.3, 333.3, 333.3, 333.3]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 137.9, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 220.9, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7, 249.7]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
 
 ```mermaid
 sequenceDiagram
@@ -3832,6 +4169,21 @@ Aos 10 s o enlace cai à metade. O BBR ainda lembra a banda antiga (a estimativa
 - A fila subindo logo depois dos 10 s e o RTT inflando.
 - A estimativa de BtlBw (painel de estado) caindo alguns segundos depois.
 
+**Legenda:** 🟩 limite de dados em voo (cwnd) do BBR · 🟧 BDP (83 segm.) · ⬛ BDP mais fila (166 segm.), o limite antes da perda
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#2e9e4f, #f4900c, #24292f"}}}}%%
+xychart-beta
+  title "Janela: 20 Mbit/s, RTT de 50 ms, fila de 83 segm., a capacidade cai à metade aos 10 s"
+  x-axis "Tempo (s)" 0.3 --> 20
+  y-axis "Segmentos" 0 --> 190
+  line [79.4, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 170.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 167.8, 169.1, 166.7, 84.9, 165.1, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 166.7, 141.1, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9, 100.9]
+  line [83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 83.3, 56.1, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7, 41.7]
+  line [166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 166.3, 139.1, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7, 124.7]
+```
+
+*Gráfico do cenário (janela).* Evolução da janela média por janela de tempo, no mesmo caminho do cenário, calculada pelo motor do simulador. Acima da linha preta há perda por estouro da fila. Corresponde à aba Janela e fila.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -4012,6 +4364,22 @@ Os fluxos não competem entre si: cada um enxerga o gargalo para si.
 
 - Na aba Janela e fila: o dente de serra do Reno, a curva cúbica e a janela quase constante do BBR.
 - Na aba Resultados: vazão, RTT médio e perdas de cada um.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Vazão: 20 Mbit/s, RTT de 50 ms"
+  x-axis "Tempo (s)" 1 --> 20
+  y-axis "Vazão (Mbit/s)" 0 --> 25
+  line [17.8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+  line [17.8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+  line [17.7, 20, 20, 19.9, 20, 20, 19.9, 20, 20, 19.9, 18, 20, 19.9, 20, 20, 19.9, 20, 20, 19.9, 20]
+  line [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+```
+
+*Gráfico do cenário (vazão).* Vazão média por janela de tempo do Reno, do CUBIC e do BBR no mesmo caminho, calculada pelo motor do simulador. Corresponde à aba Vazão e atraso.
 
 ```mermaid
 sequenceDiagram
@@ -4231,6 +4599,22 @@ O Reno e o CUBIC tratam toda perda como congestionamento e ficam com uma fraçã
 
 - A coluna Vazão na aba Resultados.
 - A janela do BBR, estável, contra a dos outros, pequena e instável.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Vazão: 20 Mbit/s, RTT de 50 ms"
+  x-axis "Tempo (s)" 1 --> 20
+  y-axis "Vazão (Mbit/s)" 0 --> 25
+  line [5.5, 2.4, 2.2, 1.5, 3, 3.1, 3, 2.5, 2.4, 1.8, 2.2, 2.2, 3.1, 2.4, 3.7, 1.3, 2.5, 2.4, 3.5, 3]
+  line [7.5, 2.5, 1.9, 1.9, 3.1, 3.1, 3.6, 2.8, 2.6, 1.3, 2.3, 2.5, 3, 2.5, 3.3, 1.3, 3.8, 3.3, 2.4, 2.9]
+  line [17.4, 19.6, 19.5, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6, 17.7, 19.6, 19.7, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6, 19.6]
+  line [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+```
+
+*Gráfico do cenário (vazão).* Vazão média por janela de tempo do Reno, do CUBIC e do BBR no mesmo caminho, calculada pelo motor do simulador. Corresponde à aba Vazão e atraso.
 
 ```mermaid
 sequenceDiagram
@@ -4468,6 +4852,22 @@ Mesma vazão para os três, mas o RTT médio do Reno e do CUBIC é muito maior q
 - Na aba Vazão e atraso: as curvas de RTT.
 - Na aba Resultados: o RTT médio de cada um.
 
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Vazão: 20 Mbit/s, RTT de 50 ms"
+  x-axis "Tempo (s)" 1 --> 20
+  y-axis "Vazão (Mbit/s)" 0 --> 25
+  line [17.8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+  line [17.8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+  line [17.7, 20, 20, 19.9, 20, 20, 19.9, 20, 20, 19.9, 18, 20, 19.9, 20, 20, 19.9, 20, 20, 19.9, 20]
+  line [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+```
+
+*Gráfico do cenário (vazão).* Vazão média por janela de tempo do Reno, do CUBIC e do BBR no mesmo caminho, calculada pelo motor do simulador. Corresponde à aba Vazão e atraso.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -4667,6 +5067,22 @@ Com pouca fila, o Reno perde utilização; o CUBIC e o BBR perdem pouco. Veja a 
 
 - A coluna Utilização na aba Resultados.
 - A quantidade de perdas em cada algoritmo.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Vazão: 20 Mbit/s, RTT de 50 ms"
+  x-axis "Tempo (s)" 1 --> 20
+  y-axis "Vazão (Mbit/s)" 0 --> 25
+  line [17.7, 18.3, 15.7, 19.6, 17.6, 16.2, 19.8, 17, 16.7, 19.9, 16.4, 17.2, 20, 15.9, 17.7, 20, 15.4, 18.1, 20, 15]
+  line [17.5, 20, 19.2, 20, 20, 19.4, 19.7, 20, 20, 19.2, 20, 20, 19.5, 19.7, 20, 20, 19.2, 20, 20, 19.6]
+  line [17.3, 20, 20, 19.9, 20, 20, 19.9, 20, 20, 19.9, 18, 20, 19.9, 20, 20, 20, 19.9, 20, 20, 19.9]
+  line [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+```
+
+*Gráfico do cenário (vazão).* Vazão média por janela de tempo do Reno, do CUBIC e do BBR no mesmo caminho, calculada pelo motor do simulador. Corresponde à aba Vazão e atraso.
 
 ```mermaid
 sequenceDiagram
@@ -4898,6 +5314,22 @@ Fila de 1/4 do BDP em um caminho de BDP grande: onde o Reno se recupera mais dev
 - A utilização de cada um na aba Resultados.
 - A janela do Reno subindo devagar depois da perda, na aba Janela e fila.
 
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Vazão: 50 Mbit/s, RTT de 200 ms"
+  x-axis "Tempo (s)" 2 --> 40
+  y-axis "Vazão (Mbit/s)" 0 --> 60
+  line [20.6, 38.7, 39.3, 39.9, 40.5, 41.1, 41.7, 42.3, 42.9, 43.5, 44.1, 44.7, 45.3, 45.9, 46.5, 47.1, 47.7, 48.3, 48.9, 49.5]
+  line [22.6, 49.2, 48.4, 50, 50, 47.2, 50, 50, 50, 47.4, 49.8, 50, 50, 50, 47.2, 50, 50, 50, 49.2, 48]
+  line [20.4, 45.7, 46.6, 46.5, 46.1, 43.8, 46.8, 46.2, 46.7, 47, 44.1, 47, 46.3, 47.1, 47.1, 44.4, 47.3, 46.6, 47.4, 47]
+  line [50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50]
+```
+
+*Gráfico do cenário (vazão).* Vazão média por janela de tempo do Reno, do CUBIC e do BBR no mesmo caminho, calculada pelo motor do simulador. Corresponde à aba Vazão e atraso.
+
 ```mermaid
 sequenceDiagram
   autonumber
@@ -5109,6 +5541,22 @@ Cada algoritmo descobre a banda nova do seu jeito: o Reno por +1 segmento por RT
 
 - A vazão depois dos 10 s, na aba Vazão e atraso.
 - O tempo que cada um leva para chegar a 40 Mbit/s.
+
+**Legenda:** 🟥 Reno · 🟦 CUBIC · 🟩 BBR · ⬛ capacidade do enlace
+
+```mermaid
+%%{init: {"xyChart": {"width": 900, "height": 560}, "themeVariables": {"xyChart": {"plotColorPalette": "#dd2e44, #2f80ed, #2e9e4f, #24292f"}}}}%%
+xychart-beta
+  title "Vazão: 20 Mbit/s, RTT de 50 ms, a capacidade dobra aos 10 s"
+  x-axis "Tempo (s)" 1 --> 20
+  y-axis "Vazão (Mbit/s)" 0 --> 50
+  line [17.8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 30.4, 35.8, 39.7, 40, 40, 40, 40, 37.1, 33.5, 38.3]
+  line [17.8, 20, 20, 20, 20, 20, 20, 20, 20, 20, 34.8, 38.4, 39.6, 39.9, 40, 40, 40, 40, 40, 40]
+  line [17.7, 20, 20, 19.9, 20, 20, 19.9, 20, 20, 19.9, 18, 20, 27.7, 40, 40, 40, 39.8, 40, 39.8, 40]
+  line [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 38.7, 40, 40, 40, 40, 40, 40, 40, 40, 40]
+```
+
+*Gráfico do cenário (vazão).* Vazão média por janela de tempo do Reno, do CUBIC e do BBR no mesmo caminho, calculada pelo motor do simulador. Corresponde à aba Vazão e atraso.
 
 ```mermaid
 sequenceDiagram

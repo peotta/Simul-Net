@@ -58,7 +58,7 @@ export const scenDoc: Record<string, ScenarioDoc> = {
     concept: 'O <b>Reno</b> (RFC 5681) controla a <b>janela de congestionamento (cwnd)</b>, o limite de segmentos em voo. No <b>slow start</b> a janela dobra a cada RTT até o ssthresh ou a primeira perda. Depois vem a <b>congestion avoidance</b>: +1 segmento por RTT. Ao detectar uma perda por 3 ACKs duplicados (<b>fast retransmit</b>), o emissor reduz o ssthresh e a cwnd à metade (<b>fast recovery</b>). É o ciclo <b>AIMD</b>: aumento aditivo, redução multiplicativa.',
     observe: ['Na aba Janela e fila: o dente de serra da cwnd entre 1/2 e 1 vez o BDP mais a fila.', 'Na aba Vazão e atraso: a vazão quase colada na capacidade e o RTT subindo e descendo com a fila.', 'No Log: as mensagens de perda com o novo ssthresh.'],
     msgs: [['Rodada: N segm.', 'segmentos enviados em um RTT', 'emissor'], ['ACKs de N segm.', 'confirmações que liberam novas rodadas', 'receptor']],
-    why: 'É a base de todo o controle de congestionamento do TCP desde 1988 (Jacobson). Entender o dente de serra explica por que a vazão média do Reno é próxima de 75% do pico quando a fila é de 1 BDP.',
+    why: 'É a base de todo o controle de congestionamento do TCP desde 1988 (Jacobson). Com fila de 1 BDP, a janela oscila entre 1 e 2 vezes o BDP e o enlace fica quase sempre cheio (acima de 95%). Com fila menor, a janela cai abaixo do BDP depois de cada perda e a utilização diminui: é o que o cenário de fila rasa mostra.',
   },
   'reno-ss': {
     short: 'A janela inicial define quantas rodadas o slow start gasta.',

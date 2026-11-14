@@ -341,6 +341,7 @@ function nativePage(sim, def) {
       if (s.what) L.push(`${md(s.what)}\n`);
       if (d?.concept) L.push(`**Conceito.** ${md(d.concept)}\n`);
       if (d?.observe?.length) { L.push('**O que observar**\n'); for (const x of d.observe) L.push(`- ${md(x)}`); L.push(''); }
+      if (def.docChart) L.push(def.docChart(s), '');
       try {
         const sd = sequenceDiagram(def, s, base);
         L.push(sd.block, '');
